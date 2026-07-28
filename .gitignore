@@ -7,4 +7,5 @@ dist/
 coverage/
 .seed-build/
 work/
+.DS_Store
 *.log
