@@ -46,7 +46,8 @@ type PrismaSurveyPersistenceClient = {
     upsert(args: unknown): Promise<unknown>;
   };
   survey: {
-    upsert(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
   };
   surveyItem: {
     deleteMany(args: unknown): Promise<unknown>;
@@ -149,31 +150,33 @@ export async function persistSurvey(
 ) {
   const school = await ensureSchoolForPersistence(prisma, survey.schoolId);
   const schoolId = school.id;
-  const surveyId = survey.id === "new" ? undefined : survey.id;
-  const savedSurvey = await prisma.survey.upsert({
-    where: { id: surveyId || `survey-${crypto.randomUUID()}` },
-    update: {
-      schoolId,
-      title: survey.title,
-      requiredKeywords: survey.requiredKeywords,
-      minCharCount: survey.minCharCount,
-      maxCharCount: survey.maxCharCount,
-      isValid: survey.isValid,
-      benefitType: survey.benefitType || null,
-      benefitShowTiming: survey.benefitShowTiming || null,
-    },
-    create: {
-      ...(surveyId ? { id: surveyId } : {}),
-      schoolId,
-      title: survey.title,
-      requiredKeywords: survey.requiredKeywords,
-      minCharCount: survey.minCharCount,
-      maxCharCount: survey.maxCharCount,
-      isValid: survey.isValid,
-      benefitType: survey.benefitType || null,
-      benefitShowTiming: survey.benefitShowTiming || null,
-    },
-  });
+  const isNewSurvey = survey.id === "new";
+  const savedSurvey = isNewSurvey
+    ? await prisma.survey.create({
+        data: {
+          schoolId,
+          title: survey.title,
+          requiredKeywords: survey.requiredKeywords,
+          minCharCount: survey.minCharCount,
+          maxCharCount: survey.maxCharCount,
+          isValid: survey.isValid,
+          benefitType: survey.benefitType || null,
+          benefitShowTiming: survey.benefitShowTiming || null,
+        },
+      })
+    : await prisma.survey.update({
+        where: { id: survey.id },
+        data: {
+          schoolId,
+          title: survey.title,
+          requiredKeywords: survey.requiredKeywords,
+          minCharCount: survey.minCharCount,
+          maxCharCount: survey.maxCharCount,
+          isValid: survey.isValid,
+          benefitType: survey.benefitType || null,
+          benefitShowTiming: survey.benefitShowTiming || null,
+        },
+      });
   const persistedSurvey = savedSurvey as { id: string };
 
   await prisma.$transaction([

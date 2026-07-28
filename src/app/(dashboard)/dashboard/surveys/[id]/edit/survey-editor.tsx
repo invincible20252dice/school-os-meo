@@ -69,7 +69,7 @@ function buildNewSurveyState(settings: SurveySettingListItem[]): SurveyEditorSta
 
   return {
     ...base,
-    id: `survey-${settings.length + 1}`,
+    id: "new",
     title: "新しいアンケート",
     isValid: false,
     hasIncentive: false,

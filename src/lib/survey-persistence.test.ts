@@ -126,7 +126,8 @@ describe("survey-persistence", () => {
         upsert: vi.fn(async () => ({ id: "school-own" })),
       },
       survey: {
-        upsert: vi.fn(async () => ({ id: "survey-1" })),
+        create: vi.fn(async () => ({ id: "survey-new" })),
+        update: vi.fn(async () => ({ id: "survey-1" })),
       },
       surveyItem: {
         deleteMany: vi.fn(async () => ({})),
@@ -148,13 +149,13 @@ describe("survey-persistence", () => {
       ),
     );
 
-    expect(prisma.survey.upsert).toHaveBeenCalledWith(
+    expect(prisma.survey.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "survey-1" },
-        update: expect.objectContaining({ schoolId: "school-own" }),
-        create: expect.objectContaining({ schoolId: "school-own" }),
+        data: expect.objectContaining({ schoolId: "school-own" }),
       }),
     );
+    expect(prisma.survey.create).not.toHaveBeenCalled();
     expect(prisma.surveyItem.deleteMany).toHaveBeenCalledWith({
       where: { surveyId: "survey-1" },
     });
@@ -162,6 +163,57 @@ describe("survey-persistence", () => {
       data: [
         expect.objectContaining({
           surveyId: "survey-1",
+          question: "自由記述",
+        }),
+      ],
+    });
+  });
+
+  it("creates a new survey when the survey id is new", async () => {
+    const prisma = {
+      user: {
+        upsert: vi.fn(async () => ({ id: "system-user" })),
+      },
+      school: {
+        findUnique: vi.fn(async () => ({ id: "school-own" })),
+        upsert: vi.fn(async () => ({ id: "school-own" })),
+      },
+      survey: {
+        create: vi.fn(async () => ({ id: "survey-created" })),
+        update: vi.fn(async () => ({ id: "survey-updated" })),
+      },
+      surveyItem: {
+        deleteMany: vi.fn(async () => ({})),
+        createMany: vi.fn(async () => ({})),
+      },
+      $transaction: vi.fn(async (operations) => Promise.all(operations)),
+    };
+
+    const savedSurvey = await persistSurvey(
+      prisma as never,
+      normalizeSurveyPersistenceInput(
+        {
+          id: "new",
+          schoolId: "school-own",
+          title: "新規アンケート",
+          items: [{ type: "TEXT", question: "自由記述", order: 1 }],
+        },
+        managerAccess,
+      ),
+    );
+
+    expect(savedSurvey).toEqual({ id: "survey-created" });
+    expect(prisma.survey.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        schoolId: "school-own",
+        title: "新規アンケート",
+      }),
+    });
+    expect(prisma.survey.update).not.toHaveBeenCalled();
+    expect(prisma.surveyItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          surveyId: "survey-created",
           question: "自由記述",
         }),
       ],
