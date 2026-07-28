@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import AuthAccessBadge from "@/components/dashboard/AuthAccessBadge";
 import Sidebar from "@/components/dashboard/Sidebar";
 import {
   buildDemoDashboardAccessContext,
@@ -57,6 +58,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
           )}
           <div className={styles.headerRight}>
+            <AuthAccessBadge />
             <nav className={styles.headerActions} aria-label="アカウント操作">
               <Link href={getDashboardSettingsPath()} className={styles.actionLink}>
                 <HeaderIcon type="settings" />

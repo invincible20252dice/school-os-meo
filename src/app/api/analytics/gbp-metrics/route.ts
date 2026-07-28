@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import {
-  resolveEffectiveSchoolIdForRequest,
-  type AuthRole,
-} from "@/lib/auth-access";
 import { buildLookerStudioRows } from "@/lib/analytics";
 import { prisma } from "@/lib/prisma";
+import {
+  buildScopedSchoolFilter,
+  resolveRequestAccess,
+} from "@/lib/supabase-access";
 
 function isAuthorized(request: Request) {
   const secret = process.env.ANALYTICS_API_SECRET;
@@ -23,36 +23,23 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const ownerId = url.searchParams.get("ownerId");
-  const role =
-    (request.headers.get("x-user-role") ||
-      url.searchParams.get("role") ||
-      "admin") as AuthRole;
-  const userSchoolId =
-    request.headers.get("x-user-school-id") ||
-    url.searchParams.get("userSchoolId") ||
-    "";
   const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
-  const effectiveSchoolId = resolveEffectiveSchoolIdForRequest(
-    {
-      userId: ownerId || "demo-user",
-      role,
-      schoolId: userSchoolId,
-      schoolIds: userSchoolId ? [userSchoolId] : [],
-    },
-    requestedSchoolId,
-  );
-
-  if (!ownerId) {
-    return NextResponse.json(
-      { message: "ownerId is required." },
-      { status: 400 },
-    );
-  }
 
   try {
+    const { access, isAuthenticated } = await resolveRequestAccess(request, url);
+    const scopedSchool = buildScopedSchoolFilter(access, requestedSchoolId);
+    const effectiveOwnerId = isAuthenticated ? access.userId : ownerId;
+
+    if (!effectiveOwnerId) {
+      return NextResponse.json(
+        { message: "ownerId is required." },
+        { status: 400 },
+      );
+    }
+
     const rows = await buildLookerStudioRows(prisma, {
-      ownerId,
-      schoolId: effectiveSchoolId,
+      ownerId: effectiveOwnerId,
+      schoolId: scopedSchool.effectiveSchoolId,
       from: url.searchParams.get("from") || undefined,
       to: url.searchParams.get("to") || undefined,
     });
@@ -60,9 +47,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       rows,
       access: {
-        requestedSchoolId: requestedSchoolId || "all",
-        effectiveSchoolId: effectiveSchoolId || "all",
-        role,
+        requestedSchoolId: scopedSchool.requestedSchoolId,
+        effectiveSchoolId: scopedSchool.effectiveSchoolId || "all",
+        role: scopedSchool.role,
+        source: access.source,
       },
     });
   } catch (error) {

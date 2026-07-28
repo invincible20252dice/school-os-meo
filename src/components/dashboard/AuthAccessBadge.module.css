@@ -1,0 +1,51 @@
+.badge {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #bdc8c4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  min-width: 180px;
+}
+
+.badge span {
+  color: #66737d;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.badge strong {
+  color: #17202a;
+  font-size: 12px;
+}
+
+.badge small {
+  color: #66737d;
+  font-size: 11px;
+}
+
+.authenticated {
+  border-color: #a9d7c7;
+  background: #f4fbf8;
+}
+
+.loading {
+  opacity: 0.72;
+}
+
+.anonymous,
+.error {
+  border-color: #f1c8c2;
+  background: #fff4f2;
+}
+
+.anonymous strong,
+.error strong {
+  color: #b84d3e;
+}
+
+@media (max-width: 880px) {
+  .badge {
+    display: none;
+  }
+}

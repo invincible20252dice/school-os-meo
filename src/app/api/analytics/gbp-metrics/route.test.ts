@@ -100,6 +100,7 @@ describe("GET /api/analytics/gbp-metrics", () => {
       requestedSchoolId: "school_other",
       effectiveSchoolId: "school_own",
       role: "staff",
+      source: "fallback",
     });
     expect(analytics.buildLookerStudioRows).toHaveBeenCalledWith(
       {},
