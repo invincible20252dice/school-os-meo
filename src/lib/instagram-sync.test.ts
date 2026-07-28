@@ -85,6 +85,74 @@ describe("instagram-sync", () => {
     });
   });
 
+  it("syncs text-only media without an authorization header and uses GBP name fallback", async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GBP_API_ACCESS_TOKEN;
+    process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
+
+    const prisma = {
+      instagramSetting: {
+        findMany: vi.fn(async () => [
+          {
+            id: "setting_1",
+            schoolId: "school_1",
+            instagramAccessToken: "ig-token",
+            instagramBusinessAccountId: "business_1",
+            autoSyncEnabled: true,
+            school: {
+              id: "school_1",
+              name: "青葉ゼミナール",
+              gbpLocationId: "location_1",
+            },
+          },
+        ]),
+        update: vi.fn(async () => undefined),
+      },
+      syncedPost: {
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: "synced_1", ...data })),
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            {
+              id: "ig_1",
+              caption: "自習室を開放しています",
+              media_type: "IMAGE",
+              media_url: null,
+              permalink: "https://instagram.com/p/1",
+              timestamp: "2026-07-22T01:00:00+0000",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          name: "accounts/1/locations/1/localPosts/post_1",
+          searchUrl: "https://google.example.com/post_1",
+        }),
+      );
+
+    const summary = await syncInstagramPosts({ prisma, fetchImpl: fetchMock });
+    const gbpRequest = fetchMock.mock.calls[1][1] as RequestInit;
+    const gbpBody = JSON.parse(String(gbpRequest.body));
+
+    expect(summary.posted).toBe(1);
+    expect(gbpRequest.headers).toEqual({ "Content-Type": "application/json" });
+    expect(gbpBody.media).toEqual([]);
+    expect(prisma.syncedPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          gbpPostId: "accounts/1/locations/1/localPosts/post_1",
+          gbpPostUrl: "https://google.example.com/post_1",
+        }),
+      }),
+    );
+  });
+
   it("skips already synced media", async () => {
     process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
     const prisma = {

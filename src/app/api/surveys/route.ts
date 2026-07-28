@@ -6,7 +6,108 @@ import {
   toJapanesePersistenceError,
   type SurveyPersistenceInput,
 } from "@/lib/survey-persistence";
-import { resolveRequestAccess } from "@/lib/supabase-access";
+import {
+  buildScopedSchoolFilter,
+  resolveRequestAccess,
+} from "@/lib/supabase-access";
+
+type SurveyListRow = {
+  id: string;
+  schoolId: string;
+  title: string;
+  requiredKeywords: string | null;
+  minCharCount: number;
+  maxCharCount: number;
+  isValid: boolean;
+  benefitType: string | null;
+  benefitShowTiming: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  school: {
+    id: string;
+    name: string;
+  };
+  items: Array<{
+    id: string;
+    type: string;
+    question: string;
+    maxSelect: number | null;
+    options: string[];
+    order: number;
+  }>;
+};
+
+function serializeSurvey(row: SurveyListRow) {
+  return {
+    id: row.id,
+    schoolId: row.schoolId,
+    schoolName: row.school.name,
+    title: row.title,
+    requiredKeywords: row.requiredKeywords || "",
+    minCharCount: row.minCharCount,
+    maxCharCount: row.maxCharCount,
+    isValid: row.isValid,
+    hasIncentive: Boolean(row.benefitType || row.benefitShowTiming),
+    benefitType: row.benefitType || "",
+    benefitShowTiming: row.benefitShowTiming || "",
+    itemCount: row.items.length,
+    items: row.items.map((item) => ({
+      id: item.id,
+      type: item.type,
+      question: item.question,
+      maxSelect: item.maxSelect,
+      options: item.options,
+      order: item.order,
+    })),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
+    const accessResult = await resolveRequestAccess(request, url);
+    const scopedSchool = buildScopedSchoolFilter(
+      accessResult.access,
+      requestedSchoolId,
+    );
+    const surveys = (await prisma.survey.findMany({
+      where: scopedSchool.effectiveSchoolId
+        ? { schoolId: scopedSchool.effectiveSchoolId }
+        : {},
+      include: {
+        school: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        items: {
+          orderBy: { order: "asc" },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    })) as SurveyListRow[];
+
+    return NextResponse.json({
+      surveys: surveys.map(serializeSurvey),
+      access: {
+        role: accessResult.access.role,
+        effectiveSchoolId: scopedSchool.effectiveSchoolId || "all",
+        requestedSchoolId: scopedSchool.requestedSchoolId,
+        source: accessResult.access.source,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { message: "アンケート設定一覧を取得できませんでした。" },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(request: Request) {
   try {

@@ -21,6 +21,8 @@ describe("line", () => {
     expect(buildStarRating(3)).toBe("★★★☆☆");
     expect(buildStarRating(0)).toBe("☆☆☆☆☆");
     expect(buildStarRating(8)).toBe("★★★★★");
+    expect(buildStarRating(2.6)).toBe("★★★☆☆");
+    expect(buildStarRating(-2)).toBe("☆☆☆☆☆");
   });
 
   it("classifies and masks LINE destination IDs", () => {
@@ -36,6 +38,8 @@ describe("line", () => {
     expect(maskLineDestination("U2e44f216ade5b621ec109c3716c188ea")).toBe(
       "U2e44f...88ea",
     );
+    expect(classifyLineDestination("line-group-id")).toBe("unknown");
+    expect(maskLineDestination("short")).toBe("short");
   });
 
 
@@ -56,6 +60,27 @@ describe("line", () => {
     expect(JSON.stringify(message)).toContain(
       "https://app.example.com/api/gbp/reply?reviewId=review_123",
     );
+  });
+
+  it("builds message links from Vercel URL and includes Google review action", () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    process.env.VERCEL_URL = "school-os-meo.vercel.app/";
+
+    const message = buildLineReviewMessage({
+      reviewId: "review with spaces",
+      schoolName: "青葉ゼミナール",
+      rating: 4,
+      reviewText: "先生が丁寧でした。",
+      aiReplyText: "温かい口コミをありがとうございます。",
+      googleReviewUrl: "https://google.example.com/review",
+    });
+    const serialized = JSON.stringify(message);
+
+    expect(serialized).toContain(
+      "https://school-os-meo.vercel.app/api/gbp/reply?reviewId=review%20with%20spaces",
+    );
+    expect(serialized).toContain("Google口コミを開く");
+    expect(serialized).toContain("https://google.example.com/review");
   });
 
   it("pushes the notification to LINE Messaging API", async () => {
@@ -157,6 +182,58 @@ describe("line", () => {
       "LINE API Error Details:",
       expect.stringContaining("Authentication failed"),
     );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("wraps plain text LINE API errors", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "invalid-line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async () => new Response("plain error", { status: 429 }));
+
+    await expect(
+      sendLineReviewNotification(
+        {
+          to: "line-group-id",
+          reviewId: "review_123",
+          schoolName: "青葉ゼミナール",
+          rating: 5,
+          reviewText: "通いやすいです。",
+          aiReplyText: "ご投稿ありがとうございます。",
+        },
+        fetchMock,
+      ),
+    ).rejects.toMatchObject({
+      status: 429,
+      details: { message: "plain error" },
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("wraps empty LINE API error responses with the status", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "invalid-line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async () => new Response("", { status: 500 }));
+
+    await expect(
+      sendLineReviewNotification(
+        {
+          to: "line-group-id",
+          reviewId: "review_123",
+          schoolName: "青葉ゼミナール",
+          rating: 5,
+          reviewText: "通いやすいです。",
+          aiReplyText: "ご投稿ありがとうございます。",
+        },
+        fetchMock,
+      ),
+    ).rejects.toMatchObject({
+      status: 500,
+      details: { message: "LINE API returned 500" },
+    });
     consoleErrorSpy.mockRestore();
   });
 });

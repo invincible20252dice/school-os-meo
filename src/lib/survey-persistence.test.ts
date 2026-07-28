@@ -274,5 +274,29 @@ describe("survey-persistence", () => {
     expect(
       toJapanesePersistenceError("failed", "保存できませんでした。"),
     ).toBe("保存できませんでした。");
+    expect(
+      toJapanesePersistenceError(
+        new Error("Unique constraint failed on the fields: (`googlePlaceId`)"),
+        "保存できませんでした。",
+      ),
+    ).toBe("同じ内容のデータがすでに登録されています。入力内容を確認してください。");
+    expect(
+      toJapanesePersistenceError(
+        new Error("schoolId is required."),
+        "保存できませんでした。",
+      ),
+    ).toBe("校舎情報を自動設定できませんでした。画面を再読み込みしてから再度お試しください。");
+    expect(
+      toJapanesePersistenceError(
+        new Error("Prisma connection failed"),
+        "保存できませんでした。",
+      ),
+    ).toBe("保存できませんでした。");
+    expect(
+      toJapanesePersistenceError(
+        new Error("アンケート名を入力してください。"),
+        "保存できませんでした。",
+      ),
+    ).toBe("アンケート名を入力してください。");
   });
 });

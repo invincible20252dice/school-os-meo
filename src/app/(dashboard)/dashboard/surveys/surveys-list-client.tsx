@@ -1,0 +1,209 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
+import styles from "./page.module.css";
+
+type SurveyListItem = {
+  id: string;
+  schoolId: string;
+  schoolName: string;
+  title: string;
+  requiredKeywords: string;
+  minCharCount: number;
+  maxCharCount: number;
+  isValid: boolean;
+  hasIncentive: boolean;
+  benefitType: string;
+  itemCount: number;
+  updatedAt: string;
+};
+
+type SurveysResponse = {
+  surveys?: SurveyListItem[];
+  message?: string;
+  access?: {
+    role: string;
+    effectiveSchoolId: string;
+  };
+};
+
+function PlusIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <path d="M21 12a9 9 0 0 1-15.5 6.2" />
+      <path d="M3 12A9 9 0 0 1 18.5 5.8" />
+      <path d="M18 2v4h4" />
+      <path d="M6 22v-4H2" />
+    </svg>
+  );
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "更新日時なし";
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(date)
+    .replaceAll("/", "-");
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data } = await createBrowserSupabaseClient().auth.getSession();
+    const token = data.session?.access_token;
+
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+export default function SurveysListClient() {
+  const [surveys, setSurveys] = useState<SurveyListItem[]>([]);
+  const [accessLabel, setAccessLabel] = useState("権限を確認中");
+  const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function loadSurveys() {
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/surveys", {
+        method: "GET",
+        headers: await getAuthHeaders(),
+        cache: "no-store",
+      });
+      const data = (await response.json()) as SurveysResponse;
+
+      if (!response.ok) {
+        throw new Error(data.message || "アンケート設定一覧を取得できませんでした。");
+      }
+
+      setSurveys(data.surveys || []);
+      setAccessLabel(
+        data.access
+          ? `${data.access.role === "admin" ? "本部" : "教室長"} / ${
+              data.access.effectiveSchoolId === "all"
+                ? "全校舎"
+                : data.access.effectiveSchoolId
+            }`
+          : "権限情報なし",
+      );
+    } catch (error) {
+      setSurveys([]);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "アンケート設定一覧を取得できませんでした。",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSurveys();
+  }, []);
+
+  return (
+    <>
+      <div className={styles.toolbar}>
+        <div>
+          <span className={styles.accessLabel}>{accessLabel}</span>
+        </div>
+        <div className={styles.actions}>
+          <button type="button" onClick={loadSurveys} disabled={isLoading}>
+            <RefreshIcon />
+            {isLoading ? "取得中" : "再取得"}
+          </button>
+          <Link href="/dashboard/surveys/new">
+            <PlusIcon />
+            新規作成
+          </Link>
+        </div>
+      </div>
+
+      {message ? <p className={styles.error}>{message}</p> : null}
+
+      {isLoading ? (
+        <section className={styles.emptyPanel}>
+          <p>アンケート設定を読み込んでいます。</p>
+        </section>
+      ) : surveys.length === 0 ? (
+        <section className={styles.emptyPanel}>
+          <h2>アンケート設定はまだありません</h2>
+          <p>新規作成から保存すると、この一覧に反映されます。</p>
+        </section>
+      ) : (
+        <div className={styles.list}>
+          {surveys.map((survey) => (
+            <section className={styles.panel} key={survey.id}>
+              <div className={styles.panelHeader}>
+                <div>
+                  <div className={styles.titleRow}>
+                    <h2>{survey.title}</h2>
+                    <span
+                      className={
+                        survey.isValid ? styles.statusActive : styles.statusPaused
+                      }
+                    >
+                      {survey.isValid ? "有効" : "停止中"}
+                    </span>
+                  </div>
+                  <p>{survey.requiredKeywords || "必須キーワード未設定"}</p>
+                </div>
+                <Link href={`/dashboard/surveys/${survey.id}/edit`}>編集</Link>
+              </div>
+              <dl className={styles.meta}>
+                <div>
+                  <dt>校舎</dt>
+                  <dd>{survey.schoolName}</dd>
+                </div>
+                <div>
+                  <dt>設問数</dt>
+                  <dd>{survey.itemCount}</dd>
+                </div>
+                <div>
+                  <dt>文字数</dt>
+                  <dd>
+                    {survey.minCharCount}-{survey.maxCharCount}
+                  </dd>
+                </div>
+                <div>
+                  <dt>特典</dt>
+                  <dd>{survey.hasIncentive ? survey.benefitType : "なし"}</dd>
+                </div>
+                <div>
+                  <dt>最終更新</dt>
+                  <dd>{formatDate(survey.updatedAt)}</dd>
+                </div>
+              </dl>
+            </section>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}

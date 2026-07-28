@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: {},
+  prisma: {
+    survey: {
+      findMany: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("@/lib/supabase-access", async () => {
@@ -37,7 +41,109 @@ vi.mock("@/lib/survey-persistence", async () => {
   };
 });
 
-describe("POST /api/surveys", () => {
+describe("/api/surveys", () => {
+  it("returns surveys scoped to the manager school", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([
+      {
+        id: "survey-1",
+        schoolId: "school-own",
+        title: "保護者アンケート",
+        requiredKeywords: "横浜駅, 個別指導",
+        minCharCount: 100,
+        maxCharCount: 300,
+        isValid: true,
+        benefitType: "体験授業",
+        benefitShowTiming: "投稿後",
+        createdAt: new Date("2026-07-20T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-21T00:00:00.000Z"),
+        school: { id: "school-own", name: "青葉ゼミナール" },
+        items: [
+          {
+            id: "item-1",
+            type: "TEXT",
+            question: "自由記述",
+            maxSelect: null,
+            options: [],
+            order: 1,
+          },
+        ],
+      },
+    ] as never);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/surveys?schoolId=school-other"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { schoolId: "school-own" },
+      }),
+    );
+    expect(body.access).toEqual({
+      role: "manager",
+      effectiveSchoolId: "school-own",
+      requestedSchoolId: "school-other",
+      source: "profiles",
+    });
+    expect(body.surveys[0]).toMatchObject({
+      id: "survey-1",
+      schoolId: "school-own",
+      schoolName: "青葉ゼミナール",
+      title: "保護者アンケート",
+      itemCount: 1,
+      hasIncentive: true,
+    });
+  });
+
+  it("returns all surveys for admin users", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "admin",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "本部",
+        email: "admin@example.com",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {},
+      }),
+    );
+    expect(body.access.effectiveSchoolId).toBe("all");
+  });
+
+  it("returns Japanese errors when survey listing fails", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockRejectedValueOnce(
+      new Error("database failed"),
+    );
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.message).toBe("アンケート設定一覧を取得できませんでした。");
+    consoleErrorSpy.mockRestore();
+  });
+
   it("persists a survey scoped to the manager school", async () => {
     const persistence = await import("@/lib/survey-persistence");
     const { POST } = await import("./route");
@@ -60,7 +166,11 @@ describe("POST /api/surveys", () => {
       source: "profiles",
     });
     expect(persistence.persistSurvey).toHaveBeenCalledWith(
-      {},
+      expect.objectContaining({
+        survey: expect.objectContaining({
+          findMany: expect.any(Function),
+        }),
+      }),
       expect.objectContaining({
         schoolId: "school-own",
       }),

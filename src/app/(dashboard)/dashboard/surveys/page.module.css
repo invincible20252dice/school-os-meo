@@ -34,8 +34,82 @@
   margin: 12px 0 0;
 }
 
-.panel {
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-top: 28px;
+}
+
+.accessLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid #cfe2db;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #effaf6;
+  color: #147d68;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.actions a,
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.actions a {
+  border: 1px solid #17202a;
+  background: #17202a;
+  color: #ffffff;
+}
+
+.actions button {
+  border: 1px solid #cfd8d4;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.panel {
   border: 1px solid #dde5e1;
   border-radius: 8px;
   background: #ffffff;
@@ -52,6 +126,13 @@
 .panelHeader h2 {
   margin: 0;
   color: #17202a;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .panelHeader p {
@@ -74,7 +155,7 @@
 
 .meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin: 20px 0 0;
 }
@@ -96,17 +177,79 @@
   font-weight: 800;
 }
 
+.statusActive,
+.statusPaused {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.statusActive {
+  background: #e8f7f1;
+  color: #147d68;
+}
+
+.statusPaused {
+  background: #fff1df;
+  color: #9a4d00;
+}
+
+.emptyPanel,
+.error {
+  margin-top: 18px;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.emptyPanel {
+  border: 1px dashed #cfd8d4;
+  background: #ffffff;
+}
+
+.emptyPanel h2,
+.emptyPanel p {
+  margin: 0;
+}
+
+.emptyPanel p {
+  margin-top: 8px;
+  color: #52606a;
+}
+
+.error {
+  border: 1px solid #f2c4c4;
+  background: #fff1f1;
+  color: #a62727;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .page {
     padding: 22px;
   }
 
-  .panelHeader,
+  .toolbar,
+  .actions,
   .meta {
     grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .toolbar,
+  .actions {
+    flex-direction: column;
   }
 
   .panelHeader {
     flex-direction: column;
+  }
+
+  .actions a,
+  .actions button {
+    width: 100%;
   }
 }

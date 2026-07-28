@@ -281,16 +281,16 @@ export function toJapanesePersistenceError(error: unknown, fallbackMessage: stri
 
   const message = error.message;
 
+  if (message.includes("Unique constraint") || message.includes("P2002")) {
+    return "同じ内容のデータがすでに登録されています。入力内容を確認してください。";
+  }
+
   if (
     message.includes("Foreign key constraint") ||
     message.includes("constraint failed") ||
     message.includes("P2003")
   ) {
     return "保存先の校舎情報を確認できませんでした。時間をおいて再度お試しください。";
-  }
-
-  if (message.includes("Unique constraint") || message.includes("P2002")) {
-    return "同じ内容のデータがすでに登録されています。入力内容を確認してください。";
   }
 
   if (message.includes("schoolId is required")) {
