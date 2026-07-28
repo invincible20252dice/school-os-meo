@@ -29,7 +29,7 @@ export type DashboardAccessContext = {
 };
 
 export type LoginProvider = {
-  id: "google" | "email";
+  id: "google";
   label: string;
   description: string;
 };
@@ -62,11 +62,6 @@ export function buildLoginProviders(): LoginProvider[] {
       id: "google",
       label: "Googleでログイン",
       description: "Google Workspaceアカウントで本部・教室長を認証します。",
-    },
-    {
-      id: "email",
-      label: "メールアドレスでログイン",
-      description: "登録済みメールへ認証リンクを送信します。",
     },
   ];
 }

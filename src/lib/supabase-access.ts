@@ -19,22 +19,46 @@ type SupabaseAccessClient = {
       error: { message: string } | null;
     }>;
   };
-  from(table: "profiles"): {
-    select(columns: string): {
-      eq(column: "id", value: string): {
-        maybeSingle(): Promise<{
-          data: {
-            id?: string | null;
-            role?: string | null;
-            school_id?: string | null;
-            school_ids?: string[] | null;
-            full_name?: string | null;
-            status?: string | null;
-          } | null;
-          error: { message: string } | null;
-        }>;
-      };
+  from(table: string): SupabaseTableClient;
+};
+
+type SupabaseProfileRecord = {
+  id?: string | null;
+  role?: string | null;
+  school_id?: string | null;
+  school_ids?: string[] | null;
+  full_name?: string | null;
+  status?: string | null;
+};
+
+type SupabaseInvitationRecord = {
+  email?: string | null;
+  role?: string | null;
+  school_id?: string | null;
+  status?: string | null;
+};
+
+type SupabaseQueryResult<T> = Promise<{
+  data: T | null;
+  error: { message: string } | null;
+}>;
+
+type SupabaseTableClient = {
+  select(columns: string): {
+    eq(column: string, value: string): {
+      maybeSingle(): SupabaseQueryResult<SupabaseProfileRecord | SupabaseInvitationRecord>;
     };
+  };
+  upsert(
+    data: Record<string, unknown>,
+    options: { onConflict: string },
+  ): {
+    select(columns: string): {
+      maybeSingle(): SupabaseQueryResult<SupabaseProfileRecord>;
+    };
+  };
+  update(data: Record<string, unknown>): {
+    eq(column: string, value: string): SupabaseQueryResult<Record<string, unknown>>;
   };
 };
 
@@ -91,6 +115,87 @@ function getFallbackAccess(request: Request, url: URL): RequestAccessResult {
   };
 }
 
+function normalizeEmail(value: string | undefined) {
+  return value?.trim().toLowerCase() || "";
+}
+
+function normalizeRole(value: string | null | undefined) {
+  return value === "admin" ? "admin" : "manager";
+}
+
+async function applyProfileInvitation(
+  client: SupabaseAccessClient,
+  user: {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+  },
+): Promise<SupabaseProfileRecord | null> {
+  const email = normalizeEmail(user.email);
+
+  if (!email) {
+    return null;
+  }
+
+  const invitationResult = await client
+    .from("profile_invitations")
+    .select("email, role, school_id, status")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (invitationResult.error) {
+    throw new Error(invitationResult.error.message);
+  }
+
+  const invitation = invitationResult.data as SupabaseInvitationRecord | null;
+
+  if (!invitation || invitation.status === "revoked") {
+    return null;
+  }
+
+  const role = normalizeRole(invitation.role);
+  const schoolId = role === "admin" ? "" : invitation.school_id?.trim() || "";
+
+  if (role === "manager" && !schoolId) {
+    return null;
+  }
+
+  const fullName =
+    String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim() ||
+    email;
+  const profileResult = await client
+    .from("profiles")
+    .upsert(
+      {
+        id: user.id,
+        role,
+        school_id: role === "admin" ? null : schoolId,
+        school_ids: role === "admin" ? [] : [schoolId],
+        full_name: fullName,
+        status: "active",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    )
+    .select("id, role, school_id, school_ids, full_name, status")
+    .maybeSingle();
+
+  if (profileResult.error) {
+    throw new Error(profileResult.error.message);
+  }
+
+  await client
+    .from("profile_invitations")
+    .update({
+      status: "accepted",
+      accepted_user_id: user.id,
+      accepted_at: new Date().toISOString(),
+    })
+    .eq("email", email);
+
+  return profileResult.data;
+}
+
 export async function resolveRequestAccess(
   request: Request,
   url: URL,
@@ -120,8 +225,14 @@ export async function resolveRequestAccess(
     throw new Error(profileResult.error.message);
   }
 
+  let profile = profileResult.data as SupabaseProfileRecord | null;
+
+  if (!profile || profile.status !== "active") {
+    profile = (await applyProfileInvitation(supabaseClient, data.user)) || profile;
+  }
+
   return {
-    access: resolveUserAccessFromSupabase(data.user, profileResult.data),
+    access: resolveUserAccessFromSupabase(data.user, profile),
     isAuthenticated: true,
   };
 }

@@ -4,6 +4,7 @@ import {
   exchangeMagicLinkCode,
   getAuthCallbackUrl,
   requestMagicLinkEmail,
+  startGoogleOAuth,
 } from "./supabase-auth";
 
 const originalEnv = process.env;
@@ -66,6 +67,42 @@ describe("supabase auth", () => {
         emailRedirectTo: "https://school-os-meo.vercel.app/auth/callback",
       },
     });
+  });
+
+  it("starts Google OAuth with the shared auth callback URL", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://school-os-meo.vercel.app";
+    const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
+
+    await expect(
+      startGoogleOAuth({
+        auth: { signInWithOAuth },
+      }),
+    ).resolves.toEqual({
+      redirectTo: "https://school-os-meo.vercel.app/auth/callback",
+    });
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://school-os-meo.vercel.app/auth/callback",
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+  });
+
+  it("surfaces Google OAuth start errors", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://school-os-meo.vercel.app";
+
+    await expect(
+      startGoogleOAuth({
+        auth: {
+          signInWithOAuth: vi
+            .fn()
+            .mockResolvedValue({ error: { message: "Google provider disabled." } }),
+        },
+      }),
+    ).rejects.toThrow("Google provider disabled.");
   });
 
   it("surfaces validation and Supabase send errors", async () => {

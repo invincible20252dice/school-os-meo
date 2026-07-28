@@ -15,10 +15,9 @@ import {
 } from "./auth-access";
 
 describe("auth access", () => {
-  it("builds Google and email login providers", () => {
+  it("builds the Google-only login provider", () => {
     expect(buildLoginProviders()).toEqual([
       expect.objectContaining({ id: "google", label: "Googleでログイン" }),
-      expect.objectContaining({ id: "email", label: "メールアドレスでログイン" }),
     ]);
   });
 

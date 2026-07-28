@@ -13,6 +13,20 @@ export type SupabaseOtpClient = {
   };
 };
 
+export type SupabaseOAuthClient = {
+  auth: {
+    signInWithOAuth(input: {
+      provider: "google";
+      options: {
+        redirectTo: string;
+        queryParams: {
+          prompt: string;
+        };
+      };
+    }): Promise<{ error: SupabaseAuthError | null }>;
+  };
+};
+
 export type SupabaseCodeExchangeClient = {
   auth: {
     exchangeCodeForSession(code: string): Promise<{
@@ -89,6 +103,31 @@ export async function requestMagicLinkEmail(
     email: trimmedEmail,
     emailRedirectTo,
   };
+}
+
+export async function startGoogleOAuth(
+  client: SupabaseOAuthClient,
+  browserOrigin?: string,
+) {
+  const redirectTo = getAuthCallbackUrl(
+    process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL,
+    browserOrigin,
+  );
+  const { error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      queryParams: {
+        prompt: "select_account",
+      },
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { redirectTo };
 }
 
 export async function exchangeMagicLinkCode(

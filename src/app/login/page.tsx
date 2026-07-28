@@ -1,14 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  buildLoginProviders,
-  getDemoGoogleLoginPath,
-} from "@/lib/auth-access";
+import { useState } from "react";
+import { buildLoginProviders } from "@/lib/auth-access";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { requestMagicLinkEmail } from "@/lib/supabase-auth";
+import { startGoogleOAuth } from "@/lib/supabase-auth";
 import styles from "./page.module.css";
 
 function BrandIcon() {
@@ -32,15 +27,6 @@ function GoogleIcon() {
   );
 }
 
-function MailIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.providerIcon}>
-      <rect x="4" y="6" width="16" height="12" rx="2" />
-      <path d="M5 8l7 5 7-5" />
-    </svg>
-  );
-}
-
 function ArrowIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.arrowIcon}>
@@ -51,47 +37,25 @@ function ArrowIcon() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const providers = buildLoginProviders();
-  const emailInputRef = useRef<HTMLInputElement>(null);
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [isSending, setIsSending] = useState(false);
 
-  function handleProviderClick(providerId: "google" | "email") {
-    if (providerId === "google") {
-      router.push(getDemoGoogleLoginPath());
-      return;
-    }
-
-    emailInputRef.current?.focus();
-    setMessage("メールアドレスを入力して、認証リンクを送信してください。");
-  }
-
-  async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleGoogleLogin() {
     setIsSending(true);
     setMessage("");
 
     try {
-      const result = await requestMagicLinkEmail(
-        email,
+      await startGoogleOAuth(
         createBrowserSupabaseClient(),
         window.location.origin,
       );
-      setMessageType("success");
-      setMessage(
-        `${result.email} 宛に認証リンクを送信しました。メール内のリンクからログインしてください。`,
-      );
     } catch (error) {
-      setMessageType("error");
       setMessage(
         error instanceof Error
           ? error.message
-          : "認証リンクを送信できませんでした。",
+          : "Googleログインを開始できませんでした。",
       );
-    } finally {
       setIsSending(false);
     }
   }
@@ -111,7 +75,7 @@ export default function LoginPage() {
           <h1>校舎データに入る前に認証します。</h1>
           <p>
             本部は全校舎、教室長は割り当て校舎だけを扱えるように、
-            ログイン時点でアクセス権限を分けます。
+            Googleログイン後にアクセス権限を判定します。
           </p>
         </div>
       </section>
@@ -136,11 +100,12 @@ export default function LoginPage() {
               key={provider.id}
               type="button"
               className={styles.providerButton}
-              onClick={() => handleProviderClick(provider.id)}
+              onClick={handleGoogleLogin}
+              disabled={isSending}
             >
-              {provider.id === "google" ? <GoogleIcon /> : <MailIcon />}
+              <GoogleIcon />
               <span>
-                <strong>{provider.label}</strong>
+                <strong>{isSending ? "Googleへ移動しています" : provider.label}</strong>
                 <small>{provider.description}</small>
               </span>
               <ArrowIcon />
@@ -148,41 +113,11 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <form className={styles.emailForm} onSubmit={handleEmailSubmit}>
-          <label>
-            <span>メールアドレス</span>
-            <input
-              ref={emailInputRef}
-              type="email"
-              placeholder="owner@example.com"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={isSending}>
-            {isSending ? "送信中..." : "認証リンクを送信"}
-          </button>
-        </form>
-
         {message ? (
-          <p
-            className={`${styles.statusMessage} ${
-              messageType === "error" ? styles.errorMessage : ""
-            }`}
-          >
+          <p className={`${styles.statusMessage} ${styles.errorMessage}`}>
             {message}
           </p>
         ) : null}
-
-        <div className={styles.demoBox}>
-          <span>デモ確認</span>
-          <p>認証連携前のローカル確認として、権限分離済みのダッシュボードへ進めます。</p>
-          <Link href="/dashboard">
-            ダッシュボードを開く
-            <ArrowIcon />
-          </Link>
-        </div>
       </section>
     </main>
   );
