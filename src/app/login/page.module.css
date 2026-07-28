@@ -213,6 +213,11 @@
   cursor: pointer;
 }
 
+.emailForm button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .statusMessage {
   margin: -8px 0 0;
   border: 1px solid #c9dfd8;
@@ -223,6 +228,12 @@
   font-size: 13px;
   font-weight: 700;
   line-height: 1.6;
+}
+
+.errorMessage {
+  border-color: #f1c7c7;
+  background: #fff4f4;
+  color: #b42318;
 }
 
 .demoBox {

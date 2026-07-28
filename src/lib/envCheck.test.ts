@@ -38,11 +38,14 @@ describe("envCheck", () => {
     const result = validateEnv(
       { NEXT_PUBLIC_APP_URL: "https://app.example.com" },
       ["NEXT_PUBLIC_APP_URL", "DATABASE_URL"],
-      ["GBP_LOCAL_POSTS_API_URL"],
+      ["NEXT_PUBLIC_SITE_URL", "GBP_LOCAL_POSTS_API_URL"],
     );
 
     expect(formatEnvCheckMessage(result)).toContain(
       "Missing required keys: DATABASE_URL",
+    );
+    expect(formatEnvCheckMessage(result)).toContain(
+      "NEXT_PUBLIC_SITE_URL is not configured.",
     );
     expect(formatEnvCheckMessage(result)).toContain(
       "GBP_LOCAL_POSTS_API_URL is not configured.",

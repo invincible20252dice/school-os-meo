@@ -5,9 +5,10 @@ import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildLoginProviders,
-  buildMagicLinkMessage,
   getDemoGoogleLoginPath,
 } from "@/lib/auth-access";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { requestMagicLinkEmail } from "@/lib/supabase-auth";
 import styles from "./page.module.css";
 
 function BrandIcon() {
@@ -55,6 +56,8 @@ export default function LoginPage() {
   const emailInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [isSending, setIsSending] = useState(false);
 
   function handleProviderClick(providerId: "google" | "email") {
     if (providerId === "google") {
@@ -66,9 +69,31 @@ export default function LoginPage() {
     setMessage("メールアドレスを入力して、認証リンクを送信してください。");
   }
 
-  function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(buildMagicLinkMessage(email));
+    setIsSending(true);
+    setMessage("");
+
+    try {
+      const result = await requestMagicLinkEmail(
+        email,
+        createBrowserSupabaseClient(),
+        window.location.origin,
+      );
+      setMessageType("success");
+      setMessage(
+        `${result.email} 宛に認証リンクを送信しました。メール内のリンクからログインしてください。`,
+      );
+    } catch (error) {
+      setMessageType("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "認証リンクを送信できませんでした。",
+      );
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -135,10 +160,20 @@ export default function LoginPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
           </label>
-          <button type="submit">認証リンクを送信</button>
+          <button type="submit" disabled={isSending}>
+            {isSending ? "送信中..." : "認証リンクを送信"}
+          </button>
         </form>
 
-        {message ? <p className={styles.statusMessage}>{message}</p> : null}
+        {message ? (
+          <p
+            className={`${styles.statusMessage} ${
+              messageType === "error" ? styles.errorMessage : ""
+            }`}
+          >
+            {message}
+          </p>
+        ) : null}
 
         <div className={styles.demoBox}>
           <span>デモ確認</span>

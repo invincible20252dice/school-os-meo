@@ -24,6 +24,7 @@ export const requiredProductionEnvKeys = [
 ] as const;
 
 export const recommendedProductionEnvKeys = [
+  "NEXT_PUBLIC_SITE_URL",
   "GBP_API_REVIEWS_URL",
   "GBP_API_ACCESS_TOKEN",
   "GBP_METRICS_API_URL",
