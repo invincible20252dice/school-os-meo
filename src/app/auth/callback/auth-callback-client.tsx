@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { exchangeMagicLinkCode } from "@/lib/supabase-auth";
+import { exchangeSupabaseAuthCallback } from "@/lib/supabase-auth";
 import styles from "./page.module.css";
 
 function StatusIcon() {
@@ -24,7 +24,6 @@ function StatusIcon() {
 
 export function AuthCallbackClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -32,8 +31,13 @@ export function AuthCallbackClient() {
 
     async function exchangeCode() {
       try {
-        const code = searchParams.get("code");
-        await exchangeMagicLinkCode(code, createBrowserSupabaseClient());
+        await exchangeSupabaseAuthCallback(
+          {
+            search: window.location.search,
+            hash: window.location.hash,
+          },
+          createBrowserSupabaseClient(),
+        );
 
         if (isActive) {
           router.replace("/dashboard");
@@ -54,7 +58,7 @@ export function AuthCallbackClient() {
     return () => {
       isActive = false;
     };
-  }, [router, searchParams]);
+  }, [router]);
 
   return (
     <main className={styles.page}>

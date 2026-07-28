@@ -18,7 +18,28 @@ export type SupabaseCodeExchangeClient = {
     exchangeCodeForSession(code: string): Promise<{
       error: SupabaseAuthError | null;
     }>;
+    setSession(input: {
+      access_token: string;
+      refresh_token: string;
+    }): Promise<{ error: SupabaseAuthError | null }>;
+    verifyOtp(input: {
+      token_hash: string;
+      type: SupabaseEmailOtpType;
+    }): Promise<{ error: SupabaseAuthError | null }>;
   };
+};
+
+export type SupabaseEmailOtpType =
+  | "signup"
+  | "invite"
+  | "magiclink"
+  | "recovery"
+  | "email_change"
+  | "email";
+
+export type SupabaseAuthCallbackParams = {
+  search: string;
+  hash: string;
 };
 
 function trimTrailingSlash(value: string) {
@@ -85,4 +106,95 @@ export async function exchangeMagicLinkCode(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+function getUrlParams(value: string) {
+  const normalizedValue = value.startsWith("?") || value.startsWith("#")
+    ? value.slice(1)
+    : value;
+
+  return new URLSearchParams(normalizedValue);
+}
+
+function getParam(
+  searchParams: URLSearchParams,
+  hashParams: URLSearchParams,
+  key: string,
+) {
+  return searchParams.get(key)?.trim() || hashParams.get(key)?.trim() || "";
+}
+
+function getOtpType(value: string): SupabaseEmailOtpType {
+  const supportedTypes: SupabaseEmailOtpType[] = [
+    "signup",
+    "invite",
+    "magiclink",
+    "recovery",
+    "email_change",
+    "email",
+  ];
+
+  return supportedTypes.includes(value as SupabaseEmailOtpType)
+    ? (value as SupabaseEmailOtpType)
+    : "email";
+}
+
+export async function exchangeSupabaseAuthCallback(
+  params: SupabaseAuthCallbackParams,
+  client: SupabaseCodeExchangeClient,
+) {
+  const searchParams = getUrlParams(params.search);
+  const hashParams = getUrlParams(params.hash);
+  const errorDescription = getParam(
+    searchParams,
+    hashParams,
+    "error_description",
+  );
+
+  if (errorDescription) {
+    throw new Error(decodeURIComponent(errorDescription.replace(/\+/g, " ")));
+  }
+
+  const code = getParam(searchParams, hashParams, "code");
+
+  if (code) {
+    await exchangeMagicLinkCode(code, client);
+    return;
+  }
+
+  const tokenHash = getParam(searchParams, hashParams, "token_hash");
+
+  if (tokenHash) {
+    const type = getOtpType(getParam(searchParams, hashParams, "type"));
+    const { error } = await client.auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const accessToken = getParam(searchParams, hashParams, "access_token");
+  const refreshToken = getParam(searchParams, hashParams, "refresh_token");
+
+  if (accessToken && refreshToken) {
+    const { error } = await client.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  throw new Error(
+    "認証トークンが見つかりません。ログイン画面から再度お試しください。",
+  );
 }

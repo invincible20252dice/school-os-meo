@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  exchangeSupabaseAuthCallback,
   exchangeMagicLinkCode,
   getAuthCallbackUrl,
   requestMagicLinkEmail,
@@ -91,7 +92,11 @@ describe("supabase auth", () => {
 
     await expect(
       exchangeMagicLinkCode(" auth-code ", {
-        auth: { exchangeCodeForSession },
+        auth: {
+          exchangeCodeForSession,
+          setSession: vi.fn(),
+          verifyOtp: vi.fn(),
+        },
       }),
     ).resolves.toBeUndefined();
     expect(exchangeCodeForSession).toHaveBeenCalledWith("auth-code");
@@ -100,7 +105,11 @@ describe("supabase auth", () => {
   it("surfaces missing code and exchange errors", async () => {
     await expect(
       exchangeMagicLinkCode("", {
-        auth: { exchangeCodeForSession: vi.fn() },
+        auth: {
+          exchangeCodeForSession: vi.fn(),
+          setSession: vi.fn(),
+          verifyOtp: vi.fn(),
+        },
       }),
     ).rejects.toThrow("認証コードが見つかりません。");
 
@@ -110,8 +119,98 @@ describe("supabase auth", () => {
           exchangeCodeForSession: vi
             .fn()
             .mockResolvedValue({ error: { message: "Invalid login link." } }),
+          setSession: vi.fn(),
+          verifyOtp: vi.fn(),
         },
       }),
     ).rejects.toThrow("Invalid login link.");
+  });
+
+  it("handles a PKCE callback code from the query string", async () => {
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({ error: null });
+
+    await exchangeSupabaseAuthCallback(
+      { search: "?code=auth-code", hash: "" },
+      {
+        auth: {
+          exchangeCodeForSession,
+          setSession: vi.fn(),
+          verifyOtp: vi.fn(),
+        },
+      },
+    );
+
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("auth-code");
+  });
+
+  it("verifies token_hash callbacks from Supabase email confirmation links", async () => {
+    const verifyOtp = vi.fn().mockResolvedValue({ error: null });
+
+    await exchangeSupabaseAuthCallback(
+      { search: "?token_hash=hash-value&type=email", hash: "" },
+      {
+        auth: {
+          exchangeCodeForSession: vi.fn(),
+          setSession: vi.fn(),
+          verifyOtp,
+        },
+      },
+    );
+
+    expect(verifyOtp).toHaveBeenCalledWith({
+      token_hash: "hash-value",
+      type: "email",
+    });
+  });
+
+  it("sets the session from hash access and refresh tokens", async () => {
+    const setSession = vi.fn().mockResolvedValue({ error: null });
+
+    await exchangeSupabaseAuthCallback(
+      {
+        search: "",
+        hash: "#access_token=access-token&refresh_token=refresh-token",
+      },
+      {
+        auth: {
+          exchangeCodeForSession: vi.fn(),
+          setSession,
+          verifyOtp: vi.fn(),
+        },
+      },
+    );
+
+    expect(setSession).toHaveBeenCalledWith({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+  });
+
+  it("surfaces callback provider errors and missing token errors", async () => {
+    await expect(
+      exchangeSupabaseAuthCallback(
+        { search: "?error_description=Email+link+expired", hash: "" },
+        {
+          auth: {
+            exchangeCodeForSession: vi.fn(),
+            setSession: vi.fn(),
+            verifyOtp: vi.fn(),
+          },
+        },
+      ),
+    ).rejects.toThrow("Email link expired");
+
+    await expect(
+      exchangeSupabaseAuthCallback(
+        { search: "", hash: "" },
+        {
+          auth: {
+            exchangeCodeForSession: vi.fn(),
+            setSession: vi.fn(),
+            verifyOtp: vi.fn(),
+          },
+        },
+      ),
+    ).rejects.toThrow("認証トークンが見つかりません。");
   });
 });
