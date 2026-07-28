@@ -182,6 +182,14 @@
   line-height: 1.6;
 }
 
+.success {
+  margin: 0;
+  color: #147d68;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 .resultPanel {
   display: grid;
   align-content: start;

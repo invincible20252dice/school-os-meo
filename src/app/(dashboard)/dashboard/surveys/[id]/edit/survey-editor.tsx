@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
   activateSurveySetting,
   buildMockSurveySettingList,
@@ -109,6 +110,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     surveyId === "new" ? null : surveyId,
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const errors = useMemo(() => validateSurveyEditorState(survey), [survey]);
   const previewSteps = useMemo(() => buildSurveyPreviewSteps(survey), [survey]);
 
@@ -157,15 +159,55 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     });
   }
 
-  function saveSurvey() {
+  async function getAuthHeaders(): Promise<Record<string, string>> {
+    const { data } = await createBrowserSupabaseClient().auth.getSession();
+    const token = data.session?.access_token;
+
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  async function saveSurvey() {
     if (errors.length > 0) {
       setNotice("入力内容を確認してください。");
       return;
     }
 
-    setSettings((current) => saveSurveySetting(current, survey, nowLabel()));
-    setEditingExistingId(survey.id);
-    setNotice("アンケート設定を保存しました。");
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/surveys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+        body: JSON.stringify(survey),
+      });
+      const data = (await response.json()) as {
+        survey?: { id: string };
+        message?: string;
+      };
+
+      if (!response.ok || !data.survey?.id) {
+        throw new Error(data.message || "アンケート設定を保存できませんでした。");
+      }
+
+      const persistedSurvey = { ...survey, id: data.survey.id };
+      setSurvey(persistedSurvey);
+      setSettings((current) =>
+        saveSurveySetting(current, persistedSurvey, nowLabel()),
+      );
+      setEditingExistingId(data.survey.id);
+      setNotice("アンケート設定をDBへ保存しました。");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "アンケート設定を保存できませんでした。",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function discardEdit() {
@@ -236,8 +278,13 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
               </p>
             </div>
             <div className={styles.formActions}>
-              <button type="button" className={styles.primaryButton} onClick={saveSurvey}>
-                {editingExistingId ? "更新する" : "保存する"}
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={saveSurvey}
+                disabled={isSaving}
+              >
+                {isSaving ? "保存中..." : editingExistingId ? "更新する" : "保存する"}
               </button>
               <button type="button" className={styles.secondaryButton} onClick={discardEdit}>
                 {editingExistingId ? "編集内容を破棄" : "新規作成"}

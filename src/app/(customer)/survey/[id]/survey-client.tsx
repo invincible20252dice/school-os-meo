@@ -58,6 +58,7 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [responseNotice, setResponseNotice] = useState("");
 
   const reviewUrl = buildGoogleReviewUrl(placeId);
 
@@ -72,6 +73,7 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
   async function generateReviews() {
     setIsLoading(true);
     setError("");
+    setResponseNotice("");
     setCopiedIndex(null);
 
     try {
@@ -92,8 +94,28 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
 
       const data = (await response.json()) as { reviews: string[] };
       setReviews(data.reviews);
+
+      const saveResponse = await fetch("/api/survey-responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId,
+          schoolName,
+          rating,
+          selectedReasons,
+          freeText,
+          generatedReviews: data.reviews,
+        }),
+      });
+      const saveData = (await saveResponse.json()) as { message?: string };
+
+      if (!saveResponse.ok) {
+        throw new Error(saveData.message || "アンケート回答を保存できませんでした。");
+      }
+
+      setResponseNotice("アンケート回答をDBへ保存しました。");
     } catch {
-      setError("口コミを生成できませんでした。入力内容を確認して再度お試しください。");
+      setError("口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
     } finally {
       setIsLoading(false);
     }
@@ -190,6 +212,9 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
           </button>
 
           {error ? <p className={styles.error}>{error}</p> : null}
+          {responseNotice ? (
+            <p className={styles.success}>{responseNotice}</p>
+          ) : null}
         </div>
       </section>
 
