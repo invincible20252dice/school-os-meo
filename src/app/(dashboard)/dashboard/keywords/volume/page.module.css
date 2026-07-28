@@ -1,0 +1,150 @@
+.page {
+  width: min(100%, 1180px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.header {
+  max-width: 860px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+  line-height: 1.2;
+}
+
+.header p,
+.panelTitle p {
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.header p {
+  margin: 14px 0 0;
+}
+
+.panel {
+  margin-top: 28px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 22px;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 20px;
+}
+
+.panelTitle p {
+  margin: 4px 0 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.filters button {
+  min-height: 38px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #ffffff;
+  color: #52606a;
+  font-weight: 800;
+}
+
+.filters .activeFilter {
+  border-color: #147d68;
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-top: 18px;
+}
+
+.tableWrap table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.tableWrap th,
+.tableWrap td {
+  border-bottom: 1px solid #edf1ef;
+  padding: 13px 14px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.tableWrap th {
+  color: #66737d;
+  background: #fafcfb;
+  font-weight: 800;
+}
+
+.tableWrap td {
+  color: #2d3943;
+}
+
+.tableWrap td strong {
+  color: #17202a;
+}
+
+.up {
+  color: #147d68;
+  font-weight: 800;
+}
+
+.down {
+  color: #b84d3e;
+  font-weight: 800;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 22px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+}

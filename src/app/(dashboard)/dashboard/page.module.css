@@ -1,0 +1,169 @@
+.page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.hero {
+  max-width: 860px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+  line-height: 1.2;
+}
+
+.hero p,
+.card p,
+.alert p,
+.actions p,
+.actions li {
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.hero p {
+  margin: 14px 0 0;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.card,
+.alert,
+.actions {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.card {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+}
+
+.card span {
+  color: #66737d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.card strong {
+  color: #17202a;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.card p {
+  margin: 0;
+}
+
+.card small {
+  color: #147d68;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.alert {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 20px;
+  background: #fff8f1;
+}
+
+.alert h2,
+.actions h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 20px;
+}
+
+.alert p,
+.actions p {
+  margin: 6px 0 0;
+}
+
+.alert a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #17202a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.actions {
+  margin-top: 20px;
+  padding: 22px;
+}
+
+.actions ul {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actions li {
+  border-left: 4px solid #27b58c;
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: #f5f8f6;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 980px) {
+  .cardGrid,
+  .alert {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .page {
+    padding: 22px;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+  }
+}

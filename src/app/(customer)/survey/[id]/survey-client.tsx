@@ -1,0 +1,231 @@
+"use client";
+
+import { useState } from "react";
+import styles from "./survey.module.css";
+import { buildGoogleReviewUrl } from "@/lib/review-generator";
+
+const reasonOptions = [
+  "先生の説明がわかりやすい",
+  "質問しやすい雰囲気",
+  "学習習慣がついた",
+  "成績や理解度が上がった",
+  "教室が通いやすい",
+  "保護者への連絡が丁寧",
+];
+
+type SurveyClientProps = {
+  schoolId: string;
+};
+
+function SparkIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2z" />
+      <path d="M18.5 15l.8 2.7L22 18.5l-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8.8-2.7z" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function ExternalIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <path d="M14 4h6v6" />
+      <path d="M10 14L20 4" />
+      <path d="M20 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4" />
+    </svg>
+  );
+}
+
+export default function SurveyClient({ schoolId }: SurveyClientProps) {
+  const [schoolName, setSchoolName] = useState("サンプル学習塾");
+  const [placeId, setPlaceId] = useState("ChIJN1t_tDeuEmsRUsoyG83frY4");
+  const [rating, setRating] = useState(5);
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([
+    reasonOptions[0],
+    reasonOptions[2],
+  ]);
+  const [freeText, setFreeText] = useState("");
+  const [reviews, setReviews] = useState<string[]>([]);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const reviewUrl = buildGoogleReviewUrl(placeId);
+
+  function toggleReason(reason: string) {
+    setSelectedReasons((current) =>
+      current.includes(reason)
+        ? current.filter((item) => item !== reason)
+        : [...current, reason],
+    );
+  }
+
+  async function generateReviews() {
+    setIsLoading(true);
+    setError("");
+    setCopiedIndex(null);
+
+    try {
+      const response = await fetch("/api/generate-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolName,
+          rating,
+          selectedReasons,
+          freeText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("生成に失敗しました");
+      }
+
+      const data = (await response.json()) as { reviews: string[] };
+      setReviews(data.reviews);
+    } catch {
+      setError("口コミを生成できませんでした。入力内容を確認して再度お試しください。");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function copyAndOpen(text: string, index: number) {
+    await navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    window.open(reviewUrl, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <main className={styles.page}>
+      <section className={styles.formPanel}>
+        <div className={styles.kicker}>Survey</div>
+        <h1 className={styles.title}>通塾体験を口コミ文に整えます</h1>
+        <p className={styles.schoolId}>校舎 ID: {schoolId}</p>
+
+        <div className={styles.formStack}>
+          <label className={styles.field}>
+            <span className={styles.label}>校舎名</span>
+            <input
+              value={schoolName}
+              onChange={(event) => setSchoolName(event.target.value)}
+              className={styles.input}
+            />
+          </label>
+
+          <label className={styles.field}>
+            <span className={styles.label}>Google Place ID</span>
+            <input
+              value={placeId}
+              onChange={(event) => setPlaceId(event.target.value)}
+              className={styles.input}
+            />
+          </label>
+
+          <div className={styles.field}>
+            <span className={styles.label}>満足度</span>
+            <div className={styles.ratingGrid}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRating(value)}
+                  className={
+                    rating === value
+                      ? `${styles.ratingButton} ${styles.ratingButtonActive}`
+                      : styles.ratingButton
+                  }
+                  aria-pressed={rating === value}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>良かった点</span>
+            <div className={styles.reasonGrid}>
+              {reasonOptions.map((reason) => (
+                <label key={reason} className={styles.reasonItem}>
+                  <input
+                    type="checkbox"
+                    checked={selectedReasons.includes(reason)}
+                    onChange={() => toggleReason(reason)}
+                  />
+                  <span>{reason}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label className={styles.field}>
+            <span className={styles.label}>自由記述</span>
+            <textarea
+              value={freeText}
+              onChange={(event) => setFreeText(event.target.value)}
+              rows={5}
+              placeholder="例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。"
+              className={styles.textarea}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={generateReviews}
+            disabled={isLoading}
+            className={styles.primaryButton}
+          >
+            <SparkIcon />
+            {isLoading ? "生成中..." : "AIで口コミを3案生成"}
+          </button>
+
+          {error ? <p className={styles.error}>{error}</p> : null}
+        </div>
+      </section>
+
+      <section className={styles.resultPanel}>
+        <div>
+          <div className={styles.resultKicker}>Review Patterns</div>
+          <h2 className={styles.resultTitle}>コピーして Google 口コミ投稿へ</h2>
+        </div>
+
+        {reviews.length === 0 ? (
+          <div className={styles.emptyState}>
+            アンケート入力後に生成された口コミ候補がここに表示されます。
+          </div>
+        ) : (
+          reviews.map((review, index) => (
+            <article key={`${review}-${index}`} className={styles.reviewCard}>
+              <div className={styles.reviewHeader}>
+                <h3>パターン {index + 1}</h3>
+                {copiedIndex === index ? (
+                  <span className={styles.copiedBadge}>コピー済み</span>
+                ) : null}
+              </div>
+              <p>{review}</p>
+              <button
+                type="button"
+                onClick={() => copyAndOpen(review, index)}
+                className={styles.copyButton}
+              >
+                <CopyIcon />
+                コピーして投稿画面へ
+                <ExternalIcon />
+              </button>
+            </article>
+          ))
+        )}
+      </section>
+    </main>
+  );
+}

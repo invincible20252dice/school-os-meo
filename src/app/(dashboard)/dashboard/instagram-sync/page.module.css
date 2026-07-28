@@ -1,0 +1,218 @@
+.page {
+  width: min(100%, 1180px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.header {
+  max-width: 860px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+  line-height: 1.2;
+}
+
+.header p {
+  margin: 14px 0 0;
+  color: #52606a;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.notice,
+.panel,
+.locationPanel,
+.flowGrid article {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.notice {
+  margin-top: 24px;
+  padding: 16px 18px;
+  color: #147d68;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.flowGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.flowGrid article {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+}
+
+.flowGrid span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #27b58c;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.flowGrid strong {
+  color: #17202a;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.mainGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.panel,
+.locationPanel {
+  margin-top: 20px;
+  padding: 22px;
+}
+
+.mainGrid .panel {
+  margin-top: 0;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 20px;
+}
+
+.panelTitle p {
+  margin: 4px 0 0;
+  color: #66737d;
+  font-size: 13px;
+}
+
+.caption,
+.formatted {
+  margin: 18px 0 0;
+  color: #34414b;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.formatted {
+  border-left: 4px solid #27b58c;
+  padding-left: 14px;
+}
+
+.panel pre {
+  max-height: 360px;
+  margin: 18px 0 0;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 16px;
+  background: #17202a;
+  color: #dce8e4;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.locationGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.locationGrid div {
+  border-radius: 8px;
+  padding: 14px;
+  background: #f5f8f6;
+}
+
+.locationGrid span {
+  display: block;
+  color: #66737d;
+  font-size: 12px;
+}
+
+.locationGrid strong {
+  display: block;
+  margin-top: 6px;
+  color: #17202a;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.locationPanel code {
+  display: block;
+  margin-top: 16px;
+  border-radius: 8px;
+  padding: 12px;
+  background: #eef8f4;
+  color: #147d68;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 940px) {
+  .flowGrid,
+  .mainGrid,
+  .locationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 22px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+
+  .flowGrid,
+  .mainGrid,
+  .locationGrid {
+    grid-template-columns: 1fr;
+  }
+}

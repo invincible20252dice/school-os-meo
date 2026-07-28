@@ -1,0 +1,294 @@
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 32px;
+  width: min(100%, 1120px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.formPanel,
+.reviewCard,
+.emptyState {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.formPanel {
+  align-self: start;
+  padding: 28px;
+}
+
+.kicker,
+.resultKicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.kicker {
+  color: #147d68;
+}
+
+.title {
+  margin: 12px 0 0;
+  color: #17202a;
+  font-size: 32px;
+  line-height: 1.28;
+}
+
+.schoolId {
+  margin: 12px 0 0;
+  color: #5e6b75;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.formStack {
+  display: grid;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.field {
+  display: grid;
+  gap: 10px;
+}
+
+.label {
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  border: 1px solid #bdc8c4;
+  border-radius: 6px;
+  padding: 11px 12px;
+  color: #17202a;
+  background: #ffffff;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: #27b58c;
+  box-shadow: 0 0 0 3px rgba(39, 181, 140, 0.18);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 136px;
+  line-height: 1.7;
+}
+
+.ratingGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.ratingButton,
+.primaryButton,
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  border: 0;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.ratingButton {
+  min-height: 42px;
+  border: 1px solid #bdc8c4;
+  background: #ffffff;
+  color: #43505a;
+}
+
+.ratingButton:hover {
+  border-color: #f26d5b;
+}
+
+.ratingButtonActive {
+  border-color: #f26d5b;
+  background: #f26d5b;
+  color: #ffffff;
+}
+
+.reasonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reasonItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid #bdc8c4;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #26323b;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.reasonItem input {
+  width: 16px;
+  height: 16px;
+  accent-color: #27b58c;
+}
+
+.primaryButton {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 18px;
+  background: #17202a;
+  color: #ffffff;
+}
+
+.primaryButton:hover {
+  background: #2c3944;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.error {
+  margin: 0;
+  color: #c5362f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.resultPanel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.resultKicker {
+  color: #c54f40;
+}
+
+.resultTitle {
+  margin: 8px 0 0;
+  color: #17202a;
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+.emptyState {
+  border-style: dashed;
+  padding: 32px;
+  color: #5e6b75;
+  line-height: 1.7;
+}
+
+.reviewCard {
+  padding: 22px;
+}
+
+.reviewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reviewHeader h3 {
+  margin: 0;
+  color: #17202a;
+  font-size: 15px;
+}
+
+.reviewCard p {
+  margin: 16px 0 0;
+  color: #43505a;
+  font-size: 14px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+
+.copiedBadge {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(39, 181, 140, 0.12);
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.copyButton {
+  margin-top: 18px;
+  min-height: 42px;
+  padding: 10px 14px;
+  background: #27b58c;
+  color: #ffffff;
+}
+
+.copyButton:hover {
+  background: #16856d;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.primaryButton .icon:first-child {
+  fill: currentColor;
+  stroke: none;
+}
+
+@media (max-width: 860px) {
+  .page {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 560px) {
+  .formPanel {
+    padding: 22px;
+  }
+
+  .reasonGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .ratingGrid {
+    gap: 6px;
+  }
+}

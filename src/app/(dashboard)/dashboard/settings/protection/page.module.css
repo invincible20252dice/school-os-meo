@@ -1,0 +1,188 @@
+.page {
+  width: min(100%, 1180px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.header {
+  max-width: 860px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+  line-height: 1.2;
+}
+
+.header p,
+.panelTitle p {
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.header p {
+  margin: 14px 0 0;
+}
+
+.summary,
+.panel,
+.fieldCard {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 28px;
+  padding: 22px;
+}
+
+.panel {
+  margin-top: 20px;
+  padding: 22px;
+}
+
+.panelTitle,
+.fieldTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 20px;
+}
+
+.panelTitle p {
+  margin: 4px 0 0;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #cdebe2;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #eef8f4;
+  color: #147d68;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: #147d68;
+}
+
+.fieldList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.fieldCard {
+  padding: 18px;
+  box-shadow: none;
+}
+
+.fieldTitle strong,
+.fieldTitle span {
+  display: block;
+}
+
+.fieldTitle strong {
+  color: #17202a;
+}
+
+.fieldTitle span {
+  margin-top: 4px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fieldCard dl {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.fieldCard dl div {
+  border-top: 1px solid #edf1ef;
+  padding-top: 10px;
+}
+
+.fieldCard dt {
+  color: #66737d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fieldCard dd {
+  overflow-wrap: anywhere;
+  margin: 5px 0 0;
+  color: #17202a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.fieldCard .detected {
+  color: #b84d3e;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  .summary,
+  .fieldList {
+    grid-template-columns: 1fr;
+  }
+
+  .summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 22px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+}

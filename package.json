@@ -1,0 +1,38 @@
+{
+  "name": "meo-aio-school-saas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev -H 127.0.0.1 -p 3030",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "check:env": "node scripts/check-env.mjs --strict",
+    "build:production": "npm run check:env && npm run build",
+    "db:seed": "npm run prisma:generate && tsc prisma/seed.ts --module commonjs --target es2022 --esModuleInterop --skipLibCheck --outDir ./.seed-build && node ./.seed-build/seed.js",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.12.0",
+    "@supabase/supabase-js": "^2.52.0",
+    "next": "^15.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
+    "eslint": "^9.20.0",
+    "eslint-config-next": "^15.4.0",
+    "prisma": "^6.12.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

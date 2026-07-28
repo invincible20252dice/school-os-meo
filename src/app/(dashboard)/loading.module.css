@@ -1,0 +1,65 @@
+.page {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border: 4px solid #dde5e1;
+  border-top-color: #147d68;
+  border-radius: 999px;
+  animation: spin 1s linear infinite;
+  flex: 0 0 auto;
+}
+
+.kicker {
+  margin: 0 0 6px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.panel h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.panel p {
+  margin: 6px 0 0;
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 620px) {
+  .page {
+    padding: 22px;
+  }
+
+  .panel {
+    align-items: flex-start;
+  }
+}

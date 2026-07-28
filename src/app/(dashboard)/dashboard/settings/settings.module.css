@@ -1,0 +1,311 @@
+.page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.header {
+  max-width: 860px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+}
+
+.header p,
+.panelTitle p {
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.header p {
+  margin: 12px 0 0;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 28px;
+}
+
+.tabs,
+.panel {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.tabs {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+}
+
+.tabs button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #52606a;
+  text-align: left;
+  font-weight: 800;
+}
+
+.tabs .activeTab {
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.panel {
+  padding: 22px;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 20px;
+}
+
+.panelTitle p {
+  margin: 4px 0 0;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.formGrid label,
+.full {
+  display: grid;
+  gap: 8px;
+}
+
+.formGrid span,
+.toggle span {
+  color: #43505a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.formGrid input,
+.formGrid select,
+.formGrid textarea {
+  width: 100%;
+  border: 1px solid #bdc8c4;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #17202a;
+  outline: none;
+}
+
+.formGrid textarea {
+  resize: vertical;
+}
+
+.full,
+.toggle {
+  grid-column: 1 / -1;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #27b58c;
+}
+
+.connectionSummary {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 14px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f9fbfa;
+}
+
+.connectedBadge,
+.mutedBadge {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connectedBadge {
+  background: #e8f7f0;
+  color: #147d68;
+}
+
+.mutedBadge {
+  background: #eef1f3;
+  color: #52606a;
+}
+
+.accountGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.accountGrid div {
+  min-width: 0;
+  border: 1px solid #e4ebe8;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.accountGrid dt {
+  margin: 0 0 6px;
+  color: #66737d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.accountGrid dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #17202a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.valid,
+.errors {
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.valid {
+  margin: 0;
+  background: #eef8f4;
+  color: #147d68;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.errors {
+  display: grid;
+  gap: 6px;
+  background: #fff1f1;
+}
+
+.errors p {
+  margin: 0;
+  color: #c5362f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.footer a {
+  color: #147d68;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.actionRow {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.actionRow a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 11px 14px;
+  background: #147d68;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.actionRow p {
+  margin: 0;
+  color: #66737d;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 860px) {
+  .page {
+    padding: 22px;
+  }
+
+  .shell,
+  .formGrid,
+  .accountGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,557 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  activateSurveySetting,
+  buildMockSurveySettingList,
+  buildMockSurveyEditorState,
+  buildSurveyPreviewSteps,
+  deleteSurveySetting,
+  saveSurveySetting,
+  type SurveyEditorItem,
+  type SurveyEditorState,
+  type SurveySettingListItem,
+  type SurveyItemType,
+  type SurveyWeekday,
+  validateSurveyEditorState,
+} from "@/lib/survey-builder";
+import styles from "./survey-editor.module.css";
+
+const itemTypes: Array<{ label: string; value: SurveyItemType }> = [
+  { label: "一つ選択", value: "SINGLE_SELECT" },
+  { label: "複数選択", value: "MULTI_SELECT" },
+  { label: "自由記述", value: "TEXT" },
+];
+const weekdays: SurveyWeekday[] = ["月", "火", "水", "木", "金", "土", "日"];
+
+function PhoneIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <path d="M11 18h2" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.buttonIcon}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function parseOptions(value: string) {
+  return value
+    .split("\n")
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+function serializeOptions(options: string[]) {
+  return options.join("\n");
+}
+
+function createItem(order: number): SurveyEditorItem {
+  return {
+    id: `item-${Date.now()}`,
+    type: "SINGLE_SELECT",
+    question: "新しい設問",
+    options: ["選択肢1", "選択肢2"],
+    order,
+  };
+}
+
+function buildNewSurveyState(settings: SurveySettingListItem[]): SurveyEditorState {
+  const base = buildMockSurveyEditorState();
+
+  return {
+    ...base,
+    id: `survey-${settings.length + 1}`,
+    title: "新しいアンケート",
+    isValid: false,
+    hasIncentive: false,
+    benefitType: "",
+    benefitShowTiming: "",
+  };
+}
+
+function nowLabel() {
+  const now = new Date();
+  const date = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+
+  return date.replaceAll("/", "-");
+}
+
+export default function SurveyEditor({ surveyId }: { surveyId: string }) {
+  const [settings, setSettings] = useState<SurveySettingListItem[]>(() =>
+    buildMockSurveySettingList(),
+  );
+  const [survey, setSurvey] = useState<SurveyEditorState>(() => {
+    const list = buildMockSurveySettingList();
+    const existing = list.find((setting) => setting.id === surveyId);
+
+    if (surveyId === "new") {
+      return buildNewSurveyState(list);
+    }
+
+    return existing ?? { ...buildMockSurveyEditorState(), id: surveyId };
+  });
+  const [editingExistingId, setEditingExistingId] = useState<string | null>(() =>
+    surveyId === "new" ? null : surveyId,
+  );
+  const [notice, setNotice] = useState<string | null>(null);
+  const errors = useMemo(() => validateSurveyEditorState(survey), [survey]);
+  const previewSteps = useMemo(() => buildSurveyPreviewSteps(survey), [survey]);
+
+  function updateSurvey<K extends keyof SurveyEditorState>(
+    key: K,
+    value: SurveyEditorState[K],
+  ) {
+    setSurvey((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateItem(id: string, patch: Partial<SurveyEditorItem>) {
+    setSurvey((current) => ({
+      ...current,
+      items: current.items.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
+    }));
+  }
+
+  function addItem() {
+    setSurvey((current) => ({
+      ...current,
+      items: [...current.items, createItem(current.items.length + 1)],
+    }));
+  }
+
+  function removeItem(id: string) {
+    setSurvey((current) => ({
+      ...current,
+      items: current.items
+        .filter((item) => item.id !== id)
+        .map((item, index) => ({ ...item, order: index + 1 })),
+    }));
+  }
+
+  function toggleWeekday(weekday: SurveyWeekday) {
+    setSurvey((current) => {
+      const selected = current.activeWeekdays.includes(weekday);
+
+      return {
+        ...current,
+        activeWeekdays: selected
+          ? current.activeWeekdays.filter((item) => item !== weekday)
+          : weekdays.filter((item) => [...current.activeWeekdays, weekday].includes(item)),
+      };
+    });
+  }
+
+  function saveSurvey() {
+    if (errors.length > 0) {
+      setNotice("入力内容を確認してください。");
+      return;
+    }
+
+    setSettings((current) => saveSurveySetting(current, survey, nowLabel()));
+    setEditingExistingId(survey.id);
+    setNotice("アンケート設定を保存しました。");
+  }
+
+  function discardEdit() {
+    setSurvey(buildNewSurveyState(settings));
+    setEditingExistingId(null);
+    setNotice("新規作成モードに切り替えました。");
+  }
+
+  function editSetting(setting: SurveySettingListItem) {
+    setSurvey(setting);
+    setEditingExistingId(setting.id);
+    setNotice(`${setting.title}を編集中です。`);
+  }
+
+  function activateSetting(settingId: string) {
+    setSettings((current) => activateSurveySetting(current, settingId));
+    setSurvey((current) =>
+      current.id === settingId
+        ? {
+            ...current,
+            isValid: true,
+          }
+        : current,
+    );
+    setNotice("適用中のアンケートを更新しました。");
+  }
+
+  function removeSetting(settingId: string) {
+    if (!window.confirm("このアンケートを削除してもよろしいですか？")) {
+      return;
+    }
+
+    setSettings((current) => {
+      const result = deleteSurveySetting(current, settingId);
+
+      if (result.blockedReason) {
+        setNotice(result.blockedReason);
+        return current;
+      }
+
+      if (survey.id === settingId) {
+        setSurvey(buildNewSurveyState(result.settings));
+        setEditingExistingId(null);
+      }
+
+      setNotice("アンケート設定を削除しました。");
+      return result.settings;
+    });
+  }
+
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <p className={styles.kicker}>Survey Builder</p>
+        <h1>アンケート設定</h1>
+        <p>
+          設問・口コミ生成条件・特典表示を編集すると、右側のスマホプレビューに即時反映されます。
+        </p>
+      </header>
+
+      <section className={styles.grid}>
+        <div className={styles.editor}>
+          <section className={styles.actionPanel}>
+            <div>
+              <h2>{editingExistingId ? "アンケートを編集中" : "新規アンケート作成"}</h2>
+              <p>
+                保存すると作成済みアンケート一覧へ反映されます。適用中にできる設定は1件です。
+              </p>
+            </div>
+            <div className={styles.formActions}>
+              <button type="button" className={styles.primaryButton} onClick={saveSurvey}>
+                {editingExistingId ? "更新する" : "保存する"}
+              </button>
+              <button type="button" className={styles.secondaryButton} onClick={discardEdit}>
+                {editingExistingId ? "編集内容を破棄" : "新規作成"}
+              </button>
+            </div>
+            {notice ? <p className={styles.toast}>{notice}</p> : null}
+          </section>
+
+          <section className={styles.panel}>
+            <h2>基本設定</h2>
+            <div className={styles.fieldGrid}>
+              <label>
+                <span>アンケート名</span>
+                <input
+                  value={survey.title}
+                  onChange={(event) => updateSurvey("title", event.target.value)}
+                />
+              </label>
+              <label>
+                <span>含めたいキーワード</span>
+                <input
+                  value={survey.requiredKeywords}
+                  onChange={(event) =>
+                    updateSurvey("requiredKeywords", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                <span>最小文字数</span>
+                <input
+                  type="number"
+                  value={survey.minCharCount}
+                  onChange={(event) =>
+                    updateSurvey("minCharCount", Number(event.target.value))
+                  }
+                />
+              </label>
+              <label>
+                <span>最大文字数</span>
+                <input
+                  type="number"
+                  value={survey.maxCharCount}
+                  onChange={(event) =>
+                    updateSurvey("maxCharCount", Number(event.target.value))
+                  }
+                />
+              </label>
+            </div>
+            <label className={styles.toggle}>
+              <input
+                type="checkbox"
+                checked={survey.isValid}
+                onChange={(event) => updateSurvey("isValid", event.target.checked)}
+              />
+              <span>アンケートを有効化</span>
+            </label>
+            <div className={styles.incentiveCard}>
+              <div>
+                <span>アンケート回答特典を付与する</span>
+                <p>OFFの場合、特典情報は保存時に空の状態で保持します。</p>
+              </div>
+              <div className={styles.segmented} aria-label="特典の有無">
+                <button
+                  type="button"
+                  className={survey.hasIncentive ? styles.segmentActive : undefined}
+                  aria-pressed={survey.hasIncentive}
+                  onClick={() => updateSurvey("hasIncentive", true)}
+                >
+                  特典をつける
+                </button>
+                <button
+                  type="button"
+                  className={!survey.hasIncentive ? styles.segmentActive : undefined}
+                  aria-pressed={!survey.hasIncentive}
+                  onClick={() => updateSurvey("hasIncentive", false)}
+                >
+                  特典をつけない
+                </button>
+              </div>
+            </div>
+            {survey.hasIncentive ? (
+              <div className={styles.fieldGrid}>
+                <label>
+                  <span>特典</span>
+                  <input
+                    value={survey.benefitType}
+                    onChange={(event) =>
+                      updateSurvey("benefitType", event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  <span>特典表示タイミング</span>
+                  <select
+                    value={survey.benefitShowTiming}
+                    onChange={(event) =>
+                      updateSurvey("benefitShowTiming", event.target.value)
+                    }
+                  >
+                    <option value="Google口コミ投稿後">Google口コミ投稿後</option>
+                    <option value="アンケート完了後">アンケート完了後</option>
+                    <option value="常時表示">常時表示</option>
+                  </select>
+                </label>
+              </div>
+            ) : (
+              <p className={styles.incentiveOff}>特典なしで保存されます。</p>
+            )}
+            <div className={styles.weekdayCard}>
+              <div>
+                <span>公開曜日</span>
+                <p>保護者にアンケートを表示する曜日を選択します。</p>
+              </div>
+              <div className={styles.weekdayButtons} aria-label="公開曜日">
+                {weekdays.map((weekday) => {
+                  const active = survey.activeWeekdays.includes(weekday);
+
+                  return (
+                    <button
+                      key={weekday}
+                      type="button"
+                      className={active ? styles.weekdayActive : undefined}
+                      aria-pressed={active}
+                      onClick={() => toggleWeekday(weekday)}
+                    >
+                      {weekday}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <h2>設問リスト</h2>
+              <button type="button" onClick={addItem}>
+                <PlusIcon />
+                設問を追加
+              </button>
+            </div>
+
+            <div className={styles.itemList}>
+              {survey.items.map((item) => (
+                <article key={item.id} className={styles.itemCard}>
+                  <div className={styles.itemHeader}>
+                    <strong>設問 {item.order}</strong>
+                    <button type="button" onClick={() => removeItem(item.id)}>
+                      削除
+                    </button>
+                  </div>
+                  <div className={styles.fieldGrid}>
+                    <label>
+                      <span>設問タイプ</span>
+                      <select
+                        value={item.type}
+                        onChange={(event) =>
+                          updateItem(item.id, {
+                            type: event.target.value as SurveyItemType,
+                            options:
+                              event.target.value === "TEXT" ? [] : item.options,
+                          })
+                        }
+                      >
+                        {itemTypes.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>設問文</span>
+                      <input
+                        value={item.question}
+                        onChange={(event) =>
+                          updateItem(item.id, { question: event.target.value })
+                        }
+                      />
+                    </label>
+                    {item.type === "MULTI_SELECT" ? (
+                      <label>
+                        <span>最大選択数</span>
+                        <input
+                          type="number"
+                          value={item.maxSelect ?? 3}
+                          onChange={(event) =>
+                            updateItem(item.id, {
+                              maxSelect: Number(event.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    {item.type !== "TEXT" ? (
+                      <label className={styles.full}>
+                        <span>選択肢（改行区切り）</span>
+                        <textarea
+                          rows={4}
+                          value={serializeOptions(item.options)}
+                          onChange={(event) =>
+                            updateItem(item.id, {
+                              options: parseOptions(event.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {errors.length ? (
+              <div className={styles.errors}>
+                {errors.map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+              </div>
+            ) : (
+              <p className={styles.valid}>保存可能な設定です。</p>
+            )}
+          </section>
+        </div>
+
+        <aside className={styles.previewWrap}>
+          <div className={styles.previewHeader}>
+            <PhoneIcon />
+            <div>
+              <h2>スマホプレビュー</h2>
+              <p>保護者画面での表示イメージ</p>
+            </div>
+          </div>
+          <div className={styles.phone}>
+            <div className={styles.phoneTop}>
+              <strong>{survey.title}</strong>
+              <span>{survey.isValid ? "公開中" : "停止中"}</span>
+            </div>
+            <p className={styles.keywords}>{survey.requiredKeywords}</p>
+            {previewSteps.map((item) => (
+              <section key={item.id} className={styles.previewStep}>
+                <span>Q{item.order}</span>
+                <h3>{item.question}</h3>
+                <p>{item.helperText}</p>
+                {item.type === "TEXT" ? (
+                  <div className={styles.textPlaceholder}>自由記述入力欄</div>
+                ) : (
+                  <div className={styles.optionList}>
+                    {item.options.map((option) => (
+                      <button key={option} type="button">
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+            {survey.hasIncentive ? (
+              <div className={styles.benefit}>
+                <strong>{survey.benefitType || "特典名未設定"}</strong>
+                <span>{survey.benefitShowTiming || "表示タイミング未設定"}</span>
+              </div>
+            ) : (
+              <div className={styles.benefitOff}>特典なし</div>
+            )}
+          </div>
+
+          <section className={styles.listPanel}>
+            <div className={styles.previewHeader}>
+              <div>
+                <h2>作成済みアンケート一覧</h2>
+                <p>選択・編集・削除をここで管理します。</p>
+              </div>
+            </div>
+            <div className={styles.settingList}>
+              {settings.map((setting) => (
+                <article key={setting.id} className={styles.settingCard}>
+                  <div className={styles.settingHeader}>
+                    <div>
+                      <strong>{setting.title}</strong>
+                      <span>作成日時 {setting.createdAt}</span>
+                    </div>
+                    <div className={styles.badges}>
+                      <b className={setting.hasIncentive ? styles.benefitBadge : styles.noBenefitBadge}>
+                        {setting.hasIncentive ? "特典あり" : "特典なし"}
+                      </b>
+                      {setting.isValid ? <b className={styles.activeBadge}>適用中</b> : null}
+                    </div>
+                  </div>
+                  <div className={styles.settingActions}>
+                    <button
+                      type="button"
+                      onClick={() => activateSetting(setting.id)}
+                      disabled={setting.isValid}
+                    >
+                      選択
+                    </button>
+                    <button type="button" onClick={() => editSetting(setting)}>
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.deleteButton}
+                      onClick={() => removeSetting(setting.id)}
+                    >
+                      削除
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  );
+}

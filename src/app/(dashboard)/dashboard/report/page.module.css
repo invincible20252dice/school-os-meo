@@ -1,0 +1,515 @@
+.page {
+  width: min(100%, 1180px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  color: #17202a;
+  font-size: 38px;
+  line-height: 1.2;
+}
+
+.header p,
+.panelTitle p {
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.header p {
+  margin: 14px 0 0;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.headerActions label {
+  display: grid;
+  gap: 6px;
+  color: #52606a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.headerActions select,
+.printButton {
+  min-height: 44px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.headerActions select {
+  min-width: 170px;
+  border: 1px solid #cfdad5;
+  padding: 0 38px 0 14px;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.printButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  align-self: end;
+  border: 0;
+  padding: 0 16px;
+  background: #147d68;
+  color: #ffffff;
+}
+
+.scorePanel,
+.metricCard,
+.insightPanel,
+.insightCard,
+.actionPanel {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.scorePanel {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  margin-top: 28px;
+  padding: 24px;
+}
+
+.scoreVisual {
+  display: grid;
+  place-items: center;
+  position: relative;
+  min-height: 230px;
+  border-radius: 8px;
+  background: #eef8f4;
+}
+
+.scoreVisual svg {
+  width: 176px;
+  height: 176px;
+  transform: rotate(-90deg);
+}
+
+.scoreVisual circle {
+  fill: none;
+  stroke: #d2ddd8;
+  stroke-width: 12;
+}
+
+.scoreVisual circle + circle {
+  stroke: #147d68;
+  stroke-linecap: round;
+}
+
+.scoreVisual div {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.scoreVisual strong {
+  color: #17202a;
+  font-size: 30px;
+}
+
+.scoreVisual span {
+  color: #147d68;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.scoreCopy > p {
+  margin: 18px 0 0;
+  border-left: 4px solid #27b58c;
+  padding-left: 14px;
+  color: #34414b;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 22px;
+}
+
+.panelTitle p {
+  margin: 4px 0 0;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.metricCard {
+  display: grid;
+  min-height: 210px;
+  align-content: start;
+  gap: 10px;
+  padding: 20px;
+}
+
+.metricCard span {
+  color: #52606a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.metricCard strong {
+  color: #17202a;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.metricCard p {
+  min-height: 48px;
+  margin: 0;
+  color: #52606a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.metricCard small {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.good small {
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.watch small {
+  background: #fff7e6;
+  color: #906302;
+}
+
+.alert small {
+  background: #fff0ee;
+  color: #b84d3e;
+}
+
+.insightPanel {
+  margin-top: 20px;
+  padding: 24px;
+}
+
+.insightHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+}
+
+.insightHeader h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 24px;
+}
+
+.insightHeader p {
+  margin: 8px 0 0;
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.insightControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.insightControls label {
+  display: grid;
+  gap: 6px;
+  color: #52606a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.insightControls select,
+.compareButton,
+.csvButton {
+  min-height: 42px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.insightControls select {
+  min-width: 150px;
+  border: 1px solid #cfdad5;
+  padding: 0 34px 0 13px;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.compareButton,
+.csvButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: end;
+  padding: 0 14px;
+}
+
+.compareButton {
+  border: 1px solid #147d68;
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.csvButton {
+  border: 0;
+  background: #17202a;
+  color: #ffffff;
+}
+
+.periodNotice {
+  margin-top: 18px;
+  border: 1px solid #cdebe2;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #f1fbf7;
+  color: #147d68;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.7;
+}
+
+.insightGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.insightCard {
+  display: grid;
+  min-height: 178px;
+  gap: 18px;
+  align-content: space-between;
+  padding: 18px;
+  box-shadow: none;
+}
+
+.insightCardTop {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.insightCardTop span {
+  display: block;
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.insightCardTop small {
+  display: block;
+  margin-top: 6px;
+  color: #52606a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.insightCardBottom {
+  display: grid;
+  gap: 10px;
+}
+
+.insightCardBottom strong {
+  color: #17202a;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.deltaBadge {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px dashed currentColor;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.deltaIncrease {
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.deltaDecrease {
+  background: #fff0ee;
+  color: #b84d3e;
+}
+
+.deltaFlat {
+  background: #f3f6f5;
+  color: #52606a;
+}
+
+.actionPanel {
+  margin-top: 20px;
+  padding: 24px;
+}
+
+.actions {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actions li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid #edf1ef;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfcfb;
+}
+
+.actions strong {
+  color: #17202a;
+  font-size: 15px;
+}
+
+.actions p {
+  margin: 7px 0 0;
+  color: #52606a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.actions span {
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #eef8f4;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  color: #27b58c;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.printButton .icon,
+.csvButton .icon {
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+@media (max-width: 1020px) {
+  .header,
+  .scorePanel,
+  .metrics,
+  .insightHeader,
+  .insightGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .headerActions,
+  .insightControls {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 20px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+
+  .scorePanel,
+  .insightPanel,
+  .actionPanel {
+    padding: 18px;
+  }
+
+  .insightControls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .insightControls select,
+  .compareButton,
+  .csvButton {
+    width: 100%;
+  }
+
+  .actions li {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .page {
+    padding: 0;
+  }
+
+  .printButton {
+    display: none;
+  }
+}
