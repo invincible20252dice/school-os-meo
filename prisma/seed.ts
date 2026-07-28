@@ -8,6 +8,8 @@ import {
 const prisma = new PrismaClient();
 
 const demoSchoolId = "school_demo_001";
+const defaultSchoolId = "default-school";
+const systemUserId = "system-user";
 
 async function main() {
   const adminEmail =
@@ -29,6 +31,39 @@ async function main() {
       name: adminName,
       role: Role.HEADQUARTERS,
       ...(adminPasswordHash ? { passwordHash: adminPasswordHash } : {}),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { id: systemUserId },
+    update: {
+      name: "システム",
+      role: Role.HEADQUARTERS,
+    },
+    create: {
+      id: systemUserId,
+      email: "system@school-os.local",
+      name: "システム",
+      role: Role.HEADQUARTERS,
+    },
+  });
+
+  await prisma.school.upsert({
+    where: { id: defaultSchoolId },
+    update: {
+      ownerId: systemUserId,
+      name: "デフォルト校舎",
+      brandName: "デフォルト校舎",
+      status: SchoolStatus.ACTIVE,
+    },
+    create: {
+      id: defaultSchoolId,
+      ownerId: systemUserId,
+      name: "デフォルト校舎",
+      brandName: "デフォルト校舎",
+      status: SchoolStatus.ACTIVE,
+      googlePlaceId: "system-default-school-place",
+      googleMapsUrl: "https://search.google.com/local/writereview",
     },
   });
 

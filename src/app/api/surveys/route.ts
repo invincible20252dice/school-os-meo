@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   normalizeSurveyPersistenceInput,
   persistSurvey,
+  toJapanesePersistenceError,
   type SurveyPersistenceInput,
 } from "@/lib/survey-persistence";
 import { resolveRequestAccess } from "@/lib/supabase-access";
@@ -29,10 +30,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        message:
-          error instanceof Error
-            ? error.message
-            : "アンケート設定を保存できませんでした。",
+        message: toJapanesePersistenceError(
+          error,
+          "アンケート設定を保存できませんでした。入力内容を確認して再度お試しください。",
+        ),
       },
       { status: 400 },
     );

@@ -42,6 +42,9 @@ export type SurveyResponseInput = {
 };
 
 type PrismaSurveyPersistenceClient = {
+  user: {
+    upsert(args: unknown): Promise<unknown>;
+  };
   survey: {
     upsert(args: unknown): Promise<unknown>;
   };
@@ -54,9 +57,15 @@ type PrismaSurveyPersistenceClient = {
   };
   school: {
     findUnique(args: unknown): Promise<unknown>;
+    upsert(args: unknown): Promise<unknown>;
   };
   $transaction<T>(operations: Promise<T>[]): Promise<T[]>;
 };
+
+export const DEFAULT_SCHOOL_ID = "default-school";
+const DEFAULT_SCHOOL_NAME = "デフォルト校舎";
+const SYSTEM_USER_ID = "system-user";
+const SYSTEM_USER_EMAIL = "system@school-os.local";
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -83,11 +92,10 @@ export function normalizeSurveyPersistenceInput(
   accessResult: RequestAccessResult,
 ): SurveyEditorState {
   const scopedSchool = buildScopedSchoolFilter(accessResult.access, input.schoolId);
-  const schoolId = scopedSchool.effectiveSchoolId || normalizeString(input.schoolId);
-
-  if (!schoolId) {
-    throw new Error("schoolId is required.");
-  }
+  const schoolId =
+    scopedSchool.effectiveSchoolId ||
+    normalizeString(input.schoolId) ||
+    DEFAULT_SCHOOL_ID;
 
   const title = normalizeString(input.title);
 
@@ -139,11 +147,13 @@ export async function persistSurvey(
   prisma: PrismaSurveyPersistenceClient,
   survey: SurveyEditorState,
 ) {
+  const school = await ensureSchoolForPersistence(prisma, survey.schoolId);
+  const schoolId = school.id;
   const surveyId = survey.id === "new" ? undefined : survey.id;
   const savedSurvey = await prisma.survey.upsert({
     where: { id: surveyId || `survey-${crypto.randomUUID()}` },
     update: {
-      schoolId: survey.schoolId,
+      schoolId,
       title: survey.title,
       requiredKeywords: survey.requiredKeywords,
       minCharCount: survey.minCharCount,
@@ -154,7 +164,7 @@ export async function persistSurvey(
     },
     create: {
       ...(surveyId ? { id: surveyId } : {}),
-      schoolId: survey.schoolId,
+      schoolId,
       title: survey.title,
       requiredKeywords: survey.requiredKeywords,
       minCharCount: survey.minCharCount,
@@ -184,11 +194,7 @@ export async function persistSurvey(
 }
 
 export function normalizeSurveyResponseInput(input: SurveyResponseInput) {
-  const schoolId = normalizeString(input.schoolId);
-
-  if (!schoolId) {
-    throw new Error("schoolId is required.");
-  }
+  const schoolId = normalizeString(input.schoolId) || DEFAULT_SCHOOL_ID;
 
   return {
     schoolId,
@@ -202,21 +208,14 @@ export function normalizeSurveyResponseInput(input: SurveyResponseInput) {
 }
 
 export async function persistSurveyResponse(
-  prisma: Pick<PrismaSurveyPersistenceClient, "review" | "school">,
+  prisma: Pick<PrismaSurveyPersistenceClient, "review" | "school" | "user">,
   input: ReturnType<typeof normalizeSurveyResponseInput>,
 ) {
-  const school = await prisma.school.findUnique({
-    where: { id: input.schoolId },
-    select: { id: true },
-  });
-
-  if (!school) {
-    throw new Error("対象校舎が見つかりません。");
-  }
+  const school = await ensureSchoolForPersistence(prisma, input.schoolId);
 
   return prisma.review.create({
     data: {
-      schoolId: input.schoolId,
+      schoolId: school.id,
       source: "SURVEY",
       status: "GENERATED" satisfies ReviewStatus,
       rating: input.rating || null,
@@ -230,4 +229,79 @@ export async function persistSurveyResponse(
       generatedPatterns: input.generatedReviews,
     },
   });
+}
+
+type PersistedSchool = { id: string };
+
+export async function ensureSchoolForPersistence(
+  prisma: Pick<PrismaSurveyPersistenceClient, "school" | "user">,
+  requestedSchoolId?: string,
+): Promise<PersistedSchool> {
+  const schoolId = normalizeString(requestedSchoolId) || DEFAULT_SCHOOL_ID;
+  const existingSchool = (await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { id: true },
+  })) as PersistedSchool | null;
+
+  if (existingSchool) {
+    return existingSchool;
+  }
+
+  await prisma.user.upsert({
+    where: { id: SYSTEM_USER_ID },
+    update: {},
+    create: {
+      id: SYSTEM_USER_ID,
+      name: "システム",
+      email: SYSTEM_USER_EMAIL,
+      role: "HEADQUARTERS",
+    },
+  });
+
+  return prisma.school.upsert({
+    where: { id: schoolId },
+    update: {},
+    create: {
+      id: schoolId,
+      ownerId: SYSTEM_USER_ID,
+      name: DEFAULT_SCHOOL_NAME,
+      brandName: DEFAULT_SCHOOL_NAME,
+      googlePlaceId: `system-${schoolId}-place`,
+      googleMapsUrl: "https://search.google.com/local/writereview",
+      status: "ACTIVE",
+    },
+    select: { id: true },
+  }) as Promise<PersistedSchool>;
+}
+
+export function toJapanesePersistenceError(error: unknown, fallbackMessage: string) {
+  if (!(error instanceof Error)) {
+    return fallbackMessage;
+  }
+
+  const message = error.message;
+
+  if (
+    message.includes("Foreign key constraint") ||
+    message.includes("constraint failed") ||
+    message.includes("P2003")
+  ) {
+    return "保存先の校舎情報を確認できませんでした。時間をおいて再度お試しください。";
+  }
+
+  if (message.includes("Unique constraint") || message.includes("P2002")) {
+    return "同じ内容のデータがすでに登録されています。入力内容を確認してください。";
+  }
+
+  if (message.includes("schoolId is required")) {
+    return "校舎情報を自動設定できませんでした。画面を再読み込みしてから再度お試しください。";
+  }
+
+  const hasRawDatabaseDetail =
+    message.includes("Prisma") ||
+    message.includes("constraint") ||
+    message.includes("database") ||
+    /^P\d{4}/.test(message);
+
+  return hasRawDatabaseDetail ? fallbackMessage : message;
 }

@@ -98,6 +98,33 @@ describe("POST /api/surveys", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body.message).toBe("アンケート設定を保存できませんでした。");
+    expect(body.message).toBe(
+      "アンケート設定を保存できませんでした。入力内容を確認して再度お試しください。",
+    );
+  });
+
+  it("does not expose raw database errors", async () => {
+    const persistence = await import("@/lib/survey-persistence");
+    vi.mocked(persistence.persistSurvey).mockRejectedValueOnce(
+      new Error("Foreign key constraint violated on the constraint: Survey_schoolId_fkey"),
+    );
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/surveys", {
+        method: "POST",
+        body: JSON.stringify({
+          schoolId: "school-missing",
+          title: "アンケート",
+          items: [{ type: "TEXT", question: "自由記述", order: 1 }],
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toBe(
+      "保存先の校舎情報を確認できませんでした。時間をおいて再度お試しください。",
+    );
+    expect(body.message).not.toContain("Foreign key");
   });
 });

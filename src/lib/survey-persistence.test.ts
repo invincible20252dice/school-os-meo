@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_SCHOOL_ID,
+  ensureSchoolForPersistence,
   normalizeSurveyPersistenceInput,
   normalizeSurveyResponseInput,
   persistSurvey,
   persistSurveyResponse,
+  toJapanesePersistenceError,
 } from "./survey-persistence";
 
 const managerAccess = {
@@ -54,13 +57,20 @@ describe("survey-persistence", () => {
     expect(survey.items[0].options).toEqual(["良い"]);
   });
 
+  it("uses the default school when a school id is not provided", () => {
+    const survey = normalizeSurveyPersistenceInput(
+      {
+        schoolId: "",
+        title: "アンケート",
+        items: [{ type: "TEXT", question: "自由記述", order: 1 }],
+      },
+      adminAccess,
+    );
+
+    expect(survey.schoolId).toBe(DEFAULT_SCHOOL_ID);
+  });
+
   it("rejects invalid survey inputs", () => {
-    expect(() =>
-      normalizeSurveyPersistenceInput(
-        { schoolId: "", title: "x", items: [] },
-        adminAccess,
-      ),
-    ).toThrow("schoolId is required.");
     expect(() =>
       normalizeSurveyPersistenceInput(
         { schoolId: "school-own", title: " ", items: [] },
@@ -108,6 +118,13 @@ describe("survey-persistence", () => {
 
   it("persists a survey and replaces its items", async () => {
     const prisma = {
+      user: {
+        upsert: vi.fn(async () => ({ id: "system-user" })),
+      },
+      school: {
+        findUnique: vi.fn(async () => ({ id: "school-own" })),
+        upsert: vi.fn(async () => ({ id: "school-own" })),
+      },
       survey: {
         upsert: vi.fn(async () => ({ id: "survey-1" })),
       },
@@ -134,6 +151,8 @@ describe("survey-persistence", () => {
     expect(prisma.survey.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "survey-1" },
+        update: expect.objectContaining({ schoolId: "school-own" }),
+        create: expect.objectContaining({ schoolId: "school-own" }),
       }),
     );
     expect(prisma.surveyItem.deleteMany).toHaveBeenCalledWith({
@@ -151,8 +170,12 @@ describe("survey-persistence", () => {
 
   it("normalizes and persists survey responses as reviews", async () => {
     const prisma = {
+      user: {
+        upsert: vi.fn(async () => ({ id: "system-user" })),
+      },
       school: {
         findUnique: vi.fn(async () => ({ id: "school-own" })),
+        upsert: vi.fn(async () => ({ id: "school-own" })),
       },
       review: {
         create: vi.fn(async () => ({ id: "review-1" })),
@@ -179,15 +202,77 @@ describe("survey-persistence", () => {
     });
   });
 
-  it("rejects responses for unknown schools", async () => {
-    await expect(
-      persistSurveyResponse(
-        {
-          school: { findUnique: vi.fn(async () => null) },
-          review: { create: vi.fn() },
-        },
-        normalizeSurveyResponseInput({ schoolId: "school-missing" }),
+  it("creates a school before saving a response when the school is missing", async () => {
+    const prisma = {
+      user: {
+        upsert: vi.fn(async () => ({ id: "system-user" })),
+      },
+      school: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn(async () => ({ id: "school-missing" })),
+      },
+      review: {
+        create: vi.fn(async () => ({ id: "review-1" })),
+      },
+    };
+
+    await persistSurveyResponse(
+      prisma,
+      normalizeSurveyResponseInput({ schoolId: "school-missing" }),
+    );
+
+    expect(prisma.user.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "system-user" },
+      }),
+    );
+    expect(prisma.school.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "school-missing" },
+        create: expect.objectContaining({
+          id: "school-missing",
+          ownerId: "system-user",
+          name: "デフォルト校舎",
+        }),
+      }),
+    );
+    expect(prisma.review.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ schoolId: "school-missing" }),
+    });
+  });
+
+  it("ensures the default school when no school id is passed", async () => {
+    const prisma = {
+      user: {
+        upsert: vi.fn(async () => ({ id: "system-user" })),
+      },
+      school: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn(async () => ({ id: DEFAULT_SCHOOL_ID })),
+      },
+    };
+
+    const school = await ensureSchoolForPersistence(prisma, "");
+
+    expect(school.id).toBe(DEFAULT_SCHOOL_ID);
+    expect(prisma.school.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: DEFAULT_SCHOOL_ID },
+      }),
+    );
+  });
+
+  it("maps raw database errors to Japanese messages", () => {
+    expect(
+      toJapanesePersistenceError(
+        new Error("Foreign key constraint violated on the constraint: Survey_schoolId_fkey"),
+        "保存できませんでした。",
       ),
-    ).rejects.toThrow("対象校舎が見つかりません。");
+    ).toBe(
+      "保存先の校舎情報を確認できませんでした。時間をおいて再度お試しください。",
+    );
+    expect(
+      toJapanesePersistenceError("failed", "保存できませんでした。"),
+    ).toBe("保存できませんでした。");
   });
 });
