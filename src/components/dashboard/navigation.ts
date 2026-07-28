@@ -84,6 +84,7 @@ export const dashboardNavItems: DashboardNavItem[] = [
       { label: "LINE通知設定", href: "/dashboard/settings/line" },
       { label: "Instagram連携設定", href: "/dashboard/settings/instagram" },
       { label: "プロンプト設定", href: "/dashboard/settings/prompts" },
+      { label: "ユーザー・権限管理", href: "/dashboard/settings/users" },
       { label: "改ざん防止", href: "/dashboard/settings/protection" },
     ],
   },

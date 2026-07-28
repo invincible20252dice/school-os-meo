@@ -93,6 +93,7 @@ describe("supabase-access", () => {
       role: "manager",
       school_id: "school-profile",
       full_name: "教室長",
+      status: "active",
     });
     const request = new Request("http://localhost/api", {
       headers: { authorization: "Bearer jwt-token" },
@@ -112,12 +113,17 @@ describe("supabase-access", () => {
         schoolId: "school-profile",
         schoolIds: ["school-profile"],
         name: "教室長",
+        status: "active",
       }),
     );
   });
 
   it("accepts explicit Supabase access token headers", async () => {
-    const client = buildClient({ role: "admin", school_ids: ["school-a"] });
+    const client = buildClient({
+      role: "admin",
+      school_ids: ["school-a"],
+      status: "active",
+    });
     const request = new Request("http://localhost/api", {
       headers: { "x-supabase-access-token": "explicit-token" },
     });
@@ -159,6 +165,7 @@ describe("supabase-access", () => {
           schoolIds: ["school-own"],
           name: "教室長",
           email: "manager@example.com",
+          status: "active",
           source: "profiles",
         },
         "school-other",

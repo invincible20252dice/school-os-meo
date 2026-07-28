@@ -11,6 +11,7 @@ export type ProfileAccessRow = {
   school_id?: string | null;
   school_ids?: string[] | null;
   full_name?: string | null;
+  status?: string | null;
 };
 
 export type SupabaseUserLike = {
@@ -22,6 +23,7 @@ export type SupabaseUserLike = {
 export type ResolvedUserAccess = AuthUserAccess & {
   name: string;
   email: string;
+  status: "active" | "pending";
   source: "profiles" | "user_metadata" | "fallback";
 };
 
@@ -81,6 +83,12 @@ export function resolveUserAccessFromSupabase(
     normalizeString(metadata.name) ||
     normalizeString(user.email) ||
     "ユーザー";
+  const explicitStatus = normalizeString(profile?.status).toLowerCase();
+  const hasApprovedProfile = Boolean(profile) && explicitStatus !== "pending";
+  const status =
+    hasApprovedProfile && (role === "admin" || Boolean(schoolId))
+      ? "active"
+      : "pending";
 
   return {
     userId: user.id,
@@ -89,8 +97,17 @@ export function resolveUserAccessFromSupabase(
     schoolIds: role === "admin" ? schoolIds : schoolIds.filter(Boolean),
     name,
     email: normalizeString(user.email),
+    status,
     source: profile ? "profiles" : Object.keys(metadata).length ? "user_metadata" : "fallback",
   };
+}
+
+export function isApprovedAccess(access: ResolvedUserAccess) {
+  return access.status === "active";
+}
+
+export function canManageUsers(access: ResolvedUserAccess) {
+  return access.status === "active" && access.role === "admin";
 }
 
 export function resolveScopedSchoolAccess(

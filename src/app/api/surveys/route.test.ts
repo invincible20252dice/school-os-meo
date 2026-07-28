@@ -23,6 +23,7 @@ vi.mock("@/lib/supabase-access", async () => {
         schoolIds: ["school-own"],
         name: "教室長",
         email: "manager@example.com",
+        status: "active",
         source: "profiles",
       },
       isAuthenticated: true,
@@ -109,6 +110,7 @@ describe("/api/surveys", () => {
         schoolIds: [],
         name: "本部",
         email: "admin@example.com",
+        status: "active",
         source: "profiles",
       },
       isAuthenticated: true,
@@ -142,6 +144,32 @@ describe("/api/surveys", () => {
     expect(response.status).toBe(500);
     expect(body.message).toBe("アンケート設定一覧を取得できませんでした。");
     consoleErrorSpy.mockRestore();
+  });
+
+  it("blocks authenticated users that are still waiting for approval", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "pending",
+        role: "manager",
+        schoolId: "",
+        schoolIds: [],
+        name: "承認待ち",
+        email: "pending@example.com",
+        status: "pending",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    const { GET } = await import("./route");
+    vi.mocked(prisma.survey.findMany).mockClear();
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.message).toBe("アカウント承認後にアンケート設定を閲覧できます。");
+    expect(prisma.survey.findMany).not.toHaveBeenCalled();
   });
 
   it("persists a survey scoped to the manager school", async () => {

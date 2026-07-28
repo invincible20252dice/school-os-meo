@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import AuthApprovalGate from "@/components/dashboard/AuthApprovalGate";
 import AuthAccessBadge from "@/components/dashboard/AuthAccessBadge";
 import Sidebar from "@/components/dashboard/Sidebar";
 import {
@@ -36,6 +37,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.shell}>
+      <AuthApprovalGate />
       <Sidebar />
       <div className={styles.content}>
         <header className={styles.header}>

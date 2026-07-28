@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeAccessRole,
+  canManageUsers,
+  isApprovedAccess,
   resolveScopedSchoolAccess,
   resolveUserAccessFromSupabase,
 } from "./access-control";
@@ -40,9 +42,45 @@ describe("access-control", () => {
         schoolId: "school-from-profile",
         schoolIds: ["school-from-profile"],
         name: "Profile User",
+        status: "active",
         source: "profiles",
       }),
     );
+  });
+
+  it("keeps new users pending until a profile is approved", () => {
+    const withoutProfile = resolveUserAccessFromSupabase({
+      id: "user-pending",
+      email: "pending@example.com",
+      user_metadata: { role: "admin" },
+    });
+    const pendingProfile = resolveUserAccessFromSupabase(
+      { id: "user-pending-2", email: "pending2@example.com" },
+      { role: "manager", school_id: "school-a", status: "pending" },
+    );
+
+    expect(withoutProfile.status).toBe("pending");
+    expect(pendingProfile.status).toBe("pending");
+    expect(isApprovedAccess(withoutProfile)).toBe(false);
+  });
+
+  it("allows only approved admin users to manage users", () => {
+    expect(
+      canManageUsers(
+        resolveUserAccessFromSupabase(
+          { id: "admin", email: "admin@example.com" },
+          { role: "admin", status: "active" },
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      canManageUsers(
+        resolveUserAccessFromSupabase(
+          { id: "manager", email: "manager@example.com" },
+          { role: "manager", school_id: "school-a", status: "active" },
+        ),
+      ),
+    ).toBe(false);
   });
 
   it("resolves access from metadata when a profile row is absent", () => {
@@ -79,6 +117,7 @@ describe("access-control", () => {
         schoolId: "",
         schoolIds: [],
         name: "fallback@example.com",
+        status: "pending",
         source: "fallback",
       }),
     );

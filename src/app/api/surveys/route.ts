@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
   normalizeSurveyPersistenceInput,
@@ -69,6 +70,14 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
     const accessResult = await resolveRequestAccess(request, url);
+
+    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+      return NextResponse.json(
+        { message: "アカウント承認後にアンケート設定を閲覧できます。" },
+        { status: 403 },
+      );
+    }
+
     const scopedSchool = buildScopedSchoolFilter(
       accessResult.access,
       requestedSchoolId,
@@ -113,6 +122,14 @@ export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
     const accessResult = await resolveRequestAccess(request, url);
+
+    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+      return NextResponse.json(
+        { message: "アカウント承認後にアンケート設定を保存できます。" },
+        { status: 403 },
+      );
+    }
+
     const input = (await request.json()) as SurveyPersistenceInput;
     const survey = normalizeSurveyPersistenceInput(input, accessResult);
     const savedSurvey = await persistSurvey(prisma, survey);

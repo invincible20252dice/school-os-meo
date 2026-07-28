@@ -29,6 +29,7 @@ type SupabaseAccessClient = {
             school_id?: string | null;
             school_ids?: string[] | null;
             full_name?: string | null;
+            status?: string | null;
           } | null;
           error: { message: string } | null;
         }>;
@@ -83,6 +84,7 @@ function getFallbackAccess(request: Request, url: URL): RequestAccessResult {
       schoolIds: schoolId ? [schoolId] : [],
       name: "Demo User",
       email: "",
+      status: "active",
       source: "fallback",
     },
     isAuthenticated: false,
@@ -110,7 +112,7 @@ export async function resolveRequestAccess(
 
   const profileResult = await supabaseClient
     .from("profiles")
-    .select("id, role, school_id, school_ids, full_name")
+    .select("id, role, school_id, school_ids, full_name, status")
     .eq("id", data.user.id)
     .maybeSingle();
 

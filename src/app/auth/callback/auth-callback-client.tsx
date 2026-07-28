@@ -38,9 +38,20 @@ export function AuthCallbackClient() {
           },
           createBrowserSupabaseClient(),
         );
+        const { data } = await createBrowserSupabaseClient().auth.getSession();
+        const token = data.session?.access_token;
+        const accessResponse = token
+          ? await fetch("/api/auth/me", {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            })
+          : null;
+        const access = accessResponse?.ok
+          ? ((await accessResponse.json()) as { approved?: boolean })
+          : null;
 
         if (isActive) {
-          router.replace("/dashboard");
+          router.replace(access?.approved === false ? "/pending" : "/dashboard");
         }
       } catch (error) {
         if (isActive) {
