@@ -256,11 +256,13 @@
   flex-wrap: wrap;
 }
 
-.actionRow a {
+.actionRow a,
+.actionRow button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 44px;
+  border: 0;
   border-radius: 8px;
   padding: 11px 14px;
   background: #147d68;
@@ -268,6 +270,13 @@
   font-size: 14px;
   font-weight: 800;
   text-decoration: none;
+  cursor: pointer;
+}
+
+.actionRow button:disabled {
+  background: #bdc8c4;
+  color: #ffffff;
+  cursor: not-allowed;
 }
 
 .actionRow p {
@@ -275,6 +284,33 @@
   color: #66737d;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.locationPreview {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.locationPreview div {
+  display: grid;
+  gap: 5px;
+}
+
+.locationPreview strong {
+  color: #17202a;
+  font-size: 14px;
+}
+
+.locationPreview span {
+  color: #52606a;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .icon {

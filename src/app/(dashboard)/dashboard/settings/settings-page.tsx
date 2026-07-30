@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buildMockSchoolSetting,
   buildSettingsTabs,
@@ -11,10 +11,21 @@ import {
   type SchoolSettingState,
   validateSchoolSetting,
 } from "@/lib/settings";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import TestReviewNotificationButton from "@/components/dashboard/TestReviewNotificationButton";
 import styles from "./settings.module.css";
 
 type SettingsTab = "google" | "line" | "instagram" | "prompts";
+
+type GbpLocationOption = {
+  accountName: string;
+  accountDisplayName: string;
+  name: string;
+  title: string;
+  locationId: string;
+  address: string;
+  placeId: string;
+};
 
 function SettingsIcon() {
   return (
@@ -47,6 +58,12 @@ export default function SettingsPage({
   const [setting, setSetting] = useState<SchoolSettingState>(() =>
     normalizeSchoolSetting(initialSetting ?? buildMockSchoolSetting()),
   );
+  const [gbpLocations, setGbpLocations] = useState<GbpLocationOption[]>([]);
+  const [selectedGbpLocationName, setSelectedGbpLocationName] = useState("");
+  const [googleMessage, setGoogleMessage] = useState("");
+  const [isLoadingGoogleSetting, setIsLoadingGoogleSetting] = useState(false);
+  const [isLoadingGbpLocations, setIsLoadingGbpLocations] = useState(false);
+  const [isSavingGbpLocation, setIsSavingGbpLocation] = useState(false);
   const tabs = buildSettingsTabs();
   const errors = useMemo(() => validateSchoolSetting(setting), [setting]);
   const instagramIsConnected =
@@ -58,6 +75,183 @@ export default function SettingsPage({
   ) {
     setSetting((current) => ({ ...current, [key]: value }));
   }
+
+  async function buildAuthHeaders(): Promise<Record<string, string>> {
+    try {
+      const { data } = await createBrowserSupabaseClient().auth.getSession();
+      const token = data.session?.access_token;
+
+      return token ? { authorization: `Bearer ${token}` } : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async function loadGoogleSetting() {
+    setIsLoadingGoogleSetting(true);
+    const schoolId =
+      typeof window === "undefined"
+        ? setting.schoolId
+        : new URLSearchParams(window.location.search).get("schoolId") ||
+          setting.schoolId;
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(
+        `/api/settings/google?schoolId=${encodeURIComponent(schoolId)}`,
+        { headers },
+      );
+      const data = (await response.json()) as {
+        message?: string;
+        setting?: NullableSchoolSettingState | null;
+        school?: { id: string; name: string; gbpLocationId?: string | null };
+      };
+
+      if (!response.ok) {
+        setGoogleMessage(data.message || "Google連携設定を取得できませんでした。");
+        return;
+      }
+
+      if (data.setting) {
+        const nextSetting = normalizeSchoolSetting({
+          ...setting,
+          ...data.setting,
+          schoolId: data.school?.id || data.setting.schoolId,
+          selectedGbpLocationId:
+            data.setting.selectedGbpLocationId ||
+            data.school?.gbpLocationId ||
+            "",
+        });
+        setSetting(nextSetting);
+        setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
+      }
+    } catch {
+      setGoogleMessage("Google連携設定を取得できませんでした。");
+    } finally {
+      setIsLoadingGoogleSetting(false);
+    }
+  }
+
+  async function loadGbpLocations() {
+    setIsLoadingGbpLocations(true);
+    setGoogleMessage("");
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch(
+        `/api/google/gbp-locations?schoolId=${encodeURIComponent(
+          setting.schoolId,
+        )}`,
+        { headers },
+      );
+      const data = (await response.json()) as {
+        message?: string;
+        locations?: GbpLocationOption[];
+        selectedGbpLocationId?: string;
+      };
+
+      if (!response.ok) {
+        setGoogleMessage(data.message || "GBP店舗一覧を取得できませんでした。");
+        return;
+      }
+
+      const locations = data.locations || [];
+      setGbpLocations(locations);
+      const selectedLocation =
+        data.selectedGbpLocationId ||
+        setting.selectedGbpLocationId ||
+        locations[0]?.name ||
+        "";
+      setSelectedGbpLocationName(selectedLocation);
+      setGoogleMessage(
+        locations.length
+          ? "GBP店舗一覧を取得しました。校舎に紐付ける店舗を選択してください。"
+          : "連携中のGoogleアカウントで取得できるGBP店舗がありませんでした。",
+      );
+    } catch {
+      setGoogleMessage("GBP店舗一覧を取得できませんでした。");
+    } finally {
+      setIsLoadingGbpLocations(false);
+    }
+  }
+
+  async function saveGbpLocationSelection() {
+    const selectedLocation = gbpLocations.find(
+      (location) => location.name === selectedGbpLocationName,
+    );
+
+    if (!selectedLocation) {
+      setGoogleMessage("保存するGBP店舗を選択してください。");
+      return;
+    }
+
+    setIsSavingGbpLocation(true);
+    setGoogleMessage("");
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch("/api/google/gbp-location-selection", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify({
+          schoolId: setting.schoolId,
+          accountName: selectedLocation.accountName,
+          locationName: selectedLocation.name,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        setting?: NullableSchoolSettingState;
+      };
+
+      if (!response.ok) {
+        setGoogleMessage(data.message || "GBP店舗の紐付けを保存できませんでした。");
+        return;
+      }
+
+      if (data.setting) {
+        setSetting((current) =>
+          normalizeSchoolSetting({
+            ...current,
+            ...data.setting,
+            googleRefreshToken: current.googleRefreshToken,
+          }),
+        );
+      }
+      setGoogleMessage("GBP店舗の紐付けを保存しました。");
+    } catch {
+      setGoogleMessage("GBP店舗の紐付けを保存できませんでした。");
+    } finally {
+      setIsSavingGbpLocation(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== "google") {
+      return;
+    }
+
+    const params =
+      typeof window === "undefined"
+        ? new URLSearchParams()
+        : new URLSearchParams(window.location.search);
+    const connectedMessage = params.get("google_connected");
+    const errorMessage = params.get("google_error");
+
+    if (connectedMessage) {
+      setGoogleMessage(
+        "Googleアカウント連携が完了しました。GBP店舗一覧を取得して校舎に紐付けてください。",
+      );
+    } else if (errorMessage) {
+      setGoogleMessage(errorMessage);
+    }
+
+    void loadGoogleSetting();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <main className={styles.page}>
@@ -104,43 +298,100 @@ export default function SettingsPage({
 
           {activeTab === "google" ? (
             <div className={styles.formGrid}>
-              <label className={styles.toggle}>
-                <input
-                  type="checkbox"
-                  checked={setting.googleConnected}
-                  onChange={(event) =>
-                    update("googleConnected", event.target.checked)
+              <div className={styles.connectionSummary}>
+                <span
+                  className={
+                    setting.googleConnected
+                      ? styles.connectedBadge
+                      : styles.mutedBadge
                   }
-                />
-                <span>Googleアカウント連携を有効化</span>
-              </label>
-              <label>
-                <span>GoogleアカウントID</span>
-                <input
-                  value={setting.googleAccountId}
+                >
+                  {setting.googleConnected ? "連携済み" : "未連携"}
+                </span>
+                <dl className={styles.accountGrid}>
+                  <div>
+                    <dt>Googleアカウント</dt>
+                    <dd>
+                      {isLoadingGoogleSetting
+                        ? "取得中"
+                        : setting.googleAccountId || "未連携"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Refresh Token</dt>
+                    <dd>{maskSecret(setting.googleRefreshToken)}</dd>
+                  </div>
+                  <div>
+                    <dt>連携対象GBP店舗</dt>
+                    <dd>{setting.selectedGbpLocationId || "未選択"}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div className={styles.actionRow}>
+                <a
+                  href={`/api/auth/google?schoolId=${encodeURIComponent(
+                    setting.schoolId,
+                  )}`}
+                >
+                  Googleアカウント連携（OAuth）
+                </a>
+                <button
+                  type="button"
+                  onClick={loadGbpLocations}
+                  disabled={!setting.googleConnected || isLoadingGbpLocations}
+                >
+                  {isLoadingGbpLocations ? "店舗一覧を取得中" : "GBP店舗一覧を取得"}
+                </button>
+                <p>
+                  Google Cloud Consoleの承認済みリダイレクトURIに
+                  `/api/auth/callback/google` を設定してください。
+                </p>
+              </div>
+              <label className={styles.full}>
+                <span>校舎に紐付けるGBP店舗</span>
+                <select
+                  value={selectedGbpLocationName}
                   onChange={(event) =>
-                    update("googleAccountId", event.target.value)
+                    setSelectedGbpLocationName(event.target.value)
                   }
-                />
+                  disabled={!gbpLocations.length}
+                >
+                  {!gbpLocations.length ? (
+                    <option value="">GBP店舗一覧を取得してください</option>
+                  ) : null}
+                  {gbpLocations.map((location) => (
+                    <option key={location.name} value={location.name}>
+                      {location.title} / {location.accountDisplayName} /{" "}
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <label>
-                <span>Refresh Token</span>
-                <input
-                  value={setting.googleRefreshToken}
-                  onChange={(event) =>
-                    update("googleRefreshToken", event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                <span>連携対象GBP店舗ID</span>
-                <input
-                  value={setting.selectedGbpLocationId}
-                  onChange={(event) =>
-                    update("selectedGbpLocationId", event.target.value)
-                  }
-                />
-              </label>
+              {selectedGbpLocationName ? (
+                <div className={styles.locationPreview}>
+                  {gbpLocations
+                    .filter(
+                      (location) => location.name === selectedGbpLocationName,
+                    )
+                    .map((location) => (
+                      <div key={location.name}>
+                        <strong>{location.title}</strong>
+                        <span>{location.address || "住所情報なし"}</span>
+                        <span>Place ID: {location.placeId || "未取得"}</span>
+                      </div>
+                    ))}
+                </div>
+              ) : null}
+              <div className={styles.actionRow}>
+                <button
+                  type="button"
+                  onClick={saveGbpLocationSelection}
+                  disabled={!selectedGbpLocationName || isSavingGbpLocation}
+                >
+                  {isSavingGbpLocation ? "保存中" : "選択したGBP店舗を保存"}
+                </button>
+                {googleMessage ? <p>{googleMessage}</p> : null}
+              </div>
             </div>
           ) : null}
 
