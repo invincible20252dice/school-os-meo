@@ -6,7 +6,7 @@ import {
 } from "@/lib/google-gbp-oauth";
 
 function normalizeSchoolId(value: string | null) {
-  return value?.trim() || "school-demo-001";
+  return value?.trim() || "";
 }
 
 function buildSettingsRedirect(requestUrl: string, message: string) {
@@ -20,6 +20,10 @@ export async function GET(request: Request) {
   const schoolId = normalizeSchoolId(url.searchParams.get("schoolId"));
 
   try {
+    if (!schoolId) {
+      throw new Error("Google連携を開始する校舎を選択してください。");
+    }
+
     const redirectUri = getGoogleRedirectUri(
       request.url,
       getForwardedOrigin(request.headers),

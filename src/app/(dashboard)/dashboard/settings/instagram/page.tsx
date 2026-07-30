@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import SettingsPage from "../settings-page";
 
 export default function InstagramSettingsPage() {
-  return <SettingsPage initialTab="instagram" />;
+  return (
+    <Suspense fallback={null}>
+      <SettingsPage initialTab="instagram" />
+    </Suspense>
+  );
 }

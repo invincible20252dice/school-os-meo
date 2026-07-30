@@ -82,6 +82,33 @@ export function buildMockSchoolSetting(): SchoolSettingState {
   };
 }
 
+export function buildEmptySchoolSetting(schoolId: string): SchoolSettingState {
+  return {
+    id: "",
+    schoolId: schoolId.trim(),
+    googleConnected: false,
+    googleAccountId: "",
+    googleRefreshToken: "",
+    selectedGbpLocationId: "",
+    lineNotifyEnabled: true,
+    lineChannelAccessToken: "",
+    lineDestinationId: "",
+    notifyOnNewReview: true,
+    notifyOnLowRating: true,
+    instagramConnected: false,
+    instagramMetaAppId: "",
+    instagramMetaAppSecret: "",
+    instagramBusinessAccountId: "",
+    instagramAccountName: "",
+    instagramAccessToken: "",
+    promptSystemRole: "",
+    promptReviewTone: "FRIENDLY",
+    promptForbiddenWords: [],
+    promptMustKeywords: [],
+    updatedAt: "",
+  };
+}
+
 function normalizeString(value: string | null | undefined) {
   return value ?? "";
 }

@@ -47,7 +47,12 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const metaAppId = url.searchParams.get("metaAppId") || undefined;
-    const schoolId = url.searchParams.get("schoolId") || "school-demo-001";
+    const schoolId = url.searchParams.get("schoolId")?.trim() || "";
+
+    if (!schoolId) {
+      throw new Error("Instagram連携を開始する校舎を選択してください。");
+    }
+
     const redirectUri = getInstagramRedirectUri(
       request.url,
       getForwardedOrigin(request.headers),

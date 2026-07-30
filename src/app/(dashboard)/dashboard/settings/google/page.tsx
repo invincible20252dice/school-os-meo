@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import SettingsPage from "../settings-page";
 
 export default function GoogleSettingsPage() {
-  return <SettingsPage initialTab="google" />;
+  return (
+    <Suspense fallback={null}>
+      <SettingsPage initialTab="google" />
+    </Suspense>
+  );
 }

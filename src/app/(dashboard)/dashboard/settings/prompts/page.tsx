@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import SettingsPage from "../settings-page";
 
 export default function PromptSettingsPage() {
-  return <SettingsPage initialTab="prompts" />;
+  return (
+    <Suspense fallback={null}>
+      <SettingsPage initialTab="prompts" />
+    </Suspense>
+  );
 }

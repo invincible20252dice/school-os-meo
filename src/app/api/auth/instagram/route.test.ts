@@ -124,6 +124,16 @@ describe("GET /api/auth/instagram", () => {
     expect(prisma.instagramSetting.findUnique).not.toHaveBeenCalled();
   });
 
+  it("rejects OAuth start when school id is missing", async () => {
+    const response = await GET(
+      new Request("https://example.ngrok-free.dev/api/auth/instagram"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toContain("校舎");
+  });
+
   it("still redirects with the fixed fallback App ID when DB lookup fails", async () => {
     const { prisma } = await import("@/lib/prisma");
     process.env = { ...process.env, DATABASE_URL: "postgresql://example" };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMockSchoolSetting,
+  buildEmptySchoolSetting,
   buildSettingsTabs,
   maskSecret,
   normalizeSchoolSetting,
@@ -27,6 +28,16 @@ describe("settings", () => {
     expect(setting.promptReviewTone).toBe("FRIENDLY");
     expect(setting.promptForbiddenWords).toContain("絶対合格");
     expect(setting.promptMustKeywords).toContain("個別指導");
+  });
+
+  it("builds an empty school setting for DB-backed settings screens", () => {
+    const setting = buildEmptySchoolSetting(" school-live-001 ");
+
+    expect(setting.schoolId).toBe("school-live-001");
+    expect(setting.googleConnected).toBe(false);
+    expect(setting.googleRefreshToken).toBe("");
+    expect(setting.lineNotifyEnabled).toBe(true);
+    expect(setting.promptForbiddenWords).toEqual([]);
   });
 
   it("validates connected settings", () => {

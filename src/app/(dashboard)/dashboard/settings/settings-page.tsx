@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  buildEmptySchoolSetting,
   buildMockSchoolSetting,
   buildSettingsTabs,
   maskSecret,
@@ -54,6 +56,7 @@ export default function SettingsPage({
   initialTab?: SettingsTab;
   initialSetting?: NullableSchoolSettingState;
 }) {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [setting, setSetting] = useState<SchoolSettingState>(() =>
     normalizeSchoolSetting(initialSetting ?? buildMockSchoolSetting()),
@@ -61,9 +64,11 @@ export default function SettingsPage({
   const [gbpLocations, setGbpLocations] = useState<GbpLocationOption[]>([]);
   const [selectedGbpLocationName, setSelectedGbpLocationName] = useState("");
   const [googleMessage, setGoogleMessage] = useState("");
-  const [isLoadingGoogleSetting, setIsLoadingGoogleSetting] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isLoadingSchoolSetting, setIsLoadingSchoolSetting] = useState(false);
   const [isLoadingGbpLocations, setIsLoadingGbpLocations] = useState(false);
   const [isSavingGbpLocation, setIsSavingGbpLocation] = useState(false);
+  const [isSavingSchoolSetting, setIsSavingSchoolSetting] = useState(false);
   const tabs = buildSettingsTabs();
   const errors = useMemo(() => validateSchoolSetting(setting), [setting]);
   const instagramIsConnected =
@@ -87,18 +92,21 @@ export default function SettingsPage({
     }
   }
 
-  async function loadGoogleSetting() {
-    setIsLoadingGoogleSetting(true);
+  function getActiveSchoolId() {
+    return searchParams.get("schoolId") || setting.schoolId;
+  }
+
+  async function loadSchoolSetting() {
+    setIsLoadingSchoolSetting(true);
+    setSaveMessage("");
     const schoolId =
-      typeof window === "undefined"
-        ? setting.schoolId
-        : new URLSearchParams(window.location.search).get("schoolId") ||
-          setting.schoolId;
+      searchParams.get("schoolId") ||
+      setting.schoolId;
 
     try {
       const headers = await buildAuthHeaders();
       const response = await fetch(
-        `/api/settings/google?schoolId=${encodeURIComponent(schoolId)}`,
+        `/api/settings/school?schoolId=${encodeURIComponent(schoolId)}`,
         { headers },
       );
       const data = (await response.json()) as {
@@ -108,13 +116,12 @@ export default function SettingsPage({
       };
 
       if (!response.ok) {
-        setGoogleMessage(data.message || "Google連携設定を取得できませんでした。");
+        setSaveMessage(data.message || "校舎設定を取得できませんでした。");
         return;
       }
 
       if (data.setting) {
         const nextSetting = normalizeSchoolSetting({
-          ...setting,
           ...data.setting,
           schoolId: data.school?.id || data.setting.schoolId,
           selectedGbpLocationId:
@@ -124,11 +131,54 @@ export default function SettingsPage({
         });
         setSetting(nextSetting);
         setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
+      } else if (data.school?.id) {
+        setSetting(buildEmptySchoolSetting(data.school.id));
+        setSelectedGbpLocationName("");
       }
     } catch {
-      setGoogleMessage("Google連携設定を取得できませんでした。");
+      setSaveMessage("校舎設定を取得できませんでした。");
     } finally {
-      setIsLoadingGoogleSetting(false);
+      setIsLoadingSchoolSetting(false);
+    }
+  }
+
+  async function saveSchoolSetting() {
+    setIsSavingSchoolSetting(true);
+    setSaveMessage("");
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch("/api/settings/school", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify({
+          ...setting,
+          schoolId: getActiveSchoolId(),
+          googleRefreshToken: undefined,
+          instagramAccessToken: undefined,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        setting?: NullableSchoolSettingState;
+      };
+
+      if (!response.ok) {
+        setSaveMessage(data.message || "校舎設定を保存できませんでした。");
+        return;
+      }
+
+      if (data.setting) {
+        setSetting(normalizeSchoolSetting(data.setting));
+      }
+      setSaveMessage("校舎設定を保存しました。");
+    } catch {
+      setSaveMessage("校舎設定を保存できませんでした。");
+    } finally {
+      setIsSavingSchoolSetting(false);
     }
   }
 
@@ -140,7 +190,7 @@ export default function SettingsPage({
       const headers = await buildAuthHeaders();
       const response = await fetch(
         `/api/google/gbp-locations?schoolId=${encodeURIComponent(
-          setting.schoolId,
+          getActiveSchoolId(),
         )}`,
         { headers },
       );
@@ -197,7 +247,7 @@ export default function SettingsPage({
           ...headers,
         },
         body: JSON.stringify({
-          schoolId: setting.schoolId,
+          schoolId: getActiveSchoolId(),
           accountName: selectedLocation.accountName,
           locationName: selectedLocation.name,
         }),
@@ -249,9 +299,12 @@ export default function SettingsPage({
       setGoogleMessage(errorMessage);
     }
 
-    void loadGoogleSetting();
+  }, [activeTab, searchParams]);
+
+  useEffect(() => {
+    void loadSchoolSetting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [searchParams]);
 
   return (
     <main className={styles.page}>
@@ -312,7 +365,7 @@ export default function SettingsPage({
                   <div>
                     <dt>Googleアカウント</dt>
                     <dd>
-                      {isLoadingGoogleSetting
+                      {isLoadingSchoolSetting
                         ? "取得中"
                         : setting.googleAccountId || "未連携"}
                     </dd>
@@ -330,7 +383,7 @@ export default function SettingsPage({
               <div className={styles.actionRow}>
                 <a
                   href={`/api/auth/google?schoolId=${encodeURIComponent(
-                    setting.schoolId,
+                    getActiveSchoolId(),
                   )}`}
                 >
                   Googleアカウント連携（OAuth）
@@ -527,7 +580,7 @@ export default function SettingsPage({
               <div className={styles.actionRow}>
                 <a
                   href={`/api/auth/instagram?schoolId=${encodeURIComponent(
-                    setting.schoolId,
+                    getActiveSchoolId(),
                   )}&metaAppId=${encodeURIComponent(setting.instagramMetaAppId)}`}
                 >
                   Instagramアカウントを連携
@@ -596,8 +649,20 @@ export default function SettingsPage({
                 ))}
               </div>
             ) : (
-              <p className={styles.valid}>保存可能な設定です。</p>
+              <p className={styles.valid}>
+                {saveMessage ||
+                  (isLoadingSchoolSetting
+                    ? "校舎設定を読み込んでいます。"
+                    : "保存可能な設定です。")}
+              </p>
             )}
+            <button
+              type="button"
+              onClick={saveSchoolSetting}
+              disabled={isSavingSchoolSetting || isLoadingSchoolSetting || Boolean(errors.length)}
+            >
+              {isSavingSchoolSetting ? "保存中" : "設定を保存"}
+            </button>
             <Link href="/dashboard">ダッシュボードへ戻る</Link>
           </div>
         </div>

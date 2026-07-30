@@ -34,13 +34,14 @@ describe("GET /api/auth/google", () => {
     );
   });
 
-  it("uses the default demo school state when school id is omitted", async () => {
+  it("redirects back to settings when school id is omitted", async () => {
     const response = await GET(
       new Request("https://app.example.com/api/auth/google"),
     );
     const location = new URL(response.headers.get("location") || "");
 
-    expect(location.searchParams.get("state")).toBe("school-demo-001");
+    expect(location.pathname).toBe("/dashboard/settings/google");
+    expect(location.searchParams.get("google_error")).toContain("校舎");
   });
 
   it("redirects back to settings when Google client id is missing", async () => {
