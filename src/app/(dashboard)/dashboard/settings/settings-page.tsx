@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   buildEmptySchoolSetting,
-  buildMockSchoolSetting,
   buildSettingsTabs,
   maskSecret,
   normalizeSchoolSetting,
@@ -27,6 +26,11 @@ type GbpLocationOption = {
   locationId: string;
   address: string;
   placeId: string;
+};
+
+type DashboardContextResponse = {
+  currentSchoolId?: string;
+  message?: string;
 };
 
 function SettingsIcon() {
@@ -59,7 +63,7 @@ export default function SettingsPage({
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [setting, setSetting] = useState<SchoolSettingState>(() =>
-    normalizeSchoolSetting(initialSetting ?? buildMockSchoolSetting()),
+    normalizeSchoolSetting(initialSetting ?? buildEmptySchoolSetting("")),
   );
   const [gbpLocations, setGbpLocations] = useState<GbpLocationOption[]>([]);
   const [selectedGbpLocationName, setSelectedGbpLocationName] = useState("");
@@ -96,15 +100,37 @@ export default function SettingsPage({
     return searchParams.get("schoolId") || setting.schoolId;
   }
 
+  async function resolveActiveSchoolId(headers: Record<string, string>) {
+    const explicitSchoolId = searchParams.get("schoolId") || setting.schoolId;
+
+    if (explicitSchoolId && explicitSchoolId !== "school-demo-001") {
+      return explicitSchoolId;
+    }
+
+    const contextResponse = await fetch("/api/dashboard/context", { headers });
+    const contextData = (await contextResponse.json()) as DashboardContextResponse;
+
+    if (!contextResponse.ok) {
+      throw new Error(contextData.message || "校舎情報を取得できませんでした。");
+    }
+
+    return contextData.currentSchoolId || "";
+  }
+
   async function loadSchoolSetting() {
     setIsLoadingSchoolSetting(true);
     setSaveMessage("");
-    const schoolId =
-      searchParams.get("schoolId") ||
-      setting.schoolId;
-
     try {
       const headers = await buildAuthHeaders();
+      const schoolId = await resolveActiveSchoolId(headers);
+
+      if (!schoolId) {
+        setSetting(buildEmptySchoolSetting(""));
+        setSelectedGbpLocationName("");
+        setSaveMessage("校舎を選択してください。");
+        return;
+      }
+
       const response = await fetch(
         `/api/settings/school?schoolId=${encodeURIComponent(schoolId)}`,
         { headers },

@@ -61,6 +61,7 @@ describe("GET /api/auth/callback/google", () => {
           googleConnected: true,
           googleAccountId: "owner@example.com",
           googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "",
         }),
       }),
     );

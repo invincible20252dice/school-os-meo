@@ -79,6 +79,7 @@ export async function GET(request: Request) {
         googleConnected: true,
         googleAccountId: accountEmail || "Google Business Profile",
         googleRefreshToken: tokenSet.refreshToken,
+        selectedGbpLocationId: "",
       },
     });
 

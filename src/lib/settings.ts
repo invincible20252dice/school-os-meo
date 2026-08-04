@@ -120,7 +120,7 @@ function normalizeStringList(value: string[] | null | undefined) {
 export function normalizeSchoolSetting(
   setting: NullableSchoolSettingState = {},
 ): SchoolSettingState {
-  const fallback = buildMockSchoolSetting();
+  const fallback = buildEmptySchoolSetting(normalizeString(setting.schoolId));
   const hasInstagramAccount =
     Boolean(setting.instagramBusinessAccountId) ||
     Boolean(setting.instagramAccessToken) ||
@@ -151,8 +151,7 @@ export function normalizeSchoolSetting(
     instagramAccountName: normalizeString(setting.instagramAccountName),
     instagramAccessToken: normalizeString(setting.instagramAccessToken),
     promptSystemRole: normalizeString(setting.promptSystemRole),
-    promptReviewTone:
-      setting.promptReviewTone ?? fallback.promptReviewTone,
+    promptReviewTone: setting.promptReviewTone ?? fallback.promptReviewTone,
     promptForbiddenWords: normalizeStringList(setting.promptForbiddenWords),
     promptMustKeywords: normalizeStringList(setting.promptMustKeywords),
     updatedAt: normalizeString(setting.updatedAt) || fallback.updatedAt,

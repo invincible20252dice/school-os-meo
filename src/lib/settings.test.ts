@@ -95,7 +95,7 @@ describe("settings", () => {
     expect(setting.promptMustKeywords).toEqual([]);
   });
 
-  it("keeps explicit disabled flags and fallback IDs during normalization", () => {
+  it("keeps explicit disabled flags without injecting demo settings during normalization", () => {
     const setting = normalizeSchoolSetting({
       id: "",
       schoolId: "",
@@ -113,8 +113,8 @@ describe("settings", () => {
       updatedAt: "",
     });
 
-    expect(setting.id).toBe("setting-demo-001");
-    expect(setting.schoolId).toBe("school-demo-001");
+    expect(setting.id).toBe("");
+    expect(setting.schoolId).toBe("");
     expect(setting.googleConnected).toBe(false);
     expect(setting.lineNotifyEnabled).toBe(false);
     expect(setting.notifyOnNewReview).toBe(false);
@@ -123,7 +123,16 @@ describe("settings", () => {
     expect(setting.promptReviewTone).toBe("FRIENDLY");
     expect(setting.promptForbiddenWords).toEqual(["誇大表現"]);
     expect(setting.promptMustKeywords).toEqual(["地域密着"]);
-    expect(setting.updatedAt).toBe("2026-07-22 16:45");
+    expect(setting.updatedAt).toBe("");
+  });
+
+  it("does not inject mock Google account values into empty settings", () => {
+    const setting = normalizeSchoolSetting();
+
+    expect(setting.googleConnected).toBe(false);
+    expect(setting.googleAccountId).toBe("");
+    expect(setting.googleRefreshToken).toBe("");
+    expect(setting.selectedGbpLocationId).toBe("");
   });
 
   it("masks saved secrets for display", () => {
