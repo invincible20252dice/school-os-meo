@@ -84,9 +84,34 @@ describe("supabase auth", () => {
       provider: "google",
       options: {
         redirectTo: "https://school-os-meo.vercel.app/auth/callback",
+        scopes: "https://www.googleapis.com/auth/business.manage",
         queryParams: {
-          prompt: "select_account",
+          access_type: "offline",
+          prompt: "consent",
         },
+      },
+    });
+  });
+
+  it("requests Google OAuth refresh token consent for GBP access", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "";
+    process.env.NEXT_PUBLIC_SITE_URL = "";
+    const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
+
+    await startGoogleOAuth(
+      {
+        auth: { signInWithOAuth },
+      },
+      "http://localhost:3030",
+    );
+
+    const payload = signInWithOAuth.mock.calls[0][0];
+    expect(payload.options).toMatchObject({
+      redirectTo: "http://localhost:3030/auth/callback",
+      scopes: "https://www.googleapis.com/auth/business.manage",
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent",
       },
     });
   });

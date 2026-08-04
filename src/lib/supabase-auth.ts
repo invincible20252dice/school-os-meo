@@ -19,7 +19,9 @@ export type SupabaseOAuthClient = {
       provider: "google";
       options: {
         redirectTo: string;
+        scopes: string;
         queryParams: {
+          access_type: string;
           prompt: string;
         };
       };
@@ -117,8 +119,10 @@ export async function startGoogleOAuth(
     provider: "google",
     options: {
       redirectTo,
+      scopes: "https://www.googleapis.com/auth/business.manage",
       queryParams: {
-        prompt: "select_account",
+        access_type: "offline",
+        prompt: "consent",
       },
     },
   });
