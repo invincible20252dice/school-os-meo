@@ -225,6 +225,29 @@ describe("supabase auth", () => {
     });
   });
 
+  it("surfaces token_hash verification errors", async () => {
+    const verifyOtp = vi.fn().mockResolvedValue({
+      error: { message: "Token hash expired." },
+    });
+
+    await expect(
+      exchangeSupabaseAuthCallback(
+        { search: "?token_hash=hash-value&type=invite", hash: "" },
+        {
+          auth: {
+            exchangeCodeForSession: vi.fn(),
+            setSession: vi.fn(),
+            verifyOtp,
+          },
+        },
+      ),
+    ).rejects.toThrow("Token hash expired.");
+    expect(verifyOtp).toHaveBeenCalledWith({
+      token_hash: "hash-value",
+      type: "invite",
+    });
+  });
+
   it("sets the session from hash access and refresh tokens", async () => {
     const setSession = vi.fn().mockResolvedValue({ error: null });
 
@@ -246,6 +269,28 @@ describe("supabase auth", () => {
       access_token: "access-token",
       refresh_token: "refresh-token",
     });
+  });
+
+  it("surfaces hash session setup errors", async () => {
+    const setSession = vi.fn().mockResolvedValue({
+      error: { message: "Refresh token revoked." },
+    });
+
+    await expect(
+      exchangeSupabaseAuthCallback(
+        {
+          search: "",
+          hash: "#access_token=access-token&refresh_token=refresh-token",
+        },
+        {
+          auth: {
+            exchangeCodeForSession: vi.fn(),
+            setSession,
+            verifyOtp: vi.fn(),
+          },
+        },
+      ),
+    ).rejects.toThrow("Refresh token revoked.");
   });
 
   it("surfaces callback provider errors and missing token errors", async () => {

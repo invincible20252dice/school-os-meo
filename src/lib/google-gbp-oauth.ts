@@ -39,6 +39,7 @@ type GbpLocationsResponse = {
 type GbpLocationResponse = {
   name?: string;
   title?: string;
+  storeCode?: string;
   storefrontAddress?: {
     addressLines?: string[];
     locality?: string;
@@ -79,6 +80,7 @@ export type GbpLocation = {
   accountDisplayName: string;
   name: string;
   title: string;
+  storeCode: string;
   locationId: string;
   address: string;
   placeId: string;
@@ -317,6 +319,30 @@ async function fetchJson<T>(url: URL, accessToken: string, fetchImpl: FetchLike)
   return (await response.json()) as T;
 }
 
+async function fetchGbpJson<T>(url: URL, accessToken: string, fetchImpl: FetchLike) {
+  const response = await fetchImpl(url.toString(), {
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    let errorBody = "";
+
+    try {
+      errorBody = await response.text();
+    } catch {
+      errorBody = "";
+    }
+
+    throw new Error(
+      `Google Business Profile API failed: ${response.status}${errorBody ? ` ${errorBody}` : ""}`,
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
 export async function fetchGbpAccounts({
   accessToken,
   fetchImpl = fetch,
@@ -372,32 +398,41 @@ export async function fetchGbpLocationsForAccounts({
       );
       url.searchParams.set(
         "readMask",
-        "name,title,storefrontAddress,metadata",
+        "name,title,storeCode,storefrontAddress,metadata",
       );
 
       if (pageToken) {
         url.searchParams.set("pageToken", pageToken);
       }
 
-      const data = await fetchJson<GbpLocationsResponse>(
-        url,
-        accessToken,
-        fetchImpl,
-      );
-      locations.push(
-        ...(data.locations || [])
-          .filter(hasName)
-          .map((location) => ({
-            accountName: account.name,
-            accountDisplayName: account.accountName,
-            name: (location as NamedGbpLocationResponse).name,
-            title: location.title || getLocationId(location.name),
-            locationId: getLocationId(location.name),
-            address: formatAddress(location),
-            placeId: location.metadata?.placeId || "",
-          })),
-      );
-      pageToken = data.nextPageToken || "";
+      try {
+        const data = await fetchGbpJson<GbpLocationsResponse>(
+          url,
+          accessToken,
+          fetchImpl,
+        );
+        locations.push(
+          ...(data.locations || [])
+            .filter(hasName)
+            .map((location) => ({
+              accountName: account.name,
+              accountDisplayName: account.accountName,
+              name: (location as NamedGbpLocationResponse).name,
+              title: location.title || getLocationId(location.name),
+              storeCode: location.storeCode || "",
+              locationId: getLocationId(location.name),
+              address: formatAddress(location),
+              placeId: location.metadata?.placeId || "",
+            })),
+        );
+        pageToken = data.nextPageToken || "";
+      } catch (error) {
+        console.error(
+          `Failed to fetch locations for ${account.name}:`,
+          error instanceof Error ? error.message : error,
+        );
+        pageToken = "";
+      }
     } while (pageToken);
   }
 

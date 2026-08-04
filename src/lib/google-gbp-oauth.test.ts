@@ -278,6 +278,7 @@ describe("google-gbp-oauth", () => {
             {
               name: "locations/100",
               title: "iスクール 本校",
+              storeCode: "ischool-main",
               storefrontAddress: {
                 postalCode: "100-0001",
                 administrativeArea: "東京都",
@@ -318,6 +319,7 @@ describe("google-gbp-oauth", () => {
     expect(locations[0]).toMatchObject({
       accountName: "accounts/1",
       title: "iスクール 本校",
+      storeCode: "ischool-main",
       locationId: "100",
       address: "100-0001 東京都 千代田区 丸の内1-1-1",
       placeId: "place-100",
@@ -377,10 +379,67 @@ describe("google-gbp-oauth", () => {
         accountDisplayName: "iスクール",
         name: "/",
         title: "/",
+        storeCode: "",
         locationId: "/",
         address: "東京都",
         placeId: "",
       },
     ]);
+  });
+
+  it("continues collecting locations when one GBP account group fails", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { message: "The caller does not have permission" } },
+          { status: 403 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          locations: [
+            {
+              name: "locations/200",
+              title: "大学受験専門塾 iスクール予備校",
+              storeCode: "ischool-yobiko",
+            },
+          ],
+        }),
+      ) as unknown as typeof fetch;
+
+    const locations = await fetchGbpLocationsForAccounts({
+      accessToken: "access-token",
+      accounts: [
+        { name: "accounts/organization", accountName: "組織", type: "ORGANIZATION" },
+        { name: "accounts/personal", accountName: "個人", type: "PERSONAL" },
+      ],
+      fetchImpl,
+    });
+
+    expect(locations).toEqual([
+      expect.objectContaining({
+        accountName: "accounts/personal",
+        title: "大学受験専門塾 iスクール予備校",
+        storeCode: "ischool-yobiko",
+      }),
+    ]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to fetch locations for accounts/organization:",
+      expect.stringContaining("403"),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        "readMask=name%2Ctitle%2CstoreCode%2CstorefrontAddress%2Cmetadata",
+      ),
+      expect.objectContaining({
+        headers: { authorization: "Bearer access-token" },
+      }),
+    );
+    consoleErrorSpy.mockRestore();
   });
 });

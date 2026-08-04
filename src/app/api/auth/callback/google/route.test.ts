@@ -104,6 +104,31 @@ describe("GET /api/auth/callback/google", () => {
     );
   });
 
+  it("stores a generic account name when Google account email cannot be read", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const google = await import("@/lib/google-gbp-oauth");
+    vi.mocked(google.fetchGoogleAccountEmail).mockResolvedValueOnce("");
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/auth/callback/google?code=oauth-code&state=school-1",
+      ),
+    );
+    const location = new URL(response.headers.get("location") || "");
+
+    expect(location.searchParams.get("google_connected")).toBe("true");
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          googleAccountId: "Google Business Profile",
+        }),
+        update: expect.objectContaining({
+          googleAccountId: "Google Business Profile",
+        }),
+      }),
+    );
+  });
+
   it("redirects with an error when token exchange fails", async () => {
     const google = await import("@/lib/google-gbp-oauth");
     vi.mocked(google.exchangeGoogleCode).mockRejectedValueOnce(
