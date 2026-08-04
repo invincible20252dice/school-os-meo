@@ -3,6 +3,7 @@ import { isApprovedAccess } from "@/lib/access-control";
 import {
   fetchGbpAccounts,
   fetchGbpLocationsForAccounts,
+  GoogleBusinessProfileApiError,
   refreshGoogleAccessToken,
 } from "@/lib/google-gbp-oauth";
 import { prisma } from "@/lib/prisma";
@@ -73,6 +74,20 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error(error);
+
+    if (error instanceof GoogleBusinessProfileApiError) {
+      return NextResponse.json(
+        {
+          message:
+            error.status === 401 || error.status === 403
+              ? "Google Business Profileの権限を確認できませんでした。Googleアカウント連携をやり直してください。"
+              : "Google Business Profile APIから店舗一覧を取得できませんでした。",
+          error: `GBP Accounts API Error: ${error.status}`,
+        },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json(
       { message: "Google Business Profileの店舗一覧を取得できませんでした。" },
       { status: 500 },

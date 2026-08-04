@@ -24,6 +24,16 @@ vi.mock("@/lib/supabase-access", () => ({
 }));
 
 vi.mock("@/lib/google-gbp-oauth", () => ({
+  GoogleBusinessProfileApiError: class GoogleBusinessProfileApiError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly responseBody = "",
+    ) {
+      super(message);
+      this.name = "GoogleBusinessProfileApiError";
+    }
+  },
   refreshGoogleAccessToken: vi.fn(async () => "access-token"),
   fetchGbpAccounts: vi.fn(async () => [
     { name: "accounts/1", accountName: "塾MEO", type: "" },
@@ -162,5 +172,30 @@ describe("GET /api/google/gbp-locations", () => {
 
     expect(response.status).toBe(500);
     expect(body.message).toContain("店舗一覧を取得できませんでした");
+  });
+
+  it("returns Google API status when the GBP accounts API rejects authorization", async () => {
+    const google = await import("@/lib/google-gbp-oauth");
+    vi.mocked(google.fetchGbpAccounts).mockRejectedValueOnce(
+      new google.GoogleBusinessProfileApiError(
+        "Google Business Profile API failed: 403",
+        403,
+        '{"error":"PERMISSION_DENIED"}',
+      ),
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/google/gbp-locations?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toMatchObject({
+      message:
+        "Google Business Profileの権限を確認できませんでした。Googleアカウント連携をやり直してください。",
+      error: "GBP Accounts API Error: 403",
+    });
   });
 });

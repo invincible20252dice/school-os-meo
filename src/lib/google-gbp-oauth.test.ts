@@ -7,6 +7,7 @@ import {
   fetchGoogleAccountEmail,
   getForwardedOrigin,
   getGoogleRedirectUri,
+  GoogleBusinessProfileApiError,
   GOOGLE_BUSINESS_SCOPE,
   refreshGoogleAccessToken,
 } from "./google-gbp-oauth";
@@ -340,6 +341,21 @@ describe("google-gbp-oauth", () => {
     ).rejects.toThrow("Google Business Profile API failed");
   });
 
+  it("keeps GBP accounts API status and response body for route-level handling", async () => {
+    await expect(
+      fetchGbpAccounts({
+        accessToken: "access-token",
+        fetchImpl: vi.fn(async () =>
+          new Response('{"error":"PERMISSION_DENIED"}', { status: 403 }),
+        ) as unknown as typeof fetch,
+      }),
+    ).rejects.toMatchObject({
+      name: "GoogleBusinessProfileApiError",
+      status: 403,
+      responseBody: '{"error":"PERMISSION_DENIED"}',
+    } satisfies Partial<GoogleBusinessProfileApiError>);
+  });
+
   it("handles empty GBP pages and sparse location addresses", async () => {
     const accountsFetch = vi.fn(async () => jsonResponse({})) as unknown as typeof fetch;
     const accounts = await fetchGbpAccounts({
@@ -385,6 +401,26 @@ describe("google-gbp-oauth", () => {
         placeId: "",
       },
     ]);
+  });
+
+  it("treats non-array GBP accounts and locations payloads as empty", async () => {
+    const accounts = await fetchGbpAccounts({
+      accessToken: "access-token",
+      fetchImpl: vi.fn(async () =>
+        jsonResponse({ accounts: { name: "accounts/not-array" } }),
+      ) as unknown as typeof fetch,
+    });
+
+    const locations = await fetchGbpLocationsForAccounts({
+      accessToken: "access-token",
+      accounts: [{ name: "accounts/1", accountName: "塾MEO", type: "" }],
+      fetchImpl: vi.fn(async () =>
+        jsonResponse({ locations: { name: "locations/not-array" } }),
+      ) as unknown as typeof fetch,
+    });
+
+    expect(accounts).toEqual([]);
+    expect(locations).toEqual([]);
   });
 
   it("continues collecting locations when one GBP account group fails", async () => {
@@ -437,7 +473,7 @@ describe("google-gbp-oauth", () => {
         "readMask=name%2Ctitle%2CstoreCode%2CstorefrontAddress%2Cmetadata",
       ),
       expect.objectContaining({
-        headers: { authorization: "Bearer access-token" },
+        headers: { Authorization: "Bearer access-token" },
       }),
     );
     consoleErrorSpy.mockRestore();

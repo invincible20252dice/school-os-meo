@@ -61,6 +61,17 @@ type NamedGbpLocationResponse = GbpLocationResponse & {
   name: string;
 };
 
+export class GoogleBusinessProfileApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly responseBody = "",
+  ) {
+    super(message);
+    this.name = "GoogleBusinessProfileApiError";
+  }
+}
+
 export type GoogleTokenSet = {
   accessToken: string;
   refreshToken: string;
@@ -305,38 +316,32 @@ function hasName<T extends { name?: string }>(record: T): record is T & { name: 
   return Boolean(record.name?.trim());
 }
 
-async function fetchJson<T>(url: URL, accessToken: string, fetchImpl: FetchLike) {
-  const response = await fetchImpl(url.toString(), {
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-    },
-  });
+function toArray<T>(value: T[] | undefined) {
+  return Array.isArray(value) ? value : [];
+}
 
-  if (!response.ok) {
-    throw new Error(`Google Business Profile API failed: ${response.status}`);
+async function readResponseText(response: Response) {
+  try {
+    return await response.text();
+  } catch {
+    return "";
   }
-
-  return (await response.json()) as T;
 }
 
 async function fetchGbpJson<T>(url: URL, accessToken: string, fetchImpl: FetchLike) {
   const response = await fetchImpl(url.toString(), {
     headers: {
-      authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
 
   if (!response.ok) {
-    let errorBody = "";
+    const responseBody = await readResponseText(response);
 
-    try {
-      errorBody = await response.text();
-    } catch {
-      errorBody = "";
-    }
-
-    throw new Error(
-      `Google Business Profile API failed: ${response.status}${errorBody ? ` ${errorBody}` : ""}`,
+    throw new GoogleBusinessProfileApiError(
+      `Google Business Profile API failed: ${response.status}`,
+      response.status,
+      responseBody,
     );
   }
 
@@ -362,9 +367,13 @@ export async function fetchGbpAccounts({
       url.searchParams.set("pageToken", pageToken);
     }
 
-    const data = await fetchJson<GbpAccountsResponse>(url, accessToken, fetchImpl);
+    const data = await fetchGbpJson<GbpAccountsResponse>(
+      url,
+      accessToken,
+      fetchImpl,
+    );
     accounts.push(
-      ...(data.accounts || [])
+      ...toArray(data?.accounts)
         .filter(hasName)
         .map((account) => ({
           name: (account as NamedGbpAccountResponse).name,
@@ -412,7 +421,7 @@ export async function fetchGbpLocationsForAccounts({
           fetchImpl,
         );
         locations.push(
-          ...(data.locations || [])
+          ...toArray(data?.locations)
             .filter(hasName)
             .map((location) => ({
               accountName: account.name,
@@ -429,7 +438,11 @@ export async function fetchGbpLocationsForAccounts({
       } catch (error) {
         console.error(
           `Failed to fetch locations for ${account.name}:`,
-          error instanceof Error ? error.message : error,
+          error instanceof GoogleBusinessProfileApiError
+            ? `${error.message}${error.responseBody ? ` ${error.responseBody}` : ""}`
+            : error instanceof Error
+              ? error.message
+              : error,
         );
         pageToken = "";
       }
