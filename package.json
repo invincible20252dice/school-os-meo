@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev -H 127.0.0.1 -p 3030",
-    "build": "next build",
+    "build": "npm run prisma:generate && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
