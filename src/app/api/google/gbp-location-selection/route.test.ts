@@ -81,6 +81,37 @@ describe("POST /api/google/gbp-location-selection", () => {
     );
   });
 
+  it("normalizes manually entered location id without overwriting Google account", async () => {
+    const { prisma } = await import("@/lib/prisma");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/google/gbp-location-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          locationName: " 1234567890 ",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.school.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          gbpLocationId: "locations/1234567890",
+        },
+      }),
+    );
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: {
+          googleConnected: true,
+          selectedGbpLocationId: "locations/1234567890",
+        },
+      }),
+    );
+  });
+
   it("validates required payload fields", async () => {
     const response = await POST(
       new Request("https://app.example.com/api/google/gbp-location-selection", {

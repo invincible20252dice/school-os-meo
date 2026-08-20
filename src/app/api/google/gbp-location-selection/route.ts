@@ -16,6 +16,18 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeLocationName(value: unknown) {
+  const locationName = normalizeString(value).replace(/^\/+/, "");
+
+  if (!locationName) {
+    return "";
+  }
+
+  return locationName.startsWith("locations/")
+    ? locationName
+    : `locations/${locationName}`;
+}
+
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
@@ -31,11 +43,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as LocationSelectionPayload;
     const requestedSchoolId = normalizeString(body.schoolId);
     const accountName = normalizeString(body.accountName);
-    const locationName = normalizeString(body.locationName);
+    const locationName = normalizeLocationName(body.locationName);
 
-    if (!requestedSchoolId || !accountName || !locationName) {
+    if (!requestedSchoolId || !locationName) {
       return NextResponse.json(
-        { message: "校舎とGBP店舗を選択してください。" },
+        { message: "校舎とGBP店舗IDを入力してください。" },
         { status: 400 },
       );
     }
@@ -56,7 +68,7 @@ export async function POST(request: Request) {
       prisma.school.update({
         where: { id: requestedSchoolId },
         data: {
-          gbpAccountId: accountName,
+          ...(accountName ? { gbpAccountId: accountName } : {}),
           gbpLocationId: locationName,
         },
         select: {
@@ -71,14 +83,14 @@ export async function POST(request: Request) {
         create: {
           schoolId: requestedSchoolId,
           googleConnected: true,
-          googleAccountId: accountName,
+          googleAccountId: accountName || "手動入力",
           selectedGbpLocationId: locationName,
           promptForbiddenWords: [],
           promptMustKeywords: [],
         },
         update: {
           googleConnected: true,
-          googleAccountId: accountName,
+          ...(accountName ? { googleAccountId: accountName } : {}),
           selectedGbpLocationId: locationName,
         },
         select: {

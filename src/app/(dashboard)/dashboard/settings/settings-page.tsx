@@ -67,6 +67,7 @@ export default function SettingsPage({
   );
   const [gbpLocations, setGbpLocations] = useState<GbpLocationOption[]>([]);
   const [selectedGbpLocationName, setSelectedGbpLocationName] = useState("");
+  const [manualGbpLocationId, setManualGbpLocationId] = useState("");
   const [googleMessage, setGoogleMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isLoadingSchoolSetting, setIsLoadingSchoolSetting] = useState(false);
@@ -157,9 +158,11 @@ export default function SettingsPage({
         });
         setSetting(nextSetting);
         setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
+        setManualGbpLocationId(nextSetting.selectedGbpLocationId);
       } else if (data.school?.id) {
         setSetting(buildEmptySchoolSetting(data.school.id));
         setSelectedGbpLocationName("");
+        setManualGbpLocationId("");
       }
     } catch {
       setSaveMessage("校舎設定を取得できませんでした。");
@@ -239,6 +242,7 @@ export default function SettingsPage({
         locations[0]?.name ||
         "";
       setSelectedGbpLocationName(selectedLocation);
+      setManualGbpLocationId(selectedLocation);
       setGoogleMessage(
         locations.length
           ? "GBP店舗一覧を取得しました。校舎に紐付ける店舗を選択してください。"
@@ -297,9 +301,77 @@ export default function SettingsPage({
           }),
         );
       }
+      setManualGbpLocationId(selectedGbpLocationName);
       setGoogleMessage("GBP店舗の紐付けを保存しました。");
     } catch {
       setGoogleMessage("GBP店舗の紐付けを保存できませんでした。");
+    } finally {
+      setIsSavingGbpLocation(false);
+    }
+  }
+
+  function normalizeManualGbpLocationId(value: string) {
+    const locationId = value.trim().replace(/^\/+/, "");
+
+    if (!locationId) {
+      return "";
+    }
+
+    return locationId.startsWith("locations/")
+      ? locationId
+      : `locations/${locationId}`;
+  }
+
+  async function saveManualGbpLocationId() {
+    const locationName = normalizeManualGbpLocationId(manualGbpLocationId);
+
+    if (!locationName) {
+      setGoogleMessage("保存するGBPロケーションIDを入力してください。");
+      return;
+    }
+
+    setIsSavingGbpLocation(true);
+    setGoogleMessage("");
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch("/api/google/gbp-location-selection", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify({
+          schoolId: getActiveSchoolId(),
+          locationName,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        setting?: NullableSchoolSettingState;
+      };
+
+      if (!response.ok) {
+        setGoogleMessage(data.message || "GBP店舗IDを保存できませんでした。");
+        return;
+      }
+
+      setSelectedGbpLocationName(locationName);
+      setManualGbpLocationId(locationName);
+      setSetting((current) =>
+        normalizeSchoolSetting({
+          ...current,
+          ...data.setting,
+          googleConnected: true,
+          selectedGbpLocationId: locationName,
+          googleAccountId:
+            data.setting?.googleAccountId || current.googleAccountId,
+          googleRefreshToken: current.googleRefreshToken,
+        }),
+      );
+      setGoogleMessage("手動入力したGBP店舗IDを保存しました。");
+    } catch {
+      setGoogleMessage("GBP店舗IDを保存できませんでした。");
     } finally {
       setIsSavingGbpLocation(false);
     }
@@ -470,6 +542,29 @@ export default function SettingsPage({
                   {isSavingGbpLocation ? "保存中" : "選択したGBP店舗を保存"}
                 </button>
                 {googleMessage ? <p>{googleMessage}</p> : null}
+              </div>
+              <label className={styles.full}>
+                <span>
+                  またはGBPロケーションIDを手動入力（例: locations/1234567890 または 1234567890）
+                </span>
+                <input
+                  value={manualGbpLocationId}
+                  onChange={(event) =>
+                    setManualGbpLocationId(event.target.value)
+                  }
+                  placeholder="locations/1234567890"
+                />
+              </label>
+              <div className={styles.actionRow}>
+                <button
+                  type="button"
+                  onClick={saveManualGbpLocationId}
+                  disabled={!manualGbpLocationId.trim() || isSavingGbpLocation}
+                >
+                  {isSavingGbpLocation
+                    ? "保存中"
+                    : "手動入力した店舗IDを保存"}
+                </button>
               </div>
             </div>
           ) : null}
