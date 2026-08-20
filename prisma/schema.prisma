@@ -230,6 +230,7 @@ model SchoolSetting {
   googleAccountId        String?
   googleRefreshToken     String?
   selectedGbpLocationId  String?
+  googleReviewUrl        String?
   lineNotifyEnabled      Boolean  @default(true)
   lineChannelAccessToken String?
   lineDestinationId      String?

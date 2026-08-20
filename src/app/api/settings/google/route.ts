@@ -13,6 +13,7 @@ function toSettingResponse(setting: {
   googleAccountId: string | null;
   googleRefreshToken: string | null;
   selectedGbpLocationId: string | null;
+  googleReviewUrl: string | null;
   updatedAt: Date;
 }) {
   return {
@@ -22,6 +23,7 @@ function toSettingResponse(setting: {
     googleAccountId: setting.googleAccountId || "",
     googleRefreshToken: setting.googleRefreshToken ? "********" : "",
     selectedGbpLocationId: setting.selectedGbpLocationId || "",
+    googleReviewUrl: setting.googleReviewUrl || "",
     updatedAt: setting.updatedAt.toISOString().slice(0, 16).replace("T", " "),
   };
 }
@@ -71,6 +73,7 @@ export async function GET(request: Request) {
           googleAccountId: true,
           googleRefreshToken: true,
           selectedGbpLocationId: true,
+          googleReviewUrl: true,
           updatedAt: true,
         },
       }),

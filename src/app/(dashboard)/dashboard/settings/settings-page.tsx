@@ -476,6 +476,10 @@ export default function SettingsPage({
                     <dt>連携対象GBP店舗</dt>
                     <dd>{setting.selectedGbpLocationId || "未選択"}</dd>
                   </div>
+                  <div>
+                    <dt>Google口コミ投稿リンク</dt>
+                    <dd>{setting.googleReviewUrl || "未設定"}</dd>
+                  </div>
                 </dl>
               </div>
               <div className={styles.actionRow}>
@@ -564,6 +568,25 @@ export default function SettingsPage({
                   {isSavingGbpLocation
                     ? "保存中"
                     : "手動入力した店舗IDを保存"}
+                </button>
+              </div>
+              <label className={styles.full}>
+                <span>Google口コミ投稿リンク（レビューURL）</span>
+                <input
+                  value={setting.googleReviewUrl}
+                  onChange={(event) =>
+                    update("googleReviewUrl", event.target.value)
+                  }
+                  placeholder="https://search.google.com/local/writereview?placeid=..."
+                />
+              </label>
+              <div className={styles.actionRow}>
+                <button
+                  type="button"
+                  onClick={saveSchoolSetting}
+                  disabled={isSavingSchoolSetting}
+                >
+                  {isSavingSchoolSetting ? "保存中" : "口コミ投稿リンクを保存"}
                 </button>
               </div>
             </div>

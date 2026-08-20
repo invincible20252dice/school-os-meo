@@ -7,6 +7,7 @@ export type SchoolSettingState = {
   googleAccountId: string;
   googleRefreshToken: string;
   selectedGbpLocationId: string;
+  googleReviewUrl: string;
   lineNotifyEnabled: boolean;
   lineChannelAccessToken: string;
   lineDestinationId: string;
@@ -62,6 +63,8 @@ export function buildMockSchoolSetting(): SchoolSettingState {
     googleAccountId: "owner@example.com",
     googleRefreshToken: "••••••••••••••••",
     selectedGbpLocationId: "locations/aoba-yokohama-main",
+    googleReviewUrl:
+      "https://search.google.com/local/writereview?placeid=ChIJyXGfWkGvQTUR0pD1oA7w0_0",
     lineNotifyEnabled: true,
     lineChannelAccessToken: "LINE_CHANNEL_TOKEN_********",
     lineDestinationId: "Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -90,6 +93,7 @@ export function buildEmptySchoolSetting(schoolId: string): SchoolSettingState {
     googleAccountId: "",
     googleRefreshToken: "",
     selectedGbpLocationId: "",
+    googleReviewUrl: "",
     lineNotifyEnabled: true,
     lineChannelAccessToken: "",
     lineDestinationId: "",
@@ -133,6 +137,7 @@ export function normalizeSchoolSetting(
     googleAccountId: normalizeString(setting.googleAccountId),
     googleRefreshToken: normalizeString(setting.googleRefreshToken),
     selectedGbpLocationId: normalizeString(setting.selectedGbpLocationId),
+    googleReviewUrl: normalizeString(setting.googleReviewUrl),
     lineNotifyEnabled:
       setting.lineNotifyEnabled ?? fallback.lineNotifyEnabled,
     lineChannelAccessToken: normalizeString(setting.lineChannelAccessToken),

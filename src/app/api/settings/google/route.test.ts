@@ -41,6 +41,8 @@ vi.mock("@/lib/prisma", () => ({
         googleAccountId: "owner@example.com",
         googleRefreshToken: "refresh-token",
         selectedGbpLocationId: "locations/100",
+        googleReviewUrl:
+          "https://search.google.com/local/writereview?placeid=ischool",
         updatedAt: new Date("2026-07-30T10:00:00.000Z"),
       })),
     },
@@ -65,6 +67,8 @@ describe("GET /api/settings/google", () => {
       googleConnected: true,
       googleRefreshToken: "********",
       selectedGbpLocationId: "locations/100",
+      googleReviewUrl:
+        "https://search.google.com/local/writereview?placeid=ischool",
     });
   });
 
@@ -140,6 +144,7 @@ describe("GET /api/settings/google", () => {
       googleAccountId: null,
       googleRefreshToken: null,
       selectedGbpLocationId: null,
+      googleReviewUrl: null,
       updatedAt: new Date("2026-07-30T10:00:00.000Z"),
     });
 
@@ -153,6 +158,7 @@ describe("GET /api/settings/google", () => {
       googleAccountId: "",
       googleRefreshToken: "",
       selectedGbpLocationId: "",
+      googleReviewUrl: "",
     });
   });
 

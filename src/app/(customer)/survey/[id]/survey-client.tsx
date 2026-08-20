@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DEFAULT_GOOGLE_REVIEW_URL } from "@/lib/google-review-url";
 import styles from "./survey.module.css";
-import { buildGoogleReviewUrl } from "@/lib/review-generator";
 
 const reasonOptions = [
   "先生の説明がわかりやすい",
@@ -47,7 +47,9 @@ function ExternalIcon() {
 
 export default function SurveyClient({ schoolId }: SurveyClientProps) {
   const [schoolName, setSchoolName] = useState("サンプル学習塾");
-  const [placeId, setPlaceId] = useState("ChIJN1t_tDeuEmsRUsoyG83frY4");
+  const [googleReviewUrl, setGoogleReviewUrl] = useState(
+    DEFAULT_GOOGLE_REVIEW_URL,
+  );
   const [rating, setRating] = useState(5);
   const [selectedReasons, setSelectedReasons] = useState<string[]>([
     reasonOptions[0],
@@ -59,8 +61,43 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [responseNotice, setResponseNotice] = useState("");
+  const [publicSettingNotice, setPublicSettingNotice] = useState("");
 
-  const reviewUrl = buildGoogleReviewUrl(placeId);
+  useEffect(() => {
+    async function loadPublicSurveySetting() {
+      try {
+        const response = await fetch(
+          `/api/public/survey-school?schoolId=${encodeURIComponent(schoolId)}`,
+        );
+        const data = (await response.json()) as {
+          school?: { name?: string };
+          googleReviewUrl?: string;
+          message?: string;
+        };
+
+        if (data.school?.name) {
+          setSchoolName(data.school.name);
+        }
+
+        if (data.googleReviewUrl) {
+          setGoogleReviewUrl(data.googleReviewUrl);
+        }
+
+        if (!response.ok && data.message) {
+          setPublicSettingNotice(
+            "校舎設定を確認できなかったため、iスクール予備校の口コミ投稿リンクを使用します。",
+          );
+        }
+      } catch {
+        setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
+        setPublicSettingNotice(
+          "校舎設定を確認できなかったため、iスクール予備校の口コミ投稿リンクを使用します。",
+        );
+      }
+    }
+
+    void loadPublicSurveySetting();
+  }, [schoolId]);
 
   function toggleReason(reason: string) {
     setSelectedReasons((current) =>
@@ -124,7 +161,7 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
   async function copyAndOpen(text: string, index: number) {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
-    window.open(reviewUrl, "_blank", "noopener,noreferrer");
+    window.open(googleReviewUrl, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -144,14 +181,9 @@ export default function SurveyClient({ schoolId }: SurveyClientProps) {
             />
           </label>
 
-          <label className={styles.field}>
-            <span className={styles.label}>Google Place ID</span>
-            <input
-              value={placeId}
-              onChange={(event) => setPlaceId(event.target.value)}
-              className={styles.input}
-            />
-          </label>
+          {publicSettingNotice ? (
+            <p className={styles.success}>{publicSettingNotice}</p>
+          ) : null}
 
           <div className={styles.field}>
             <span className={styles.label}>満足度</span>

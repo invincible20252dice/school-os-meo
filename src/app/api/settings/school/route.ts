@@ -38,6 +38,7 @@ function serializeSetting({
     googleAccountId: string | null;
     googleRefreshToken: string | null;
     selectedGbpLocationId: string | null;
+    googleReviewUrl: string | null;
     lineNotifyEnabled: boolean;
     lineChannelAccessToken: string | null;
     lineDestinationId: string | null;
@@ -74,6 +75,7 @@ function serializeSetting({
     googleAccountId: schoolSetting?.googleAccountId || "",
     googleRefreshToken: schoolSetting?.googleRefreshToken ? "********" : "",
     selectedGbpLocationId: schoolSetting?.selectedGbpLocationId || "",
+    googleReviewUrl: schoolSetting?.googleReviewUrl || "",
     lineNotifyEnabled:
       schoolSetting?.lineNotifyEnabled ?? fallback.lineNotifyEnabled,
     lineChannelAccessToken: schoolSetting?.lineChannelAccessToken || "",
@@ -225,6 +227,7 @@ export async function PATCH(request: Request) {
         googleAccountId: normalizeString(body.googleAccountId),
         googleRefreshToken: current?.googleRefreshToken || null,
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
+        googleReviewUrl: normalizeString(body.googleReviewUrl),
         lineNotifyEnabled: body.lineNotifyEnabled ?? true,
         lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
         lineDestinationId: normalizeString(body.lineDestinationId),
@@ -242,6 +245,7 @@ export async function PATCH(request: Request) {
         googleConnected: Boolean(body.googleConnected),
         googleAccountId: normalizeString(body.googleAccountId),
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
+        googleReviewUrl: normalizeString(body.googleReviewUrl),
         lineNotifyEnabled: body.lineNotifyEnabled ?? true,
         lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
         lineDestinationId: normalizeString(body.lineDestinationId),
