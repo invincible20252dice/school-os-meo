@@ -73,9 +73,29 @@ export default function SettingsPage({
   const [isLoadingSchoolSetting, setIsLoadingSchoolSetting] = useState(false);
   const [isLoadingGbpLocations, setIsLoadingGbpLocations] = useState(false);
   const [isSavingGbpLocation, setIsSavingGbpLocation] = useState(false);
+  const [isSavingGoogleReviewUrl, setIsSavingGoogleReviewUrl] = useState(false);
   const [isSavingSchoolSetting, setIsSavingSchoolSetting] = useState(false);
   const tabs = buildSettingsTabs();
   const errors = useMemo(() => validateSchoolSetting(setting), [setting]);
+  const activeTabErrors = useMemo(
+    () =>
+      errors.filter((error) => {
+        if (activeTab === "google") {
+          return error.includes("Google");
+        }
+
+        if (activeTab === "line") {
+          return error.includes("LINE");
+        }
+
+        if (activeTab === "instagram") {
+          return error.includes("Instagram");
+        }
+
+        return error.includes("返信トーン");
+      }),
+    [activeTab, errors],
+  );
   const instagramIsConnected =
     setting.instagramConnected || Boolean(setting.instagramBusinessAccountId);
 
@@ -377,6 +397,50 @@ export default function SettingsPage({
     }
   }
 
+  async function saveGoogleReviewUrl() {
+    setIsSavingGoogleReviewUrl(true);
+    setGoogleMessage("");
+
+    try {
+      const headers = await buildAuthHeaders();
+      const response = await fetch("/api/settings/google-review-url", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify({
+          schoolId: getActiveSchoolId(),
+          googleReviewUrl: setting.googleReviewUrl,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        setting?: NullableSchoolSettingState;
+      };
+
+      if (!response.ok) {
+        setGoogleMessage(data.message || "Google口コミ投稿リンクを保存できませんでした。");
+        return;
+      }
+
+      if (data.setting) {
+        setSetting((current) =>
+          normalizeSchoolSetting({
+            ...current,
+            ...data.setting,
+            googleRefreshToken: current.googleRefreshToken,
+          }),
+        );
+      }
+      setGoogleMessage("Google口コミ投稿リンクを保存しました。");
+    } catch {
+      setGoogleMessage("Google口コミ投稿リンクを保存できませんでした。");
+    } finally {
+      setIsSavingGoogleReviewUrl(false);
+    }
+  }
+
   useEffect(() => {
     if (activeTab !== "google") {
       return;
@@ -583,10 +647,12 @@ export default function SettingsPage({
               <div className={styles.actionRow}>
                 <button
                   type="button"
-                  onClick={saveSchoolSetting}
-                  disabled={isSavingSchoolSetting}
+                  onClick={saveGoogleReviewUrl}
+                  disabled={isSavingGoogleReviewUrl}
                 >
-                  {isSavingSchoolSetting ? "保存中" : "口コミ投稿リンクを保存"}
+                  {isSavingGoogleReviewUrl
+                    ? "保存中"
+                    : "口コミ投稿リンクを保存"}
                 </button>
               </div>
             </div>
@@ -786,9 +852,9 @@ export default function SettingsPage({
           ) : null}
 
           <div className={styles.footer}>
-            {errors.length ? (
+            {activeTabErrors.length ? (
               <div className={styles.errors}>
-                {errors.map((error) => (
+                {activeTabErrors.map((error) => (
                   <p key={error}>{error}</p>
                 ))}
               </div>
@@ -803,7 +869,11 @@ export default function SettingsPage({
             <button
               type="button"
               onClick={saveSchoolSetting}
-              disabled={isSavingSchoolSetting || isLoadingSchoolSetting || Boolean(errors.length)}
+              disabled={
+                isSavingSchoolSetting ||
+                isLoadingSchoolSetting ||
+                Boolean(activeTabErrors.length)
+              }
             >
               {isSavingSchoolSetting ? "保存中" : "設定を保存"}
             </button>
