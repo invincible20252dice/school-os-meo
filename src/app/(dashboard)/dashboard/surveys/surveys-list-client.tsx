@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
 import styles from "./page.module.css";
 
 type SurveyListItem = {
@@ -49,6 +50,25 @@ function RefreshIcon() {
   );
 }
 
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+    </svg>
+  );
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
 
@@ -84,6 +104,23 @@ export default function SurveysListClient() {
   const [accessLabel, setAccessLabel] = useState("権限を確認中");
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [publicOrigin, setPublicOrigin] = useState("");
+
+  function getSurveyPublicUrl(schoolId: string) {
+    return buildSurveyPublicUrl(publicOrigin, schoolId);
+  }
+
+  async function copySurveyUrl(schoolId: string) {
+    try {
+      const url = getSurveyPublicUrl(schoolId);
+      await navigator.clipboard.writeText(url);
+      setCopyMessage("URLをコピーしました");
+      window.setTimeout(() => setCopyMessage(null), 2400);
+    } catch {
+      setCopyMessage("URLをコピーできませんでした。");
+    }
+  }
 
   async function loadSurveys() {
     setIsLoading(true);
@@ -124,6 +161,7 @@ export default function SurveysListClient() {
   }
 
   useEffect(() => {
+    setPublicOrigin(window.location.origin);
     void loadSurveys();
   }, []);
 
@@ -146,6 +184,11 @@ export default function SurveysListClient() {
       </div>
 
       {message ? <p className={styles.error}>{message}</p> : null}
+      {copyMessage ? (
+        <div className={styles.toast} role="status" aria-live="polite">
+          {copyMessage}
+        </div>
+      ) : null}
 
       {isLoading ? (
         <section className={styles.emptyPanel}>
@@ -174,7 +217,28 @@ export default function SurveysListClient() {
                   </div>
                   <p>{survey.requiredKeywords || "必須キーワード未設定"}</p>
                 </div>
-                <Link href={`/dashboard/surveys/${survey.id}/edit`}>編集</Link>
+                <div className={styles.cardActions}>
+                  <Link href={`/dashboard/surveys/${survey.id}/edit`}>編集</Link>
+                  <button
+                    type="button"
+                    disabled={!publicOrigin}
+                    onClick={() => void copySurveyUrl(survey.schoolId)}
+                  >
+                    <CopyIcon />
+                    URLをコピー
+                  </button>
+                  <a
+                    href={
+                      publicOrigin ? getSurveyPublicUrl(survey.schoolId) : "#"
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={!publicOrigin}
+                  >
+                    <ExternalLinkIcon />
+                    アンケートを開く
+                  </a>
+                </div>
               </div>
               <dl className={styles.meta}>
                 <div>
