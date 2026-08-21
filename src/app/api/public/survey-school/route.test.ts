@@ -151,6 +151,47 @@ describe("GET /api/public/survey-school", () => {
     expect(body.questions[2].placeholder).toBe("自由記述入力欄");
   });
 
+  it("returns JSON-string questions as a top-level pure questions array", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([
+      buildSurvey({
+        items: [],
+        questionsJson: JSON.stringify([
+          {
+            id: "q-json",
+            title: "選択設問",
+            type: "multiple",
+            maxSelect: 2,
+            options: JSON.stringify(["説明が丁寧", "料金が明確", "通いやすい"]),
+          },
+        ]),
+      }),
+    ]);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1&surveyId=survey-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(body.questions)).toBe(true);
+    expect(body.questions).toEqual([
+      {
+        id: "q-json",
+        title: "選択設問",
+        type: "multiple",
+        question: "選択設問",
+        internalType: "MULTI_SELECT",
+        maxSelect: 2,
+        options: ["説明が丁寧", "料金が明確", "通いやすい"],
+        order: 1,
+      },
+    ]);
+    expect(body.survey.questions).toEqual(body.questions);
+  });
+
   it("falls back to the iSchool review URL when school id is missing", async () => {
     const response = await GET(
       new Request("https://app.example.com/api/public/survey-school"),

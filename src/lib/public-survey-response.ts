@@ -10,6 +10,24 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseJsonArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeNumber(value: unknown, fallback = 0) {
   const numberValue = Number(value);
 
@@ -17,11 +35,13 @@ function normalizeNumber(value: unknown, fallback = 0) {
 }
 
 function normalizeStringArray(value: unknown) {
-  if (!Array.isArray(value)) {
+  const arrayValue = parseJsonArray(value);
+
+  if (!arrayValue) {
     return [];
   }
 
-  return value.map(normalizeString).filter(Boolean);
+  return arrayValue.map(normalizeString).filter(Boolean);
 }
 
 function normalizeQuestionType(value: unknown): PublicSurveyQuestion["type"] {
@@ -38,8 +58,16 @@ function normalizeQuestionType(value: unknown): PublicSurveyQuestion["type"] {
   return "TEXT";
 }
 
-function firstArray(...values: unknown[]) {
-  return values.find(Array.isArray) as unknown[] | undefined;
+function firstQuestionArray(...values: unknown[]) {
+  for (const value of values) {
+    const arrayValue = parseJsonArray(value);
+
+    if (arrayValue) {
+      return arrayValue;
+    }
+  }
+
+  return undefined;
 }
 
 export function normalizePublicSurveyQuestion(
@@ -61,7 +89,7 @@ export function normalizePublicSurveyQuestion(
   }
 
   const options = normalizeStringArray(
-    firstArray(value.options, value.choices, value.items),
+    firstQuestionArray(value.options, value.choices, value.items),
   );
   const maxSelect =
     value.maxSelect === null || value.maxSelect === undefined
@@ -88,9 +116,13 @@ export function extractPublicSurveyQuestions(response: unknown) {
 
   const survey = isRecord(response.survey) ? response.survey : {};
   const source =
-    firstArray(
+    firstQuestionArray(
       response.questions,
+      response.questionsJson,
       survey.questions,
+      survey.questionsJson,
+      response.surveyQuestions,
+      survey.surveyQuestions,
       response.items,
       survey.items,
     ) || [];
@@ -99,4 +131,3 @@ export function extractPublicSurveyQuestions(response: unknown) {
     .map((item, index) => normalizePublicSurveyQuestion(item, index + 1))
     .filter((item): item is PublicSurveyQuestion => Boolean(item));
 }
-

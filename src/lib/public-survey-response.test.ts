@@ -85,6 +85,32 @@ describe("public-survey-response", () => {
     });
   });
 
+  it("parses JSON string question and option arrays before binding state", () => {
+    const questions = extractPublicSurveyQuestions({
+      survey: {
+        questionsJson: JSON.stringify([
+          {
+            id: "q-json",
+            title: "口コミに入れてもよい学年を選んでください",
+            type: "single",
+            options: JSON.stringify(["小学生", "中学生", "高校生"]),
+          },
+        ]),
+      },
+    });
+
+    expect(questions).toEqual([
+      {
+        id: "q-json",
+        type: "SINGLE_SELECT",
+        question: "口コミに入れてもよい学年を選んでください",
+        maxSelect: undefined,
+        options: ["小学生", "中学生", "高校生"],
+        order: 1,
+      },
+    ]);
+  });
+
   it("drops malformed question rows instead of creating empty rendered fields", () => {
     expect(
       [
@@ -94,4 +120,3 @@ describe("public-survey-response", () => {
     ).toEqual([]);
   });
 });
-

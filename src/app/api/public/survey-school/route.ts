@@ -5,6 +5,10 @@ import {
   resolveGoogleReviewUrl,
 } from "@/lib/google-review-url";
 import { prisma } from "@/lib/prisma";
+import {
+  extractPublicSurveyQuestions,
+} from "@/lib/public-survey-response";
+import type { PublicSurveyQuestion } from "@/lib/public-survey-answers";
 
 function normalizeString(value: string | null | undefined) {
   return value?.trim() || "";
@@ -29,6 +33,9 @@ type PublicSurveyRow = {
   benefitType: string | null;
   benefitShowTiming: string | null;
   items: PublicSurveyItemRow[];
+  questions?: unknown;
+  questionsJson?: unknown;
+  surveyQuestions?: unknown;
   school: {
     id: string;
     name: string;
@@ -71,7 +78,7 @@ const publicSurveyInclude = {
   },
 };
 
-function serializeSurveyItem(item: PublicSurveyItemRow) {
+function serializeNormalizedQuestion(item: PublicSurveyQuestion) {
   const type = normalizeQuestionType(item.type);
 
   return {
@@ -80,13 +87,10 @@ function serializeSurveyItem(item: PublicSurveyItemRow) {
     type,
     question: item.question,
     internalType: item.type,
-    maxSelect: item.maxSelect,
+    maxSelect: item.maxSelect ?? null,
     options: item.options,
     order: item.order,
-    placeholder:
-      type === "text"
-        ? "自由記述入力欄"
-        : undefined,
+    placeholder: type === "text" ? "自由記述入力欄" : undefined,
   };
 }
 
@@ -95,7 +99,9 @@ function serializeSurvey(survey: PublicSurveyRow | null) {
     return null;
   }
 
-  const questions = survey.items.map(serializeSurveyItem);
+  const questions = extractPublicSurveyQuestions({ survey }).map(
+    serializeNormalizedQuestion,
+  );
 
   return {
     id: survey.id,
