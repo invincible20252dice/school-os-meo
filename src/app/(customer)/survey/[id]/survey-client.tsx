@@ -105,13 +105,15 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         );
         const data = (await response.json()) as {
           school?: { name?: string };
+          schoolName?: string;
           survey?: PublicSurvey | null;
+          questions?: PublicSurveyItem[];
           googleReviewUrl?: string;
           message?: string;
         };
 
-        if (data.school?.name) {
-          setSchoolName(data.school.name);
+        if (data.schoolName || data.school?.name) {
+          setSchoolName(data.schoolName || data.school?.name || DEFAULT_PUBLIC_SCHOOL_NAME);
         }
 
         if (data.googleReviewUrl) {
@@ -119,7 +121,9 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         }
 
         if (data.survey) {
-          const questions = data.survey.questions?.length
+          const questions = data.questions?.length
+            ? data.questions
+            : data.survey.questions?.length
             ? data.survey.questions
             : data.survey.items || [];
 
@@ -130,6 +134,9 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
             max: data.survey.maxCharCount,
           });
           setAnswers(createInitialPublicSurveyAnswers(questions));
+        } else if (data.questions?.length) {
+          setSurveyItems(data.questions);
+          setAnswers(createInitialPublicSurveyAnswers(data.questions));
         }
 
         if (!response.ok) {

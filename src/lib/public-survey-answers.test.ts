@@ -3,6 +3,7 @@ import {
   buildPublicSurveyQuestionAnswers,
   buildReviewGenerationInputFromSurveyAnswers,
   createInitialPublicSurveyAnswers,
+  getAnswerValues,
   setSingleSurveyAnswer,
   setTextSurveyAnswer,
   toggleMultiSurveyAnswer,
@@ -99,6 +100,17 @@ describe("public-survey-answers", () => {
     const result = buildPublicSurveyQuestionAnswers([questions[0]], {});
 
     expect(result[0].value).toBe("");
+  });
+
+  it("normalizes answer values for string and missing entries", () => {
+    expect(getAnswerValues({ q1: "大学受験" }, "q1")).toEqual(["大学受験"]);
+    expect(getAnswerValues({}, "q1")).toEqual([]);
+  });
+
+  it("returns an empty array for unanswered multi-select questions", () => {
+    const result = buildPublicSurveyQuestionAnswers([questions[1]], {});
+
+    expect(result[0].value).toEqual([]);
   });
 
   it("builds prompt input with question labels and selected values", () => {

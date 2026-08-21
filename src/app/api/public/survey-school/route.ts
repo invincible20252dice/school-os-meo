@@ -21,6 +21,7 @@ type PublicSurveyItemRow = {
 
 type PublicSurveyRow = {
   id: string;
+  schoolId: string;
   title: string;
   requiredKeywords: string | null;
   minCharCount: number;
@@ -28,10 +29,20 @@ type PublicSurveyRow = {
   benefitType: string | null;
   benefitShowTiming: string | null;
   items: PublicSurveyItemRow[];
+  school: {
+    id: string;
+    name: string;
+    googlePlaceId: string | null;
+    googleMapsUrl: string | null;
+    schoolSetting: {
+      googleReviewUrl: string | null;
+    } | null;
+  };
 };
 
 const publicSurveySelect = {
   id: true,
+  schoolId: true,
   title: true,
   requiredKeywords: true,
   minCharCount: true,
@@ -47,6 +58,19 @@ const publicSurveySelect = {
       maxSelect: true,
       options: true,
       order: true,
+    },
+  },
+  school: {
+    select: {
+      id: true,
+      name: true,
+      googlePlaceId: true,
+      googleMapsUrl: true,
+      schoolSetting: {
+        select: {
+          googleReviewUrl: true,
+        },
+      },
     },
   },
 };
@@ -90,7 +114,7 @@ export async function GET(request: Request) {
     schoolId = normalizeString(url.searchParams.get("schoolId"));
     const surveyId = normalizeString(url.searchParams.get("surveyId"));
 
-    if (!schoolId) {
+    if (!schoolId && !surveyId) {
       return NextResponse.json(
         {
           message: "校舎IDを指定してください。",
@@ -104,22 +128,38 @@ export async function GET(request: Request) {
       );
     }
 
-    const school = await prisma.school.findUnique({
-      where: { id: schoolId },
-      select: {
-        id: true,
-        name: true,
-        googlePlaceId: true,
-        googleMapsUrl: true,
-        schoolSetting: {
-          select: {
-            googleReviewUrl: true,
+    const survey = (await prisma.survey.findFirst({
+      where: surveyId
+        ? {
+            id: surveyId,
+          }
+        : {
+            schoolId,
+            isValid: true,
           },
-        },
-      },
-    });
+      select: publicSurveySelect,
+      orderBy: surveyId
+        ? undefined
+        : [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+    })) as PublicSurveyRow | null;
+    const school = survey?.school || (schoolId
+      ? await prisma.school.findUnique({
+          where: { id: schoolId },
+          select: {
+            id: true,
+            name: true,
+            googlePlaceId: true,
+            googleMapsUrl: true,
+            schoolSetting: {
+              select: {
+                googleReviewUrl: true,
+              },
+            },
+          },
+        })
+      : null);
 
-    if (!school) {
+    if (!school && !survey) {
       return NextResponse.json(
         {
           message: "対象校舎が見つかりませんでした。",
@@ -133,32 +173,22 @@ export async function GET(request: Request) {
       );
     }
 
-    const survey = (await prisma.survey.findFirst({
-      where: surveyId
-        ? {
-            id: surveyId,
-            isValid: true,
-          }
-        : {
-            schoolId: school.id,
-            isValid: true,
-          },
-      select: publicSurveySelect,
-      orderBy: surveyId
-        ? undefined
-        : [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
-    })) as PublicSurveyRow | null;
+    const serializedSurvey = serializeSurvey(survey);
+    const questions = serializedSurvey?.questions || [];
+    const responseSchool = school || survey?.school;
 
     return NextResponse.json({
       school: {
-        id: school.id,
-        name: school.name,
+        id: responseSchool?.id || schoolId,
+        name: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
       },
-      survey: serializeSurvey(survey),
+      schoolName: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
+      survey: serializedSurvey,
+      questions,
       googleReviewUrl: resolveGoogleReviewUrl({
-        settingReviewUrl: school.schoolSetting?.googleReviewUrl,
-        schoolGoogleMapsUrl: school.googleMapsUrl,
-        googlePlaceId: school.googlePlaceId,
+        settingReviewUrl: responseSchool?.schoolSetting?.googleReviewUrl,
+        schoolGoogleMapsUrl: responseSchool?.googleMapsUrl,
+        googlePlaceId: responseSchool?.googlePlaceId,
       }),
     });
   } catch (error) {
