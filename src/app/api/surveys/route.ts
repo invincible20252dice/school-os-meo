@@ -84,9 +84,11 @@ export async function GET(request: Request) {
       accessResult.access,
       requestedSchoolId,
     );
+    const shouldApplySchoolFilter =
+      !requestedSurveyId || !scopedSchool.canSwitchSchool;
     const surveys = (await prisma.survey.findMany({
       where: {
-        ...(scopedSchool.effectiveSchoolId
+        ...(shouldApplySchoolFilter && scopedSchool.effectiveSchoolId
           ? { schoolId: scopedSchool.effectiveSchoolId }
           : {}),
         ...(requestedSurveyId ? { id: requestedSurveyId } : {}),

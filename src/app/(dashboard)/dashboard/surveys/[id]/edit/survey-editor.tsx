@@ -221,6 +221,14 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
   const errors = useMemo(() => validateSurveyEditorState(survey), [survey]);
   const previewSteps = useMemo(() => buildSurveyPreviewSteps(survey), [survey]);
 
+  function getSelectedSchoolId() {
+    return searchParams.get("schoolId") || "";
+  }
+
+  function getSaveSchoolId() {
+    return getSelectedSchoolId() || survey.schoolId;
+  }
+
   function updateSurvey<K extends keyof SurveyEditorState>(
     key: K,
     value: SurveyEditorState[K],
@@ -279,10 +287,14 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
 
     try {
       const params = new URLSearchParams();
-      const requestedSchoolId = searchParams.get("schoolId");
+      const requestedSchoolId = getSelectedSchoolId();
 
       if (requestedSchoolId) {
         params.set("schoolId", requestedSchoolId);
+      }
+
+      if (surveyId !== "new") {
+        params.set("id", surveyId);
       }
 
       const response = await fetch(`/api/surveys?${params.toString()}`, {
@@ -318,7 +330,10 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
         return;
       }
 
-      setSurvey(target);
+      setSurvey({
+        ...target,
+        schoolId: activeSchoolId || target.schoolId,
+      });
       setEditingExistingId(target.id);
       setNotice(`${target.title}をDBから読み込みました。`);
     } catch (error) {
@@ -342,13 +357,17 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     setIsSaving(true);
 
     try {
+      const surveyToSave = {
+        ...survey,
+        schoolId: getSaveSchoolId(),
+      };
       const response = await fetch("/api/surveys", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(await getAuthHeaders()),
         },
-        body: JSON.stringify(survey),
+        body: JSON.stringify(surveyToSave),
       });
       const data = (await response.json()) as {
         survey?: { id: string };
@@ -359,7 +378,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
         throw new Error(data.message || "アンケート設定を保存できませんでした。");
       }
 
-      const persistedSurvey = { ...survey, id: data.survey.id };
+      const persistedSurvey = { ...surveyToSave, id: data.survey.id };
       setSurvey(persistedSurvey);
       setSettings((current) =>
         saveSurveySetting(current, persistedSurvey, nowLabel()),
@@ -378,7 +397,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
   }
 
   function discardEdit() {
-    setSurvey(buildNewSurveyState(survey.schoolId));
+    setSurvey(buildNewSurveyState(getSaveSchoolId()));
     setEditingExistingId(null);
     setNotice("新規作成モードに切り替えました。");
   }

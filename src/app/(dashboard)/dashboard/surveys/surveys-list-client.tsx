@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
@@ -100,15 +101,40 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 export default function SurveysListClient() {
+  const searchParams = useSearchParams();
   const [surveys, setSurveys] = useState<SurveyListItem[]>([]);
   const [accessLabel, setAccessLabel] = useState("権限を確認中");
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [publicOrigin, setPublicOrigin] = useState("");
+  const selectedSchoolId = searchParams.get("schoolId") || "";
 
   function getSurveyPublicUrl(schoolId: string, surveyId: string) {
-    return buildSurveyPublicUrl(publicOrigin, schoolId, surveyId);
+    return buildSurveyPublicUrl(
+      publicOrigin,
+      selectedSchoolId || schoolId,
+      surveyId,
+    );
+  }
+
+  function getSurveyEditUrl(survey: SurveyListItem) {
+    const params = new URLSearchParams();
+    const targetSchoolId = selectedSchoolId || survey.schoolId;
+
+    if (targetSchoolId) {
+      params.set("schoolId", targetSchoolId);
+    }
+
+    const query = params.toString();
+
+    return `/dashboard/surveys/${survey.id}/edit${query ? `?${query}` : ""}`;
+  }
+
+  function getNewSurveyUrl() {
+    return selectedSchoolId
+      ? `/dashboard/surveys/new?schoolId=${encodeURIComponent(selectedSchoolId)}`
+      : "/dashboard/surveys/new";
   }
 
   async function copySurveyUrl(schoolId: string, surveyId: string) {
@@ -163,7 +189,7 @@ export default function SurveysListClient() {
   useEffect(() => {
     setPublicOrigin(window.location.origin);
     void loadSurveys();
-  }, []);
+  }, [searchParams]);
 
   return (
     <>
@@ -176,7 +202,7 @@ export default function SurveysListClient() {
             <RefreshIcon />
             {isLoading ? "取得中" : "再取得"}
           </button>
-          <Link href="/dashboard/surveys/new">
+          <Link href={getNewSurveyUrl()}>
             <PlusIcon />
             新規作成
           </Link>
@@ -218,7 +244,7 @@ export default function SurveysListClient() {
                   <p>{survey.requiredKeywords || "必須キーワード未設定"}</p>
                 </div>
                 <div className={styles.cardActions}>
-                  <Link href={`/dashboard/surveys/${survey.id}/edit`}>編集</Link>
+                  <Link href={getSurveyEditUrl(survey)}>編集</Link>
                   <button
                     type="button"
                     disabled={!publicOrigin}

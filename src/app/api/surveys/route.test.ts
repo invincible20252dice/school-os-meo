@@ -148,6 +148,46 @@ describe("/api/surveys", () => {
     );
   });
 
+  it("lets admin users load an existing survey by id before reassigning it to the selected school", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "admin",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "本部",
+        email: "admin@example.com",
+        status: "active",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request(
+        "http://localhost/api/surveys?id=survey-default&schoolId=school-selected",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "survey-default",
+        },
+      }),
+    );
+    expect(body.access).toMatchObject({
+      role: "admin",
+      effectiveSchoolId: "school-selected",
+      requestedSchoolId: "school-selected",
+    });
+  });
+
   it("returns Japanese errors when survey listing fails", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")

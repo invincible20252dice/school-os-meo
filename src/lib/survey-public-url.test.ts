@@ -5,7 +5,7 @@ describe("survey-public-url", () => {
   it("builds a public survey URL from the current origin and school id", () => {
     expect(
       buildSurveyPublicUrl("https://school-os-meo.vercel.app/", "school-1"),
-    ).toBe("https://school-os-meo.vercel.app/survey/school-1");
+    ).toBe("https://school-os-meo.vercel.app/survey?schoolId=school-1");
   });
 
   it("adds the survey id when one is provided", () => {
@@ -15,12 +15,14 @@ describe("survey-public-url", () => {
         "school-1",
         "survey-1",
       ),
-    ).toBe("https://school-os-meo.vercel.app/survey/school-1?surveyId=survey-1");
+    ).toBe(
+      "https://school-os-meo.vercel.app/survey?schoolId=school-1&surveyId=survey-1",
+    );
   });
 
   it("encodes school ids safely", () => {
     expect(buildSurveyPublicUrl("http://localhost:3030", " school 1 ")).toBe(
-      "http://localhost:3030/survey/school%201",
+      "http://localhost:3030/survey?schoolId=school+1",
     );
   });
 

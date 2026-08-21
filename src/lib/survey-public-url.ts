@@ -19,9 +19,8 @@ export function buildSurveyPublicUrl(
     throw new Error("アンケート公開URLを作成する校舎IDがありません。");
   }
 
-  const url = new URL(
-    `${normalizedBaseUrl}/survey/${encodeURIComponent(normalizedSchoolId)}`,
-  );
+  const url = new URL(`${normalizedBaseUrl}/survey`);
+  url.searchParams.set("schoolId", normalizedSchoolId);
 
   if (normalizedSurveyId) {
     url.searchParams.set("surveyId", normalizedSurveyId);
