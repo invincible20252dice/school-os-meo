@@ -40,6 +40,18 @@ type PublicSurveyRow = {
   };
 };
 
+function normalizeQuestionType(type: string) {
+  if (type === "SINGLE_SELECT" || type === "SINGLE_CHOICE") {
+    return "single";
+  }
+
+  if (type === "MULTI_SELECT" || type === "MULTIPLE_CHOICE") {
+    return "multiple";
+  }
+
+  return "text";
+}
+
 const publicSurveySelect = {
   id: true,
   schoolId: true,
@@ -76,13 +88,21 @@ const publicSurveySelect = {
 };
 
 function serializeSurveyItem(item: PublicSurveyItemRow) {
+  const type = normalizeQuestionType(item.type);
+
   return {
     id: item.id,
-    type: item.type,
+    title: item.question,
+    type,
     question: item.question,
+    internalType: item.type,
     maxSelect: item.maxSelect,
     options: item.options,
     order: item.order,
+    placeholder:
+      type === "text"
+        ? "自由記述入力欄"
+        : undefined,
   };
 }
 
@@ -96,9 +116,13 @@ function serializeSurvey(survey: PublicSurveyRow | null) {
   return {
     id: survey.id,
     title: survey.title,
+    keywords: survey.requiredKeywords || "",
     requiredKeywords: survey.requiredKeywords || "",
+    minChars: survey.minCharCount,
+    maxChars: survey.maxCharCount,
     minCharCount: survey.minCharCount,
     maxCharCount: survey.maxCharCount,
+    reward: survey.benefitType || "なし",
     benefitType: survey.benefitType || "",
     benefitShowTiming: survey.benefitShowTiming || "",
     items: questions,
@@ -118,10 +142,14 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           message: "校舎IDを指定してください。",
+          success: false,
           school: {
             id: "",
             name: DEFAULT_PUBLIC_SCHOOL_NAME,
           },
+          schoolName: DEFAULT_PUBLIC_SCHOOL_NAME,
+          survey: null,
+          questions: [],
           googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
         },
         { status: 400 },
@@ -163,10 +191,14 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           message: "対象校舎が見つかりませんでした。",
+          success: false,
           school: {
             id: schoolId,
             name: DEFAULT_PUBLIC_SCHOOL_NAME,
           },
+          schoolName: DEFAULT_PUBLIC_SCHOOL_NAME,
+          survey: null,
+          questions: [],
           googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
         },
         { status: 404 },
@@ -178,6 +210,7 @@ export async function GET(request: Request) {
     const responseSchool = school || survey?.school;
 
     return NextResponse.json({
+      success: true,
       school: {
         id: responseSchool?.id || schoolId,
         name: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
@@ -196,10 +229,14 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         message: "アンケート公開設定を取得できませんでした。",
+        success: false,
         school: {
           id: schoolId,
           name: DEFAULT_PUBLIC_SCHOOL_NAME,
         },
+        schoolName: DEFAULT_PUBLIC_SCHOOL_NAME,
+        survey: null,
+        questions: [],
         googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
       },
       { status: 500 },

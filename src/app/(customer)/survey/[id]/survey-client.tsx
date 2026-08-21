@@ -24,23 +24,48 @@ type SurveyClientProps = {
 type PublicSurveyItem = {
   id: string;
   type: string;
+  internalType?: string;
+  title?: string;
   question: string;
   maxSelect?: number | null;
   options: string[];
   order: number;
+  placeholder?: string;
 };
 
 type PublicSurvey = {
   id: string;
   title: string;
+  keywords?: string;
   requiredKeywords: string;
+  minChars?: number;
+  maxChars?: number;
   minCharCount: number;
   maxCharCount: number;
+  reward?: string;
   benefitType: string;
   benefitShowTiming: string;
   items?: PublicSurveyItem[];
   questions?: PublicSurveyItem[];
 };
+
+function normalizePublicSurveyItem(item: PublicSurveyItem): PublicSurveyItem {
+  const normalizedType =
+    item.internalType ||
+    (item.type === "single"
+      ? "SINGLE_SELECT"
+      : item.type === "multiple"
+      ? "MULTI_SELECT"
+      : item.type === "text"
+      ? "TEXT"
+      : item.type);
+
+  return {
+    ...item,
+    type: normalizedType,
+    question: item.question || item.title || "",
+  };
+}
 
 function SparkIcon() {
   return (
@@ -121,22 +146,25 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         }
 
         if (data.survey) {
-          const questions = data.questions?.length
-            ? data.questions
-            : data.survey.questions?.length
-            ? data.survey.questions
-            : data.survey.items || [];
+          const questions = (
+            data.questions?.length
+              ? data.questions
+              : data.survey.questions?.length
+              ? data.survey.questions
+              : data.survey.items || []
+          ).map(normalizePublicSurveyItem);
 
           setSurveyTitle(data.survey.title);
           setSurveyItems(questions);
           setSurveyTextRange({
-            min: data.survey.minCharCount,
-            max: data.survey.maxCharCount,
+            min: data.survey.minChars || data.survey.minCharCount,
+            max: data.survey.maxChars || data.survey.maxCharCount,
           });
           setAnswers(createInitialPublicSurveyAnswers(questions));
         } else if (data.questions?.length) {
-          setSurveyItems(data.questions);
-          setAnswers(createInitialPublicSurveyAnswers(data.questions));
+          const questions = data.questions.map(normalizePublicSurveyItem);
+          setSurveyItems(questions);
+          setAnswers(createInitialPublicSurveyAnswers(questions));
         }
 
         if (!response.ok) {

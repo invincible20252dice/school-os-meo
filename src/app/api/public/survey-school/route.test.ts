@@ -73,19 +73,82 @@ describe("GET /api/public/survey-school", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
     expect(body.school.name).toBe("大学受験専門塾 iスクール予備校");
     expect(body.schoolName).toBe("大学受験専門塾 iスクール予備校");
     expect(body.survey).toMatchObject({
       id: "survey-1",
       title: "予備校下通り校",
+      keywords: "下通り, 街, 個別指導, 大学受験, 安心な価格",
       requiredKeywords: "下通り, 街, 個別指導, 大学受験, 安心な価格",
+      minChars: 100,
+      maxChars: 300,
+      reward: "なし",
     });
     expect(body.survey.items).toHaveLength(1);
     expect(body.survey.questions).toEqual(body.survey.items);
     expect(body.questions).toEqual(body.survey.items);
+    expect(body.questions[0]).toMatchObject({
+      id: "item-1",
+      title: "良かった点を選んでください",
+      question: "良かった点を選んでください",
+      type: "multiple",
+      internalType: "MULTI_SELECT",
+      maxSelect: 3,
+      options: ["個別指導", "大学受験", "安心な価格"],
+    });
     expect(body.googleReviewUrl).toBe(
       "https://search.google.com/local/writereview?placeid=setting-url",
     );
+  });
+
+  it("normalizes all stored survey item types for the public JSON contract", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
+      buildSurvey({
+        items: [
+          {
+            id: "q1",
+            type: "SINGLE_SELECT",
+            question: "通塾のきっかけを教えてください",
+            maxSelect: null,
+            options: ["学習習慣づけ", "定期テスト対策"],
+            order: 1,
+          },
+          {
+            id: "q2",
+            type: "MULTI_SELECT",
+            question: "良かったと感じた点を選んでください",
+            maxSelect: 3,
+            options: ["先生の説明", "質問しやすさ"],
+            order: 2,
+          },
+          {
+            id: "q3",
+            type: "TEXT",
+            question: "お子さまの変化を教えてください",
+            maxSelect: null,
+            options: [],
+            order: 3,
+          },
+        ],
+      }),
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1&surveyId=survey-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.questions.map((question: { type: string }) => question.type)).toEqual([
+      "single",
+      "multiple",
+      "text",
+    ]);
+    expect(body.questions[2].placeholder).toBe("自由記述入力欄");
   });
 
   it("falls back to the iSchool review URL when school id is missing", async () => {
