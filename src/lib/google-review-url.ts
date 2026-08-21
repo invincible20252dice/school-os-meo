@@ -18,6 +18,14 @@ export function normalizeGoogleReviewUrl(value: string | null | undefined) {
       return "";
     }
 
+    if (
+      url.hostname === "search.google.com" &&
+      url.pathname === "/local/writereview" &&
+      !url.searchParams.get("placeid")
+    ) {
+      return "";
+    }
+
     return url.toString();
   } catch {
     return "";

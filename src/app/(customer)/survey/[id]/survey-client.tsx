@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_GOOGLE_REVIEW_URL,
   DEFAULT_PUBLIC_SCHOOL_NAME,
+  resolveGoogleReviewUrl,
 } from "@/lib/google-review-url";
 import {
   buildReviewGenerationInputFromSurveyAnswers,
@@ -96,6 +97,12 @@ function getInitialTextRange(data?: SerializedPublicSurveyResponse | null) {
   };
 }
 
+export function getPublicSurveyReviewDestinationUrl(
+  googleReviewUrl: string | null | undefined,
+) {
+  return resolveGoogleReviewUrl({ settingReviewUrl: googleReviewUrl });
+}
+
 export default function SurveyClient({
   schoolId,
   surveyId,
@@ -119,7 +126,7 @@ export default function SurveyClient({
     createInitialPublicSurveyAnswers(initialQuestions),
   );
   const [googleReviewUrl, setGoogleReviewUrl] = useState(
-    initialData?.googleReviewUrl || DEFAULT_GOOGLE_REVIEW_URL,
+    getPublicSurveyReviewDestinationUrl(initialData?.googleReviewUrl),
   );
   const [reviews, setReviews] = useState<string[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -167,7 +174,9 @@ export default function SurveyClient({
           initialData.school?.name ||
           DEFAULT_PUBLIC_SCHOOL_NAME,
       );
-      setGoogleReviewUrl(initialData.googleReviewUrl || DEFAULT_GOOGLE_REVIEW_URL);
+      setGoogleReviewUrl(
+        getPublicSurveyReviewDestinationUrl(initialData.googleReviewUrl),
+      );
 
       if (initialData.survey) {
         setSurveyTitle(initialData.survey.title);
@@ -230,7 +239,7 @@ export default function SurveyClient({
         }
 
         if (data.googleReviewUrl) {
-          setGoogleReviewUrl(data.googleReviewUrl);
+          setGoogleReviewUrl(getPublicSurveyReviewDestinationUrl(data.googleReviewUrl));
         }
 
         const questions = extractPublicSurveyQuestions(data);
@@ -386,7 +395,11 @@ export default function SurveyClient({
   async function copyAndOpen(text: string, index: number) {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
-    window.open(googleReviewUrl, "_blank", "noopener,noreferrer");
+    window.open(
+      getPublicSurveyReviewDestinationUrl(googleReviewUrl),
+      "_blank",
+      "noopener,noreferrer",
+    );
   }
 
   return (

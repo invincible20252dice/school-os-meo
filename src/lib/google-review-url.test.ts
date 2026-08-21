@@ -14,6 +14,9 @@ describe("google-review-url", () => {
     ).toBe("https://search.google.com/local/writereview?placeid=abc");
     expect(normalizeGoogleReviewUrl("javascript:alert(1)")).toBe("");
     expect(normalizeGoogleReviewUrl("not a url")).toBe("");
+    expect(
+      normalizeGoogleReviewUrl("https://search.google.com/local/writereview"),
+    ).toBe("");
   });
 
   it("prefers the saved setting URL over school and place id values", () => {
@@ -40,5 +43,13 @@ describe("google-review-url", () => {
       "https://search.google.com/local/writereview?placeid=place%20id",
     );
     expect(resolveGoogleReviewUrl({})).toBe(DEFAULT_GOOGLE_REVIEW_URL);
+  });
+
+  it("does not use an incomplete Google write-review URL as a destination", () => {
+    expect(
+      resolveGoogleReviewUrl({
+        settingReviewUrl: "https://search.google.com/local/writereview",
+      }),
+    ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });
 });

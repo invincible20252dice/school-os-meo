@@ -1,8 +1,11 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import SurveyClient from "./survey-client";
+import SurveyClient, {
+  getPublicSurveyReviewDestinationUrl,
+} from "./survey-client";
 import type { SerializedPublicSurveyResponse } from "@/lib/public-survey-query";
+import { DEFAULT_GOOGLE_REVIEW_URL } from "@/lib/google-review-url";
 
 const publicQuestions = [
   {
@@ -106,5 +109,13 @@ describe("SurveyClient", () => {
     expect(html).toContain("口コミに入れてもよい学年を選んでください");
     expect(html).toContain("選択設問");
     expect(html).not.toContain("設問データを取得できませんでした");
+  });
+
+  it("falls back to the iSchool review URL when the saved review URL is incomplete", () => {
+    expect(
+      getPublicSurveyReviewDestinationUrl(
+        "https://search.google.com/local/writereview",
+      ),
+    ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });
 });
