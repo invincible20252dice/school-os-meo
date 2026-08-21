@@ -126,7 +126,9 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     schoolId = normalizeString(url.searchParams.get("schoolId"));
-    const surveyId = normalizeString(url.searchParams.get("surveyId"));
+    const surveyId =
+      normalizeString(url.searchParams.get("surveyId")) ||
+      normalizeString(url.searchParams.get("id"));
 
     if (!schoolId && !surveyId) {
       return NextResponse.json(
@@ -146,20 +148,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const surveys = (await prisma.survey.findMany({
-      where: surveyId
-        ? {
+    const survey = surveyId
+      ? ((await prisma.survey.findUnique({
+          where: {
             id: surveyId,
-          }
-        : {
+          },
+          include: publicSurveyInclude,
+        })) as PublicSurveyRow | null)
+      : ((await prisma.survey.findFirst({
+          where: {
             schoolId,
             isValid: true,
           },
-      include: publicSurveyInclude,
-      orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
-      take: 1,
-    })) as PublicSurveyRow[];
-    const survey = surveys[0] || null;
+          include: publicSurveyInclude,
+          orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+        })) as PublicSurveyRow | null);
     const school = survey?.school || (schoolId
       ? await prisma.school.findUnique({
           where: { id: schoolId },
