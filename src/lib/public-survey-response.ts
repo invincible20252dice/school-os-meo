@@ -1,4 +1,8 @@
 import type { PublicSurveyQuestion } from "./public-survey-answers";
+import {
+  buildSurveyPreviewSteps,
+  type SurveyEditorState,
+} from "./survey-builder";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -130,4 +134,50 @@ export function extractPublicSurveyQuestions(response: unknown) {
   return source
     .map((item, index) => normalizePublicSurveyQuestion(item, index + 1))
     .filter((item): item is PublicSurveyQuestion => Boolean(item));
+}
+
+export function buildPublicSurveyPreviewSteps({
+  questions,
+  title,
+  schoolId,
+  minCharCount,
+  maxCharCount,
+}: {
+  questions: PublicSurveyQuestion[];
+  title: string;
+  schoolId: string;
+  minCharCount: number;
+  maxCharCount: number;
+}) {
+  const survey: SurveyEditorState = {
+    id: "public-survey",
+    schoolId,
+    title,
+    requiredKeywords: "",
+    minCharCount,
+    maxCharCount,
+    isValid: true,
+    hasIncentive: false,
+    benefitType: "",
+    benefitShowTiming: "",
+    activeWeekdays: ["月", "火", "水", "木", "金"],
+    items: questions.map((question) => ({
+      id: question.id,
+      type:
+        question.type === "SINGLE_SELECT" ||
+        question.type === "MULTI_SELECT" ||
+        question.type === "TEXT"
+          ? question.type
+          : "TEXT",
+      question: question.question,
+      maxSelect:
+        question.maxSelect === null || question.maxSelect === undefined
+          ? undefined
+          : question.maxSelect,
+      options: question.options,
+      order: question.order,
+    })),
+  };
+
+  return buildSurveyPreviewSteps(survey);
 }

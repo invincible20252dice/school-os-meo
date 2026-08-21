@@ -60,6 +60,39 @@
   gap: 10px;
 }
 
+.previewStep {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.previewStep h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.previewStep p {
+  margin: 0;
+  color: #5e6b75;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.questionNumber {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #eef8f4;
+  color: #147d68;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .label {
   color: #17202a;
   font-size: 14px;

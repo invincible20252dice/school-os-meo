@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPublicSurveyPreviewSteps,
   extractPublicSurveyQuestions,
   normalizePublicSurveyQuestion,
 } from "./public-survey-response";
@@ -118,5 +119,72 @@ describe("public-survey-response", () => {
         normalizePublicSurveyQuestion({ id: "q", type: "single" }, 2),
       ].filter(Boolean),
     ).toEqual([]);
+  });
+
+  it("builds public answer steps through the same preview rules as the builder", () => {
+    const steps = buildPublicSurveyPreviewSteps({
+      schoolId: "school-1",
+      title: "予備校下通り校",
+      minCharCount: 100,
+      maxCharCount: 300,
+      questions: [
+        {
+          id: "q1",
+          type: "SINGLE_SELECT",
+          question: "通塾のきっかけを教えてください",
+          options: ["学習習慣づけ", "苦手科目の克服"],
+          order: 2,
+        },
+        {
+          id: "q2",
+          type: "MULTI_SELECT",
+          question: "良かった点を選んでください",
+          maxSelect: 3,
+          options: ["先生の説明", "質問しやすさ"],
+          order: 1,
+        },
+        {
+          id: "q3",
+          type: "TEXT",
+          question: "変化を教えてください",
+          options: [],
+          order: 3,
+        },
+      ],
+    });
+
+    expect(steps.map((step) => step.id)).toEqual(["q2", "q1", "q3"]);
+    expect(steps.map((step) => step.helperText)).toEqual([
+      "最大3つまで選択できます",
+      "1つ選択してください",
+      "100〜300文字を目安に入力",
+    ]);
+  });
+
+  it("keeps preview rendering deterministic for unknown public question types", () => {
+    const steps = buildPublicSurveyPreviewSteps({
+      schoolId: "school-1",
+      title: "予備校下通り校",
+      minCharCount: 120,
+      maxCharCount: 280,
+      questions: [
+        {
+          id: "q-unknown",
+          type: "legacy-select",
+          question: "未対応形式の設問",
+          maxSelect: null,
+          options: ["選択肢"],
+          order: 1,
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({
+      id: "q-unknown",
+      type: "TEXT",
+      helperText: "120〜280文字を目安に入力",
+    });
+    expect(steps[0].maxSelect).toBeUndefined();
   });
 });

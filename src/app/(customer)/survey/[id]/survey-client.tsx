@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_GOOGLE_REVIEW_URL,
   DEFAULT_PUBLIC_SCHOOL_NAME,
@@ -14,7 +14,10 @@ import {
   toggleMultiSurveyAnswer,
   type PublicSurveyAnswerState,
 } from "@/lib/public-survey-answers";
-import { extractPublicSurveyQuestions } from "@/lib/public-survey-response";
+import {
+  buildPublicSurveyPreviewSteps,
+  extractPublicSurveyQuestions,
+} from "@/lib/public-survey-response";
 import styles from "./survey.module.css";
 
 type SurveyClientProps = {
@@ -97,6 +100,17 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   const [responseNotice, setResponseNotice] = useState("");
   const [isSettingLoading, setIsSettingLoading] = useState(true);
   const [hasLoadedSurveySetting, setHasLoadedSurveySetting] = useState(false);
+  const previewSteps = useMemo(
+    () =>
+      buildPublicSurveyPreviewSteps({
+        questions: surveyItems,
+        title: surveyTitle,
+        schoolId,
+        minCharCount: surveyTextRange.min,
+        maxCharCount: surveyTextRange.max,
+      }),
+    [schoolId, surveyItems, surveyTextRange.max, surveyTextRange.min, surveyTitle],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -269,10 +283,12 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
                 <p>保存済みの設問を確認してから表示します。</p>
               </div>
             </div>
-          ) : surveyItems.length ? (
-            surveyItems.map((item) => (
-              <div className={styles.field} key={item.id}>
-                <span className={styles.label}>{item.question}</span>
+          ) : previewSteps.length ? (
+            previewSteps.map((item) => (
+              <section className={styles.previewStep} key={item.id}>
+                <span className={styles.questionNumber}>Q{item.order}</span>
+                <h2>{item.question}</h2>
+                <p>{item.helperText}</p>
                 {item.type === "TEXT" ? (
                   <>
                     <textarea
@@ -283,17 +299,10 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
                       className={styles.textarea}
                     />
                     <span className={styles.helpText}>
-                      現在 {String(answers[item.id] || "").length}文字 / 目安{" "}
-                      {surveyTextRange.min}〜{surveyTextRange.max}文字
+                      現在 {String(answers[item.id] || "").length}文字
                     </span>
                   </>
                 ) : (
-                  <>
-                    {item.type === "MULTI_SELECT" && item.maxSelect ? (
-                      <span className={styles.helpText}>
-                        最大{item.maxSelect}個まで選択できます
-                      </span>
-                    ) : null}
                   <div className={styles.reasonGrid}>
                     {item.options.map((option) => (
                       <label key={option} className={styles.reasonItem}>
@@ -309,13 +318,12 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
                       </label>
                     ))}
                   </div>
-                  </>
                 )}
-              </div>
+              </section>
             ))
           ) : (
-            <p className={styles.emptyState}>
-              公開中の設問がまだ設定されていません。校舎のアンケート設定を確認してください。
+            <p className={styles.error}>
+              設問データを取得できませんでした。管理者に公開URLを確認してください。
             </p>
           )}
 
