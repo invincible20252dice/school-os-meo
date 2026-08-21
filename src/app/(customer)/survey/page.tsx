@@ -7,19 +7,35 @@ type PageProps = {
 
 export default async function SurveyQueryPage({ searchParams }: PageProps) {
   const { schoolId = "", surveyId = "" } = await searchParams;
-  const initialData =
-    schoolId || surveyId
-      ? await buildPublicSurveyResponse({ schoolId, surveyId }).catch((error) => {
-          console.error(error);
-          return null;
-        })
-      : null;
+  let initialData = null;
+  let initialDebugError = "";
+
+  if (schoolId || surveyId) {
+    try {
+      initialData = await buildPublicSurveyResponse({ schoolId, surveyId });
+    } catch (error) {
+      console.error("[SurveyPage] server fetch failed", error);
+      initialDebugError =
+        error instanceof Error
+          ? JSON.stringify(
+              {
+                source: "server-component",
+                message: error.message,
+                stack: error.stack,
+              },
+              null,
+              2,
+            )
+          : JSON.stringify({ source: "server-component", message: String(error) });
+    }
+  }
 
   return (
     <SurveyClient
       schoolId={schoolId}
       surveyId={surveyId}
       initialData={initialData}
+      initialDebugError={initialDebugError}
     />
   );
 }

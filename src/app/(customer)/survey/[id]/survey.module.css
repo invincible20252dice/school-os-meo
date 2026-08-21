@@ -216,6 +216,22 @@
   line-height: 1.6;
 }
 
+.debugPre {
+  overflow: auto;
+  max-height: 360px;
+  margin: 12px 0 0;
+  border: 1px solid #f0b4ae;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fff5f4;
+  color: #a62d27;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .success {
   margin: 0;
   color: #147d68;

@@ -129,6 +129,12 @@ export async function findPublicSurvey({
   const normalizedSchoolId = normalizeString(schoolId);
   const normalizedSurveyId = normalizeString(surveyId);
 
+  console.log("[PublicSurveyQuery] findPublicSurvey:start", {
+    schoolId: normalizedSchoolId,
+    surveyId: normalizedSurveyId,
+    mode: normalizedSurveyId ? "findUnique" : "findFirstBySchool",
+  });
+
   let survey = normalizedSurveyId
     ? ((await prisma.survey.findUnique({
         where: {
@@ -144,6 +150,15 @@ export async function findPublicSurvey({
         orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
       })) as PublicSurveyRow | null);
 
+  console.log("[PublicSurveyQuery] findPublicSurvey:primaryResult", {
+    found: Boolean(survey),
+    surveyId: survey?.id || null,
+    surveySchoolId: survey?.schoolId || null,
+    title: survey?.title || null,
+    itemCount: survey?.items?.length ?? null,
+    hasJoinedSchool: Boolean(survey?.school),
+  });
+
   if (!survey && normalizedSchoolId) {
     survey = (await prisma.survey.findFirst({
       where: {
@@ -152,6 +167,15 @@ export async function findPublicSurvey({
       include: publicSurveyInclude,
       orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
     })) as PublicSurveyRow | null;
+
+    console.log("[PublicSurveyQuery] findPublicSurvey:fallbackResult", {
+      found: Boolean(survey),
+      schoolId: normalizedSchoolId,
+      surveyId: survey?.id || null,
+      title: survey?.title || null,
+      itemCount: survey?.items?.length ?? null,
+      hasJoinedSchool: Boolean(survey?.school),
+    });
   }
 
   return survey;
@@ -167,14 +191,22 @@ export async function findPublicSurveySchool({
   const normalizedSchoolId = normalizeString(schoolId);
 
   if (survey?.school) {
+    console.log("[PublicSurveyQuery] findPublicSurveySchool:joinedSchool", {
+      schoolId: survey.school.id,
+      schoolName: survey.school.name,
+      hasSchoolSetting: Boolean(survey.school.schoolSetting),
+    });
     return survey.school;
   }
 
   if (!normalizedSchoolId) {
+    console.log("[PublicSurveyQuery] findPublicSurveySchool:skipped", {
+      reason: "schoolId is empty",
+    });
     return null;
   }
 
-  return prisma.school.findUnique({
+  const school = await prisma.school.findUnique({
     where: { id: normalizedSchoolId },
     select: {
       id: true,
@@ -187,7 +219,16 @@ export async function findPublicSurveySchool({
         },
       },
     },
-  }) as Promise<PublicSurveySchoolRow | null>;
+  }) as PublicSurveySchoolRow | null;
+
+  console.log("[PublicSurveyQuery] findPublicSurveySchool:lookupResult", {
+    found: Boolean(school),
+    schoolId: normalizedSchoolId,
+    schoolName: school?.name || null,
+    hasSchoolSetting: Boolean(school?.schoolSetting),
+  });
+
+  return school;
 }
 
 export async function buildPublicSurveyResponse({
@@ -198,6 +239,11 @@ export async function buildPublicSurveyResponse({
   surveyId?: string | null;
 }) {
   const normalizedSchoolId = normalizeString(schoolId);
+  console.log("[PublicSurveyQuery] buildPublicSurveyResponse:start", {
+    schoolId: normalizedSchoolId,
+    surveyId: normalizeString(surveyId),
+  });
+
   const survey = await findPublicSurvey({
     schoolId: normalizedSchoolId,
     surveyId,
@@ -208,6 +254,11 @@ export async function buildPublicSurveyResponse({
   });
 
   if (!survey) {
+    console.log("[PublicSurveyQuery] buildPublicSurveyResponse:notFound", {
+      schoolId: normalizedSchoolId,
+      schoolName: school?.name || null,
+    });
+
     return {
       success: false,
       message: "アンケートが見つかりませんでした。",
@@ -226,6 +277,15 @@ export async function buildPublicSurveyResponse({
   const serializedSurvey = serializePublicSurvey(survey);
   const questions = serializedSurvey.questions;
   const responseSchool = school || survey.school;
+
+  console.log("[PublicSurveyQuery] buildPublicSurveyResponse:success", {
+    schoolId: responseSchool?.id || survey.schoolId || normalizedSchoolId,
+    schoolName: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
+    surveyId: serializedSurvey.id,
+    title: serializedSurvey.title,
+    questionCount: questions.length,
+    questionTitles: questions.map((question) => question.title),
+  });
 
   return {
     success: true,

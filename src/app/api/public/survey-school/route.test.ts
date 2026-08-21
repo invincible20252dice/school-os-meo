@@ -417,4 +417,47 @@ describe("GET /api/public/survey-school", () => {
     expect(body.googleReviewUrl).toBe(DEFAULT_GOOGLE_REVIEW_URL);
     consoleErrorSpy.mockRestore();
   });
+
+  it("returns Prisma-style error code and stack details when lookup throws", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    const error = new Error("Unknown column googleReviewUrl") as Error & {
+      code: string;
+    };
+    error.code = "P2022";
+    vi.mocked(prisma.survey.findFirst).mockRejectedValueOnce(error);
+
+    const response = await GET(
+      new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.status).toBe(500);
+    expect(body.error).toBe("Unknown column googleReviewUrl");
+    expect(body.code).toBe("P2022");
+    expect(body.stack).toContain("Unknown column googleReviewUrl");
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("returns a raw message when a non-Error value is thrown", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findFirst).mockRejectedValueOnce("connection refused");
+
+    const response = await GET(
+      new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe("connection refused");
+    expect(body.code).toBeUndefined();
+    expect(body.stack).toBeUndefined();
+    consoleErrorSpy.mockRestore();
+  });
 });

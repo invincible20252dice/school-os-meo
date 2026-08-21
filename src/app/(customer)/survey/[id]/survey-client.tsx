@@ -26,6 +26,7 @@ type SurveyClientProps = {
   schoolId: string;
   surveyId: string;
   initialData?: SerializedPublicSurveyResponse | null;
+  initialDebugError?: string;
 };
 
 type PublicSurveyItem = {
@@ -99,6 +100,7 @@ export default function SurveyClient({
   schoolId,
   surveyId,
   initialData,
+  initialDebugError = "",
 }: SurveyClientProps) {
   const initialQuestions = useMemo(() => getInitialQuestions(initialData), [initialData]);
   const [schoolName, setSchoolName] = useState(
@@ -123,6 +125,7 @@ export default function SurveyClient({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [debugError, setDebugError] = useState(initialDebugError);
   const [responseNotice, setResponseNotice] = useState("");
   const [isSettingLoading, setIsSettingLoading] = useState(!initialData);
   const [hasLoadedSurveySetting, setHasLoadedSurveySetting] = useState(
@@ -143,6 +146,22 @@ export default function SurveyClient({
   useEffect(() => {
     if (initialData) {
       const questions = extractPublicSurveyQuestions(initialData);
+      setDebugError(
+        !initialData.success || questions.length === 0
+          ? JSON.stringify(
+              {
+                source: "server-component",
+                httpStatus: initialData.success ? 200 : 404,
+                message:
+                  "message" in initialData ? initialData.message : undefined,
+                error: "error" in initialData ? initialData.error : undefined,
+                response: initialData,
+              },
+              null,
+              2,
+            )
+          : "",
+      );
       setSchoolName(
         initialData.schoolName ||
           initialData.school?.name ||
@@ -173,13 +192,15 @@ export default function SurveyClient({
       setHasLoadedSurveySetting(false);
 
       try {
+        const endpoint = `/api/public/survey-school?schoolId=${encodeURIComponent(
+          schoolId,
+        )}${surveyId ? `&surveyId=${encodeURIComponent(surveyId)}` : ""}`;
         const response = await fetch(
-          `/api/public/survey-school?schoolId=${encodeURIComponent(
-            schoolId,
-          )}${surveyId ? `&surveyId=${encodeURIComponent(surveyId)}` : ""}`,
+          endpoint,
           { signal: controller.signal },
         );
-        const data = (await response.json()) as {
+        const rawText = await response.text();
+        let data: {
           school?: { name?: string };
           schoolName?: string;
           survey?: PublicSurvey | null;
@@ -187,7 +208,22 @@ export default function SurveyClient({
           items?: PublicSurveyItem[];
           googleReviewUrl?: string;
           message?: string;
+          error?: string;
+          stack?: string;
+          status?: number;
         };
+
+        try {
+          data = JSON.parse(rawText) as typeof data;
+        } catch (parseError) {
+          data = {
+            message: "APIレスポンスをJSONとして解析できませんでした。",
+            error:
+              parseError instanceof Error
+                ? parseError.message
+                : String(parseError),
+          };
+        }
 
         if (data.schoolName || data.school?.name) {
           setSchoolName(data.schoolName || data.school?.name || DEFAULT_PUBLIC_SCHOOL_NAME);
@@ -198,6 +234,27 @@ export default function SurveyClient({
         }
 
         const questions = extractPublicSurveyQuestions(data);
+
+        setDebugError(
+          !response.ok || questions.length === 0
+            ? JSON.stringify(
+                {
+                  source: "client-fetch",
+                  endpoint,
+                  httpStatus: response.status,
+                  ok: response.ok,
+                  message: data.message,
+                  error: data.error,
+                  stack: data.stack,
+                  rawResponse: rawText,
+                  parsedResponse: data,
+                  questionCount: questions.length,
+                },
+                null,
+                2,
+              )
+            : "",
+        );
 
         if (data.survey) {
           setSurveyTitle(data.survey.title);
@@ -216,7 +273,24 @@ export default function SurveyClient({
           setSchoolName(data.school?.name || DEFAULT_PUBLIC_SCHOOL_NAME);
           setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
         }
-      } catch {
+      } catch (fetchError) {
+        setDebugError(
+          JSON.stringify(
+            {
+              source: "client-fetch",
+              message: "公開アンケートAPIの取得中に例外が発生しました。",
+              error:
+                fetchError instanceof Error
+                  ? fetchError.message
+                  : String(fetchError),
+              stack: fetchError instanceof Error ? fetchError.stack : undefined,
+              schoolId,
+              surveyId,
+            },
+            null,
+            2,
+          ),
+        );
         setSchoolName(DEFAULT_PUBLIC_SCHOOL_NAME);
         setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
       } finally {
@@ -374,9 +448,24 @@ export default function SurveyClient({
               </section>
             ))
           ) : (
-            <p className={styles.error}>
-              設問データを取得できませんでした。管理者に公開URLを確認してください。
-            </p>
+            <div className={styles.error}>
+              <strong>設問データを取得できませんでした。</strong>
+              <pre className={styles.debugPre}>
+                {debugError ||
+                  JSON.stringify(
+                    {
+                      source: "render",
+                      message: "設問配列が空です。",
+                      schoolId,
+                      surveyId,
+                      surveyTitle,
+                      schoolName,
+                    },
+                    null,
+                    2,
+                  )}
+              </pre>
+            </div>
           )}
 
           <button

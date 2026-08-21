@@ -9,6 +9,27 @@ function normalizeString(value: string | null | undefined) {
   return value?.trim() || "";
 }
 
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code:
+        "code" in error && typeof error.code === "string"
+          ? error.code
+          : undefined,
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: String(error),
+    stack: undefined,
+    code: undefined,
+  };
+}
+
 export async function GET(request: Request) {
   let schoolId = "";
 
@@ -18,6 +39,14 @@ export async function GET(request: Request) {
     const surveyId =
       normalizeString(url.searchParams.get("surveyId")) ||
       normalizeString(url.searchParams.get("id"));
+
+    console.log("[PublicSurveyAPI] request", {
+      url: request.url,
+      pathname: url.pathname,
+      searchParams: Object.fromEntries(url.searchParams.entries()),
+      schoolId,
+      surveyId,
+    });
 
     if (!schoolId && !surveyId) {
       return NextResponse.json(
@@ -39,15 +68,30 @@ export async function GET(request: Request) {
 
     const payload = await buildPublicSurveyResponse({ schoolId, surveyId });
 
+    console.log("[PublicSurveyAPI] response", {
+      status: payload.success ? 200 : 404,
+      success: payload.success,
+      schoolId: payload.school.id,
+      schoolName: payload.schoolName,
+      surveyId: payload.survey?.id || null,
+      questionCount: payload.questions.length,
+    });
+
     return NextResponse.json(payload, {
       status: payload.success ? 200 : 404,
     });
   } catch (error) {
-    console.error(error);
+    const serializedError = serializeError(error);
+    console.error("[PublicSurveyAPI] error", serializedError);
+
     return NextResponse.json(
       {
         message: "アンケート公開設定を取得できませんでした。",
         success: false,
+        error: serializedError.message,
+        stack: serializedError.stack,
+        code: serializedError.code,
+        status: 500,
         school: {
           id: schoolId,
           name: DEFAULT_PUBLIC_SCHOOL_NAME,

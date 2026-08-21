@@ -9,13 +9,36 @@ type PageProps = {
 export default async function SurveyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { surveyId = "" } = await searchParams;
-  const initialData = await buildPublicSurveyResponse({
-    schoolId: id,
-    surveyId,
-  }).catch((error) => {
-    console.error(error);
-    return null;
-  });
+  let initialData = null;
+  let initialDebugError = "";
 
-  return <SurveyClient schoolId={id} surveyId={surveyId} initialData={initialData} />;
+  try {
+    initialData = await buildPublicSurveyResponse({
+      schoolId: id,
+      surveyId,
+    });
+  } catch (error) {
+    console.error("[SurveyPage] server fetch failed", error);
+    initialDebugError =
+      error instanceof Error
+        ? JSON.stringify(
+            {
+              source: "server-component",
+              message: error.message,
+              stack: error.stack,
+            },
+            null,
+            2,
+          )
+        : JSON.stringify({ source: "server-component", message: String(error) });
+  }
+
+  return (
+    <SurveyClient
+      schoolId={id}
+      surveyId={surveyId}
+      initialData={initialData}
+      initialDebugError={initialDebugError}
+    />
+  );
 }
