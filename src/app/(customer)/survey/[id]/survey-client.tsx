@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_GOOGLE_REVIEW_URL,
@@ -18,11 +19,13 @@ import {
   buildPublicSurveyPreviewSteps,
   extractPublicSurveyQuestions,
 } from "@/lib/public-survey-response";
+import type { SerializedPublicSurveyResponse } from "@/lib/public-survey-query";
 import styles from "./survey.module.css";
 
 type SurveyClientProps = {
   schoolId: string;
   surveyId: string;
+  initialData?: SerializedPublicSurveyResponse | null;
 };
 
 type PublicSurveyItem = {
@@ -81,25 +84,50 @@ function ExternalIcon() {
   );
 }
 
-export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) {
-  const [schoolName, setSchoolName] = useState(DEFAULT_PUBLIC_SCHOOL_NAME);
-  const [surveyTitle, setSurveyTitle] = useState("通塾体験を口コミ文に整えます");
-  const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>([]);
-  const [surveyTextRange, setSurveyTextRange] = useState({
-    min: 100,
-    max: 300,
-  });
-  const [answers, setAnswers] = useState<PublicSurveyAnswerState>({});
+function getInitialQuestions(data?: SerializedPublicSurveyResponse | null) {
+  return data ? extractPublicSurveyQuestions(data) : [];
+}
+
+function getInitialTextRange(data?: SerializedPublicSurveyResponse | null) {
+  return {
+    min: data?.survey?.minChars || data?.survey?.minCharCount || 100,
+    max: data?.survey?.maxChars || data?.survey?.maxCharCount || 300,
+  };
+}
+
+export default function SurveyClient({
+  schoolId,
+  surveyId,
+  initialData,
+}: SurveyClientProps) {
+  const initialQuestions = useMemo(() => getInitialQuestions(initialData), [initialData]);
+  const [schoolName, setSchoolName] = useState(
+    initialData?.schoolName ||
+      initialData?.school?.name ||
+      DEFAULT_PUBLIC_SCHOOL_NAME,
+  );
+  const [surveyTitle, setSurveyTitle] = useState(
+    initialData?.survey?.title || "通塾体験を口コミ文に整えます",
+  );
+  const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>(initialQuestions);
+  const [surveyTextRange, setSurveyTextRange] = useState(() =>
+    getInitialTextRange(initialData),
+  );
+  const [answers, setAnswers] = useState<PublicSurveyAnswerState>(() =>
+    createInitialPublicSurveyAnswers(initialQuestions),
+  );
   const [googleReviewUrl, setGoogleReviewUrl] = useState(
-    DEFAULT_GOOGLE_REVIEW_URL,
+    initialData?.googleReviewUrl || DEFAULT_GOOGLE_REVIEW_URL,
   );
   const [reviews, setReviews] = useState<string[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [responseNotice, setResponseNotice] = useState("");
-  const [isSettingLoading, setIsSettingLoading] = useState(true);
-  const [hasLoadedSurveySetting, setHasLoadedSurveySetting] = useState(false);
+  const [isSettingLoading, setIsSettingLoading] = useState(!initialData);
+  const [hasLoadedSurveySetting, setHasLoadedSurveySetting] = useState(
+    Boolean(initialData),
+  );
   const previewSteps = useMemo(
     () =>
       buildPublicSurveyPreviewSteps({
@@ -113,6 +141,30 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   );
 
   useEffect(() => {
+    if (initialData) {
+      const questions = extractPublicSurveyQuestions(initialData);
+      setSchoolName(
+        initialData.schoolName ||
+          initialData.school?.name ||
+          DEFAULT_PUBLIC_SCHOOL_NAME,
+      );
+      setGoogleReviewUrl(initialData.googleReviewUrl || DEFAULT_GOOGLE_REVIEW_URL);
+
+      if (initialData.survey) {
+        setSurveyTitle(initialData.survey.title);
+        setSurveyItems(questions);
+        setSurveyTextRange(getInitialTextRange(initialData));
+        setAnswers(createInitialPublicSurveyAnswers(questions));
+      } else if (questions.length) {
+        setSurveyItems(questions);
+        setAnswers(createInitialPublicSurveyAnswers(questions));
+      }
+
+      setHasLoadedSurveySetting(true);
+      setIsSettingLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 8000);
 
@@ -180,7 +232,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [schoolId, surveyId]);
+  }, [initialData, schoolId, surveyId]);
 
   function toggleSurveyOption(item: PublicSurveyItem, option: string) {
     if (item.type === "SINGLE_SELECT") {
