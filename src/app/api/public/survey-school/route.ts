@@ -52,25 +52,9 @@ function normalizeQuestionType(type: string) {
   return "text";
 }
 
-const publicSurveySelect = {
-  id: true,
-  schoolId: true,
-  title: true,
-  requiredKeywords: true,
-  minCharCount: true,
-  maxCharCount: true,
-  benefitType: true,
-  benefitShowTiming: true,
+const publicSurveyInclude = {
   items: {
     orderBy: { order: "asc" as const },
-    select: {
-      id: true,
-      type: true,
-      question: true,
-      maxSelect: true,
-      options: true,
-      order: true,
-    },
   },
   school: {
     select: {
@@ -156,7 +140,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const survey = (await prisma.survey.findFirst({
+    const surveys = (await prisma.survey.findMany({
       where: surveyId
         ? {
             id: surveyId,
@@ -165,11 +149,11 @@ export async function GET(request: Request) {
             schoolId,
             isValid: true,
           },
-      select: publicSurveySelect,
-      orderBy: surveyId
-        ? undefined
-        : [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
-    })) as PublicSurveyRow | null;
+      include: publicSurveyInclude,
+      orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+      take: 1,
+    })) as PublicSurveyRow[];
+    const survey = surveys[0] || null;
     const school = survey?.school || (schoolId
       ? await prisma.school.findUnique({
           where: { id: schoolId },

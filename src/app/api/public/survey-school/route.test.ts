@@ -51,7 +51,7 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
     },
     survey: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 }));
@@ -61,7 +61,7 @@ describe("GET /api/public/survey-school", () => {
     vi.clearAllMocks();
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.school.findUnique).mockResolvedValue(buildSchool());
-    vi.mocked(prisma.survey.findFirst).mockResolvedValue(buildSurvey());
+    vi.mocked(prisma.survey.findMany).mockResolvedValue([buildSurvey()]);
   });
 
   it("returns the public school name and saved Google review URL", async () => {
@@ -104,7 +104,7 @@ describe("GET /api/public/survey-school", () => {
 
   it("normalizes all stored survey item types for the public JSON contract", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([
       buildSurvey({
         items: [
           {
@@ -133,7 +133,7 @@ describe("GET /api/public/survey-school", () => {
           },
         ],
       }),
-    );
+    ]);
 
     const response = await GET(
       new Request(
@@ -164,7 +164,7 @@ describe("GET /api/public/survey-school", () => {
 
   it("returns the iSchool review URL when the school is missing", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([]);
     vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(null);
 
     const response = await GET(
@@ -191,7 +191,7 @@ describe("GET /api/public/survey-school", () => {
 
   it("returns school information with empty questions when no active survey exists", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([]);
 
     const response = await GET(
       new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
@@ -206,7 +206,7 @@ describe("GET /api/public/survey-school", () => {
 
   it("falls back to school Google Maps URL and then Place ID", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.survey.findMany).mockResolvedValue([]);
     vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
       id: "school-1",
       name: "大学受験専門塾 iスクール予備校",
@@ -249,11 +249,16 @@ describe("GET /api/public/survey-school", () => {
       ),
     );
 
-    expect(prisma.survey.findFirst).toHaveBeenCalledWith(
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           id: "survey-1",
         },
+        include: expect.objectContaining({
+          items: expect.any(Object),
+          school: expect.any(Object),
+        }),
+        take: 1,
       }),
     );
   });
@@ -273,9 +278,9 @@ describe("GET /api/public/survey-school", () => {
 
   it("keeps rendering questions when a survey-id lookup has no joined school row", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([
       buildSurvey({ school: undefined }),
-    );
+    ]);
 
     const response = await GET(
       new Request(
@@ -296,13 +301,18 @@ describe("GET /api/public/survey-school", () => {
       new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
     );
 
-    expect(prisma.survey.findFirst).toHaveBeenCalledWith(
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           schoolId: "school-1",
           isValid: true,
         },
+        include: expect.objectContaining({
+          items: expect.any(Object),
+          school: expect.any(Object),
+        }),
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        take: 1,
       }),
     );
   });
@@ -312,7 +322,7 @@ describe("GET /api/public/survey-school", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockRejectedValueOnce(new Error("db failed"));
+    vi.mocked(prisma.survey.findMany).mockRejectedValueOnce(new Error("db failed"));
 
     const response = await GET(
       new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),

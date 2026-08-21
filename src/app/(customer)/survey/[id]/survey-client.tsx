@@ -14,6 +14,7 @@ import {
   toggleMultiSurveyAnswer,
   type PublicSurveyAnswerState,
 } from "@/lib/public-survey-answers";
+import { extractPublicSurveyQuestions } from "@/lib/public-survey-response";
 import styles from "./survey.module.css";
 
 type SurveyClientProps = {
@@ -48,24 +49,6 @@ type PublicSurvey = {
   items?: PublicSurveyItem[];
   questions?: PublicSurveyItem[];
 };
-
-function normalizePublicSurveyItem(item: PublicSurveyItem): PublicSurveyItem {
-  const normalizedType =
-    item.internalType ||
-    (item.type === "single"
-      ? "SINGLE_SELECT"
-      : item.type === "multiple"
-      ? "MULTI_SELECT"
-      : item.type === "text"
-      ? "TEXT"
-      : item.type);
-
-  return {
-    ...item,
-    type: normalizedType,
-    question: item.question || item.title || "",
-  };
-}
 
 function SparkIcon() {
   return (
@@ -135,6 +118,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
           schoolName?: string;
           survey?: PublicSurvey | null;
           questions?: PublicSurveyItem[];
+          items?: PublicSurveyItem[];
           googleReviewUrl?: string;
           message?: string;
         };
@@ -147,15 +131,9 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
           setGoogleReviewUrl(data.googleReviewUrl);
         }
 
-        if (data.survey) {
-          const questions = (
-            data.questions?.length
-              ? data.questions
-              : data.survey.questions?.length
-              ? data.survey.questions
-              : data.survey.items || []
-          ).map(normalizePublicSurveyItem);
+        const questions = extractPublicSurveyQuestions(data);
 
+        if (data.survey) {
           setSurveyTitle(data.survey.title);
           setSurveyItems(questions);
           setSurveyTextRange({
@@ -163,8 +141,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
             max: data.survey.maxChars || data.survey.maxCharCount,
           });
           setAnswers(createInitialPublicSurveyAnswers(questions));
-        } else if (data.questions?.length) {
-          const questions = data.questions.map(normalizePublicSurveyItem);
+        } else if (questions.length) {
           setSurveyItems(questions);
           setAnswers(createInitialPublicSurveyAnswers(questions));
         }
