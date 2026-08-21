@@ -3,6 +3,7 @@ import {
   DEFAULT_GOOGLE_REVIEW_URL,
   DEFAULT_PUBLIC_SCHOOL_NAME,
 } from "@/lib/google-review-url";
+import { findSchoolSettingGoogleReviewUrl } from "@/lib/public-survey-query";
 import { GET } from "./route";
 
 function buildSchool(overrides: Record<string, unknown> = {}) {
@@ -50,6 +51,9 @@ vi.mock("@/lib/prisma", () => ({
     school: {
       findUnique: vi.fn(),
     },
+    schoolSetting: {
+      findUnique: vi.fn(),
+    },
     survey: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -62,6 +66,10 @@ describe("GET /api/public/survey-school", () => {
     vi.clearAllMocks();
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.school.findUnique).mockResolvedValue(buildSchool());
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+      googleReviewUrl:
+        "https://search.google.com/local/writereview?placeid=setting-url",
+    });
     vi.mocked(prisma.survey.findUnique).mockResolvedValue(buildSurvey());
     vi.mocked(prisma.survey.findFirst).mockResolvedValue(buildSurvey());
   });
@@ -256,14 +264,12 @@ describe("GET /api/public/survey-school", () => {
 
   it("falls back to school Google Maps URL and then Place ID", async () => {
     const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
       buildSurvey({
         school: buildSchool({
           googleMapsUrl:
             "https://search.google.com/local/writereview?placeid=school-url",
-          schoolSetting: {
-            googleReviewUrl: null,
-          },
         }),
       }),
     );
@@ -272,7 +278,6 @@ describe("GET /api/public/survey-school", () => {
         school: buildSchool({
           googlePlaceId: "place-school",
           googleMapsUrl: null,
-          schoolSetting: null,
         }),
       }),
     );
@@ -290,6 +295,76 @@ describe("GET /api/public/survey-school", () => {
     expect((await placeIdResponse.json()).googleReviewUrl).toBe(
       "https://search.google.com/local/writereview?placeid=place-school",
     );
+  });
+
+  it("keeps returning questions when SchoolSetting.googleReviewUrl is missing in DB", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    const error = new Error(
+      "The column SchoolSetting.googleReviewUrl does not exist in the current database.",
+    ) as Error & { code: string };
+    error.code = "P2022";
+    vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValueOnce(error);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(
+      buildSurvey({
+        school: buildSchool({
+          googleMapsUrl:
+            "https://search.google.com/local/writereview?placeid=school-url",
+        }),
+      }),
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1&surveyId=survey-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.questions).toHaveLength(1);
+    expect(body.googleReviewUrl).toBe(
+      "https://search.google.com/local/writereview?placeid=school-url",
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[PublicSurveyQuery] findSchoolSettingGoogleReviewUrl:error",
+      expect.objectContaining({
+        schoolId: "school-1",
+        error: expect.objectContaining({
+          code: "P2022",
+        }),
+      }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("keeps the review URL lookup optional when school id is empty or the DB throws a raw value", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+
+    await expect(findSchoolSettingGoogleReviewUrl("")).resolves.toBeNull();
+    expect(prisma.schoolSetting.findUnique).not.toHaveBeenCalled();
+
+    vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValueOnce(
+      "schema cache is stale",
+    );
+
+    await expect(findSchoolSettingGoogleReviewUrl("school-1")).resolves.toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[PublicSurveyQuery] findSchoolSettingGoogleReviewUrl:error",
+      expect.objectContaining({
+        schoolId: "school-1",
+        error: {
+          message: "schema cache is stale",
+        },
+      }),
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it("returns 404 when neither survey id nor school fallback can find a survey", async () => {

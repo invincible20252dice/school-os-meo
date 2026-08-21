@@ -25,9 +25,6 @@ type PublicSurveySchoolRow = {
   name: string;
   googlePlaceId: string | null;
   googleMapsUrl: string | null;
-  schoolSetting: {
-    googleReviewUrl: string | null;
-  } | null;
 };
 
 type PublicSurveyRow = {
@@ -68,14 +65,21 @@ export const publicSurveyInclude = {
       name: true,
       googlePlaceId: true,
       googleMapsUrl: true,
-      schoolSetting: {
-        select: {
-          googleReviewUrl: true,
-        },
-      },
     },
   },
 };
+
+function serializePublicSurveyQueryError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      code: "code" in error ? String(error.code) : undefined,
+      name: error.name,
+    };
+  }
+
+  return { message: String(error) };
+}
 
 function serializeNormalizedQuestion(item: PublicSurveyQuestion) {
   const type = normalizeQuestionType(item.type);
@@ -194,7 +198,6 @@ export async function findPublicSurveySchool({
     console.log("[PublicSurveyQuery] findPublicSurveySchool:joinedSchool", {
       schoolId: survey.school.id,
       schoolName: survey.school.name,
-      hasSchoolSetting: Boolean(survey.school.schoolSetting),
     });
     return survey.school;
   }
@@ -213,11 +216,6 @@ export async function findPublicSurveySchool({
       name: true,
       googlePlaceId: true,
       googleMapsUrl: true,
-      schoolSetting: {
-        select: {
-          googleReviewUrl: true,
-        },
-      },
     },
   }) as PublicSurveySchoolRow | null;
 
@@ -225,10 +223,44 @@ export async function findPublicSurveySchool({
     found: Boolean(school),
     schoolId: normalizedSchoolId,
     schoolName: school?.name || null,
-    hasSchoolSetting: Boolean(school?.schoolSetting),
   });
 
   return school;
+}
+
+export async function findSchoolSettingGoogleReviewUrl(schoolId?: string | null) {
+  const normalizedSchoolId = normalizeString(schoolId);
+
+  if (!normalizedSchoolId) {
+    console.log("[PublicSurveyQuery] findSchoolSettingGoogleReviewUrl:skipped", {
+      reason: "schoolId is empty",
+    });
+    return null;
+  }
+
+  try {
+    const setting = await prisma.schoolSetting.findUnique({
+      where: { schoolId: normalizedSchoolId },
+      select: {
+        googleReviewUrl: true,
+      },
+    });
+
+    console.log("[PublicSurveyQuery] findSchoolSettingGoogleReviewUrl:result", {
+      schoolId: normalizedSchoolId,
+      found: Boolean(setting),
+      hasGoogleReviewUrl: Boolean(setting?.googleReviewUrl),
+    });
+
+    return setting?.googleReviewUrl || null;
+  } catch (error) {
+    console.error("[PublicSurveyQuery] findSchoolSettingGoogleReviewUrl:error", {
+      schoolId: normalizedSchoolId,
+      error: serializePublicSurveyQueryError(error),
+    });
+
+    return null;
+  }
 }
 
 export async function buildPublicSurveyResponse({
@@ -277,9 +309,11 @@ export async function buildPublicSurveyResponse({
   const serializedSurvey = serializePublicSurvey(survey);
   const questions = serializedSurvey.questions;
   const responseSchool = school || survey.school;
+  const responseSchoolId = responseSchool?.id || survey.schoolId || normalizedSchoolId;
+  const settingReviewUrl = await findSchoolSettingGoogleReviewUrl(responseSchoolId);
 
   console.log("[PublicSurveyQuery] buildPublicSurveyResponse:success", {
-    schoolId: responseSchool?.id || survey.schoolId || normalizedSchoolId,
+    schoolId: responseSchoolId,
     schoolName: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
     surveyId: serializedSurvey.id,
     title: serializedSurvey.title,
@@ -290,14 +324,14 @@ export async function buildPublicSurveyResponse({
   return {
     success: true,
     school: {
-      id: responseSchool?.id || survey.schoolId || normalizedSchoolId,
+      id: responseSchoolId,
       name: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
     },
     schoolName: responseSchool?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
     survey: serializedSurvey,
     questions,
     googleReviewUrl: resolveGoogleReviewUrl({
-      settingReviewUrl: responseSchool?.schoolSetting?.googleReviewUrl,
+      settingReviewUrl,
       schoolGoogleMapsUrl: responseSchool?.googleMapsUrl,
       googlePlaceId: responseSchool?.googlePlaceId,
     }),
