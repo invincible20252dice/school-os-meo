@@ -449,6 +449,28 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId, searchParams]);
 
+  if (isLoading) {
+    return (
+      <main className={styles.page}>
+        <header className={styles.header}>
+          <p className={styles.kicker}>Survey Builder</p>
+          <h1>アンケート設定</h1>
+          <p>
+            保存済みのアンケート設定を確認しています。読み込み完了後に編集画面を表示します。
+          </p>
+        </header>
+
+        <section className={styles.loadingPanel} role="status" aria-live="polite">
+          <span className={styles.spinner} aria-hidden="true" />
+          <div>
+            <h2>DBからアンケート設定を読み込んでいます</h2>
+            <p>初期データを表示せず、保存済みの内容だけを編集画面に反映します。</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>

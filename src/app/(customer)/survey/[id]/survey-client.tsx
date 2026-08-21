@@ -113,6 +113,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   const [error, setError] = useState("");
   const [responseNotice, setResponseNotice] = useState("");
   const [isSettingLoading, setIsSettingLoading] = useState(true);
+  const [hasLoadedSurveySetting, setHasLoadedSurveySetting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -120,6 +121,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
 
     async function loadPublicSurveySetting() {
       setIsSettingLoading(true);
+      setHasLoadedSurveySetting(false);
 
       try {
         const response = await fetch(
@@ -176,6 +178,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
       } finally {
         window.clearTimeout(timeoutId);
+        setHasLoadedSurveySetting(true);
         setIsSettingLoading(false);
       }
     }
@@ -202,6 +205,11 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   }
 
   async function generateReviews() {
+    if (isSettingLoading || !hasLoadedSurveySetting || surveyItems.length === 0) {
+      setError("アンケート設問の読み込み完了後に生成してください。");
+      return;
+    }
+
     setIsLoading(true);
     setError("");
     setResponseNotice("");
@@ -276,7 +284,15 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         </p>
 
         <div className={styles.formStack}>
-          {surveyItems.length ? (
+          {isSettingLoading || !hasLoadedSurveySetting ? (
+            <div className={styles.loadingState} role="status" aria-live="polite">
+              <span className={styles.spinner} aria-hidden="true" />
+              <div>
+                <strong>アンケート設問を読み込んでいます</strong>
+                <p>保存済みの設問を確認してから表示します。</p>
+              </div>
+            </div>
+          ) : surveyItems.length ? (
             surveyItems.map((item) => (
               <div className={styles.field} key={item.id}>
                 <span className={styles.label}>{item.question}</span>
@@ -329,7 +345,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
           <button
             type="button"
             onClick={generateReviews}
-            disabled={isLoading}
+            disabled={isLoading || isSettingLoading || !hasLoadedSurveySetting || surveyItems.length === 0}
             className={styles.primaryButton}
           >
             <SparkIcon />

@@ -215,6 +215,45 @@
   line-height: 1.7;
 }
 
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8faf9;
+  color: #43505a;
+  line-height: 1.6;
+}
+
+.loadingState strong {
+  display: block;
+  color: #17202a;
+  font-size: 14px;
+}
+
+.loadingState p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 3px solid #dde5e1;
+  border-top-color: #27b58c;
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .reviewCard {
   padding: 22px;
 }

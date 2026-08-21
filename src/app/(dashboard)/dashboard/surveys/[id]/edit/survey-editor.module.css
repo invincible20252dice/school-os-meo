@@ -133,6 +133,48 @@
   font-weight: 800;
 }
 
+.loadingPanel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 720px;
+  margin-top: 28px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.loadingPanel h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 18px;
+}
+
+.loadingPanel p {
+  margin: 6px 0 0;
+  color: #52606a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 3px solid #dde5e1;
+  border-top-color: #147d68;
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .fieldGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
