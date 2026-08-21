@@ -238,8 +238,44 @@ describe("survey-persistence", () => {
       rating: 5,
       selectedReasons: [" 説明が丁寧 "],
       freeText: "よかったです",
+      questionAnswers: [
+        {
+          questionId: " q1 ",
+          question: " 通塾のきっかけ ",
+          type: "SINGLE_SELECT",
+          value: " 大学受験 ",
+        },
+        {
+          questionId: "q2",
+          question: "良かった点",
+          type: "MULTI_SELECT",
+          value: [" 質問しやすい ", ""],
+        },
+        null as never,
+        {
+          questionId: "",
+          question: "無効",
+          type: "TEXT",
+          value: "無効",
+        },
+      ],
       generatedReviews: ["口コミ案"],
     });
+
+    expect(input.questionAnswers).toEqual([
+      {
+        questionId: "q1",
+        question: "通塾のきっかけ",
+        type: "SINGLE_SELECT",
+        value: "大学受験",
+      },
+      {
+        questionId: "q2",
+        question: "良かった点",
+        type: "MULTI_SELECT",
+        value: ["質問しやすい"],
+      },
+    ]);
 
     await persistSurveyResponse(prisma, input);
 
@@ -250,8 +286,20 @@ describe("survey-persistence", () => {
         status: "GENERATED",
         rating: 5,
         generatedPatterns: ["口コミ案"],
+        surveyAnswers: expect.objectContaining({
+          questionAnswers: input.questionAnswers,
+        }),
       }),
     });
+  });
+
+  it("normalizes missing survey response question answers to an empty list", () => {
+    const input = normalizeSurveyResponseInput({
+      schoolId: "school-own",
+      questionAnswers: "invalid" as never,
+    });
+
+    expect(input.questionAnswers).toEqual([]);
   });
 
   it("creates a school before saving a response when the school is missing", async () => {

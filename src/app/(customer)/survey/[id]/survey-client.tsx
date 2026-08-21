@@ -5,16 +5,16 @@ import {
   DEFAULT_GOOGLE_REVIEW_URL,
   DEFAULT_PUBLIC_SCHOOL_NAME,
 } from "@/lib/google-review-url";
+import {
+  buildReviewGenerationInputFromSurveyAnswers,
+  createInitialPublicSurveyAnswers,
+  getAnswerValues,
+  setSingleSurveyAnswer,
+  setTextSurveyAnswer,
+  toggleMultiSurveyAnswer,
+  type PublicSurveyAnswerState,
+} from "@/lib/public-survey-answers";
 import styles from "./survey.module.css";
-
-const reasonOptions = [
-  "先生の説明がわかりやすい",
-  "質問しやすい雰囲気",
-  "学習習慣がついた",
-  "成績や理解度が上がった",
-  "教室が通いやすい",
-  "保護者への連絡が丁寧",
-];
 
 type SurveyClientProps = {
   schoolId: string;
@@ -73,15 +73,14 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   const [schoolName, setSchoolName] = useState(DEFAULT_PUBLIC_SCHOOL_NAME);
   const [surveyTitle, setSurveyTitle] = useState("通塾体験を口コミ文に整えます");
   const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>([]);
+  const [surveyTextRange, setSurveyTextRange] = useState({
+    min: 100,
+    max: 300,
+  });
+  const [answers, setAnswers] = useState<PublicSurveyAnswerState>({});
   const [googleReviewUrl, setGoogleReviewUrl] = useState(
     DEFAULT_GOOGLE_REVIEW_URL,
   );
-  const [rating, setRating] = useState(5);
-  const [selectedReasons, setSelectedReasons] = useState<string[]>([
-    reasonOptions[0],
-    reasonOptions[2],
-  ]);
-  const [freeText, setFreeText] = useState("");
   const [reviews, setReviews] = useState<string[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -121,6 +120,11 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         if (data.survey) {
           setSurveyTitle(data.survey.title);
           setSurveyItems(data.survey.items);
+          setSurveyTextRange({
+            min: data.survey.minCharCount,
+            max: data.survey.maxCharCount,
+          });
+          setAnswers(createInitialPublicSurveyAnswers(data.survey.items));
         }
 
         if (!response.ok) {
@@ -144,24 +148,17 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
     };
   }, [schoolId, surveyId]);
 
-  function toggleReason(reason: string) {
-    setSelectedReasons((current) =>
-      current.includes(reason)
-        ? current.filter((item) => item !== reason)
-        : [...current, reason],
-    );
-  }
-
   function toggleSurveyOption(item: PublicSurveyItem, option: string) {
     if (item.type === "SINGLE_SELECT") {
-      setSelectedReasons((current) => [
-        ...current.filter((reason) => !item.options.includes(reason)),
-        option,
-      ]);
+      setAnswers((current) => setSingleSurveyAnswer(current, item.id, option));
       return;
     }
 
-    toggleReason(option);
+    setAnswers((current) => toggleMultiSurveyAnswer(current, item, option));
+  }
+
+  function updateTextAnswer(item: PublicSurveyItem, value: string) {
+    setAnswers((current) => setTextSurveyAnswer(current, item.id, value));
   }
 
   async function generateReviews() {
@@ -171,14 +168,18 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
     setCopiedIndex(null);
 
     try {
+      const promptInput = buildReviewGenerationInputFromSurveyAnswers({
+        questions: surveyItems,
+        answers,
+      });
       const response = await fetch("/api/generate-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schoolName,
-          rating,
-          selectedReasons,
-          freeText,
+          rating: 5,
+          selectedReasons: promptInput.selectedReasons,
+          freeText: promptInput.freeText,
         }),
       });
 
@@ -196,9 +197,10 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
           schoolId,
           surveyId,
           schoolName,
-          rating,
-          selectedReasons,
-          freeText,
+          rating: 5,
+          selectedReasons: promptInput.selectedReasons,
+          freeText: promptInput.freeText,
+          questionAnswers: promptInput.questionAnswers,
           generatedReviews: data.reviews,
         }),
       });
@@ -239,14 +241,26 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
               <div className={styles.field} key={item.id}>
                 <span className={styles.label}>{item.question}</span>
                 {item.type === "TEXT" ? (
-                  <textarea
-                    value={freeText}
-                    onChange={(event) => setFreeText(event.target.value)}
-                    rows={5}
-                    placeholder="例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。"
-                    className={styles.textarea}
-                  />
+                  <>
+                    <textarea
+                      value={String(answers[item.id] || "")}
+                      onChange={(event) => updateTextAnswer(item, event.target.value)}
+                      rows={5}
+                      placeholder="例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。"
+                      className={styles.textarea}
+                    />
+                    <span className={styles.helpText}>
+                      現在 {String(answers[item.id] || "").length}文字 / 目安{" "}
+                      {surveyTextRange.min}〜{surveyTextRange.max}文字
+                    </span>
+                  </>
                 ) : (
+                  <>
+                    {item.type === "MULTI_SELECT" && item.maxSelect ? (
+                      <span className={styles.helpText}>
+                        最大{item.maxSelect}個まで選択できます
+                      </span>
+                    ) : null}
                   <div className={styles.reasonGrid}>
                     {item.options.map((option) => (
                       <label key={option} className={styles.reasonItem}>
@@ -255,66 +269,21 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
                             item.type === "SINGLE_SELECT" ? "radio" : "checkbox"
                           }
                           name={item.id}
-                          checked={selectedReasons.includes(option)}
+                          checked={getAnswerValues(answers, item.id).includes(option)}
                           onChange={() => toggleSurveyOption(item, option)}
                         />
                         <span>{option}</span>
                       </label>
                     ))}
                   </div>
+                  </>
                 )}
               </div>
             ))
           ) : (
-            <>
-              <div className={styles.field}>
-                <span className={styles.label}>満足度</span>
-                <div className={styles.ratingGrid}>
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setRating(value)}
-                      className={
-                        rating === value
-                          ? `${styles.ratingButton} ${styles.ratingButtonActive}`
-                          : styles.ratingButton
-                      }
-                      aria-pressed={rating === value}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.field}>
-                <span className={styles.label}>良かった点</span>
-                <div className={styles.reasonGrid}>
-                  {reasonOptions.map((reason) => (
-                    <label key={reason} className={styles.reasonItem}>
-                      <input
-                        type="checkbox"
-                        checked={selectedReasons.includes(reason)}
-                        onChange={() => toggleReason(reason)}
-                      />
-                      <span>{reason}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <label className={styles.field}>
-                <span className={styles.label}>自由記述</span>
-                <textarea
-                  value={freeText}
-                  onChange={(event) => setFreeText(event.target.value)}
-                  rows={5}
-                  placeholder="例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。"
-                  className={styles.textarea}
-                />
-              </label>
-            </>
+            <p className={styles.emptyState}>
+              公開中の設問がまだ設定されていません。校舎のアンケート設定を確認してください。
+            </p>
           )}
 
           <button

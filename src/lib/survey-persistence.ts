@@ -4,6 +4,10 @@ import {
   type RequestAccessResult,
 } from "./supabase-access";
 import type {
+  PublicSurveyQuestionAnswer,
+  PublicSurveyAnswerValue,
+} from "./public-survey-answers";
+import type {
   SurveyEditorItem,
   SurveyEditorState,
   SurveyItemType,
@@ -38,6 +42,7 @@ export type SurveyResponseInput = {
   rating?: number;
   selectedReasons?: string[];
   freeText?: string;
+  questionAnswers?: PublicSurveyQuestionAnswer[];
   generatedReviews?: string[];
 };
 
@@ -86,6 +91,39 @@ function normalizeOptions(value: unknown) {
   return Array.isArray(value)
     ? value.map(normalizeString).filter(Boolean)
     : [];
+}
+
+function normalizeAnswerValue(value: unknown): PublicSurveyAnswerValue {
+  return Array.isArray(value) ? normalizeOptions(value) : normalizeString(value);
+}
+
+function normalizeQuestionAnswers(value: unknown): PublicSurveyQuestionAnswer[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const row = item as Partial<PublicSurveyQuestionAnswer>;
+      const questionId = normalizeString(row.questionId);
+      const question = normalizeString(row.question);
+
+      if (!questionId || !question) {
+        return null;
+      }
+
+      return {
+        questionId,
+        question,
+        type: normalizeString(row.type) || "TEXT",
+        value: normalizeAnswerValue(row.value),
+      };
+    })
+    .filter((item): item is PublicSurveyQuestionAnswer => Boolean(item));
 }
 
 export function normalizeSurveyPersistenceInput(
@@ -206,6 +244,7 @@ export function normalizeSurveyResponseInput(input: SurveyResponseInput) {
     rating: normalizeInteger(input.rating, 0),
     selectedReasons: normalizeOptions(input.selectedReasons),
     freeText: normalizeString(input.freeText),
+    questionAnswers: normalizeQuestionAnswers(input.questionAnswers),
     generatedReviews: normalizeOptions(input.generatedReviews),
   };
 }
@@ -227,6 +266,7 @@ export async function persistSurveyResponse(
         schoolName: input.schoolName,
         selectedReasons: input.selectedReasons,
         freeText: input.freeText,
+        questionAnswers: input.questionAnswers,
       },
       originalText: input.freeText || null,
       generatedPatterns: input.generatedReviews,
