@@ -10,6 +10,78 @@ function normalizeString(value: string | null | undefined) {
   return value?.trim() || "";
 }
 
+type PublicSurveyItemRow = {
+  id: string;
+  type: string;
+  question: string;
+  maxSelect: number | null;
+  options: string[];
+  order: number;
+};
+
+type PublicSurveyRow = {
+  id: string;
+  title: string;
+  requiredKeywords: string | null;
+  minCharCount: number;
+  maxCharCount: number;
+  benefitType: string | null;
+  benefitShowTiming: string | null;
+  items: PublicSurveyItemRow[];
+};
+
+const publicSurveySelect = {
+  id: true,
+  title: true,
+  requiredKeywords: true,
+  minCharCount: true,
+  maxCharCount: true,
+  benefitType: true,
+  benefitShowTiming: true,
+  items: {
+    orderBy: { order: "asc" as const },
+    select: {
+      id: true,
+      type: true,
+      question: true,
+      maxSelect: true,
+      options: true,
+      order: true,
+    },
+  },
+};
+
+function serializeSurveyItem(item: PublicSurveyItemRow) {
+  return {
+    id: item.id,
+    type: item.type,
+    question: item.question,
+    maxSelect: item.maxSelect,
+    options: item.options,
+    order: item.order,
+  };
+}
+
+function serializeSurvey(survey: PublicSurveyRow | null) {
+  if (!survey) {
+    return null;
+  }
+
+  const questions = survey.items.map(serializeSurveyItem);
+
+  return {
+    id: survey.id,
+    title: survey.title,
+    requiredKeywords: survey.requiredKeywords || "",
+    minCharCount: survey.minCharCount,
+    maxCharCount: survey.maxCharCount,
+    benefitType: survey.benefitType || "",
+    benefitShowTiming: survey.benefitShowTiming || "",
+    items: questions,
+    questions,
+  };
+}
+
 export async function GET(request: Request) {
   let schoolId = "";
 
@@ -61,60 +133,28 @@ export async function GET(request: Request) {
       );
     }
 
-    const survey = surveyId
-      ? await prisma.survey.findFirst({
-          where: {
+    const survey = (await prisma.survey.findFirst({
+      where: surveyId
+        ? {
             id: surveyId,
+            isValid: true,
+          }
+        : {
             schoolId: school.id,
             isValid: true,
           },
-          select: {
-            id: true,
-            title: true,
-            requiredKeywords: true,
-            minCharCount: true,
-            maxCharCount: true,
-            benefitType: true,
-            benefitShowTiming: true,
-            items: {
-              orderBy: { order: "asc" },
-              select: {
-                id: true,
-                type: true,
-                question: true,
-                maxSelect: true,
-                options: true,
-                order: true,
-              },
-            },
-          },
-        })
-      : null;
+      select: publicSurveySelect,
+      orderBy: surveyId
+        ? undefined
+        : [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+    })) as PublicSurveyRow | null;
 
     return NextResponse.json({
       school: {
         id: school.id,
         name: school.name,
       },
-      survey: survey
-        ? {
-            id: survey.id,
-            title: survey.title,
-            requiredKeywords: survey.requiredKeywords || "",
-            minCharCount: survey.minCharCount,
-            maxCharCount: survey.maxCharCount,
-            benefitType: survey.benefitType || "",
-            benefitShowTiming: survey.benefitShowTiming || "",
-            items: survey.items.map((item) => ({
-              id: item.id,
-              type: item.type,
-              question: item.question,
-              maxSelect: item.maxSelect,
-              options: item.options,
-              order: item.order,
-            })),
-          }
-        : null,
+      survey: serializeSurvey(survey),
       googleReviewUrl: resolveGoogleReviewUrl({
         settingReviewUrl: school.schoolSetting?.googleReviewUrl,
         schoolGoogleMapsUrl: school.googleMapsUrl,

@@ -38,7 +38,8 @@ type PublicSurvey = {
   maxCharCount: number;
   benefitType: string;
   benefitShowTiming: string;
-  items: PublicSurveyItem[];
+  items?: PublicSurveyItem[];
+  questions?: PublicSurveyItem[];
 };
 
 function SparkIcon() {
@@ -118,13 +119,17 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         }
 
         if (data.survey) {
+          const questions = data.survey.questions?.length
+            ? data.survey.questions
+            : data.survey.items || [];
+
           setSurveyTitle(data.survey.title);
-          setSurveyItems(data.survey.items);
+          setSurveyItems(questions);
           setSurveyTextRange({
             min: data.survey.minCharCount,
             max: data.survey.maxCharCount,
           });
-          setAnswers(createInitialPublicSurveyAnswers(data.survey.items));
+          setAnswers(createInitialPublicSurveyAnswers(questions));
         }
 
         if (!response.ok) {

@@ -64,6 +64,8 @@ describe("GET /api/public/survey-school", () => {
       title: "予備校下通り校",
       requiredKeywords: "下通り, 街, 個別指導, 大学受験, 安心な価格",
     });
+    expect(body.survey.items).toHaveLength(1);
+    expect(body.survey.questions).toEqual(body.survey.items);
     expect(body.googleReviewUrl).toBe(
       "https://search.google.com/local/writereview?placeid=setting-url",
     );
@@ -142,7 +144,7 @@ describe("GET /api/public/survey-school", () => {
     );
   });
 
-  it("queries surveys by the requested survey id and school id", async () => {
+  it("queries surveys by the requested survey id without requiring school id match", async () => {
     const { prisma } = await import("@/lib/prisma");
 
     await GET(
@@ -155,9 +157,26 @@ describe("GET /api/public/survey-school", () => {
       expect.objectContaining({
         where: {
           id: "survey-1",
+          isValid: true,
+        },
+      }),
+    );
+  });
+
+  it("loads the latest active survey for the requested school when survey id is absent", async () => {
+    const { prisma } = await import("@/lib/prisma");
+
+    await GET(
+      new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
+    );
+
+    expect(prisma.survey.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
           schoolId: "school-1",
           isValid: true,
         },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
     );
   });
