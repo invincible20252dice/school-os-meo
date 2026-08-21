@@ -25,34 +25,95 @@ function toUpdatedAt(value?: Date) {
   return value ? value.toISOString().slice(0, 16).replace("T", " ") : "";
 }
 
+const schoolSettingSelect = {
+  id: true,
+  schoolId: true,
+  googleConnected: true,
+  googleAccountId: true,
+  googleRefreshToken: true,
+  selectedGbpLocationId: true,
+  googleReviewUrl: true,
+  lineNotifyEnabled: true,
+  lineChannelAccessToken: true,
+  lineDestinationId: true,
+  notifyOnNewReview: true,
+  notifyOnLowRating: true,
+  instagramConnected: true,
+  instagramMetaAppId: true,
+  instagramMetaAppSecret: true,
+  promptSystemRole: true,
+  promptReviewTone: true,
+  promptForbiddenWords: true,
+  promptMustKeywords: true,
+  updatedAt: true,
+};
+
+const legacySchoolSettingSelect = {
+  ...schoolSettingSelect,
+  googleReviewUrl: false,
+};
+
+type SchoolSettingRow = {
+  id: string;
+  schoolId: string;
+  googleConnected: boolean;
+  googleAccountId: string | null;
+  googleRefreshToken: string | null;
+  selectedGbpLocationId: string | null;
+  googleReviewUrl: string | null;
+  lineNotifyEnabled: boolean;
+  lineChannelAccessToken: string | null;
+  lineDestinationId: string | null;
+  notifyOnNewReview: boolean;
+  notifyOnLowRating: boolean;
+  instagramConnected: boolean;
+  instagramMetaAppId: string | null;
+  instagramMetaAppSecret: string | null;
+  promptSystemRole: string | null;
+  promptReviewTone: string;
+  promptForbiddenWords: string[];
+  promptMustKeywords: string[];
+  updatedAt: Date;
+};
+
+function isMissingColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("does not exist") ||
+    message.includes("Unknown column") ||
+    message.includes("P2022")
+  );
+}
+
+async function findSchoolSetting(schoolId: string): Promise<SchoolSettingRow | null> {
+  try {
+    return await prisma.schoolSetting.findUnique({
+      where: { schoolId },
+      select: schoolSettingSelect,
+    });
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    console.error("SchoolSetting column lookup failed. Retrying without new optional columns.", error);
+    const legacySetting = await prisma.schoolSetting.findUnique({
+      where: { schoolId },
+      select: legacySchoolSettingSelect,
+    });
+
+    return legacySetting ? { ...legacySetting, googleReviewUrl: null } : null;
+  }
+}
+
 function serializeSetting({
   schoolId,
   schoolSetting,
   instagramSetting,
 }: {
   schoolId: string;
-  schoolSetting: {
-    id: string;
-    schoolId: string;
-    googleConnected: boolean;
-    googleAccountId: string | null;
-    googleRefreshToken: string | null;
-    selectedGbpLocationId: string | null;
-    googleReviewUrl: string | null;
-    lineNotifyEnabled: boolean;
-    lineChannelAccessToken: string | null;
-    lineDestinationId: string | null;
-    notifyOnNewReview: boolean;
-    notifyOnLowRating: boolean;
-    instagramConnected: boolean;
-    instagramMetaAppId: string | null;
-    instagramMetaAppSecret: string | null;
-    promptSystemRole: string | null;
-    promptReviewTone: string;
-    promptForbiddenWords: string[];
-    promptMustKeywords: string[];
-    updatedAt: Date;
-  } | null;
+  schoolSetting: SchoolSettingRow | null;
   instagramSetting: {
     metaAppId: string | null;
     metaAppSecret: string | null;
@@ -156,6 +217,10 @@ function toErrorResponse(error: unknown, fallbackMessage: string) {
           ? 404
           : 500;
 
+  if (status === 500) {
+    console.error(fallbackMessage, error);
+  }
+
   return NextResponse.json(
     {
       message:
@@ -175,9 +240,7 @@ export async function GET(request: Request) {
   try {
     const { school, access } = await resolveWritableSchoolId(request);
     const [schoolSetting, instagramSetting] = await Promise.all([
-      prisma.schoolSetting.findUnique({
-        where: { schoolId: school.id },
-      }),
+      findSchoolSetting(school.id),
       prisma.instagramSetting.findUnique({
         where: { schoolId: school.id },
         select: {

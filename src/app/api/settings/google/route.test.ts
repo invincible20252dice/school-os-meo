@@ -122,7 +122,7 @@ describe("GET /api/settings/google", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns null setting when a school has not connected Google yet", async () => {
+  it("returns an empty setting when a school has not connected Google yet", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
 
@@ -132,7 +132,40 @@ describe("GET /api/settings/google", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.setting).toBeNull();
+    expect(body.setting).toMatchObject({
+      schoolId: "school-1",
+      googleConnected: false,
+      googleAccountId: "",
+      selectedGbpLocationId: "",
+      googleReviewUrl: "",
+    });
+  });
+
+  it("keeps loading saved GBP location when the review URL column is not available yet", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique)
+      .mockRejectedValueOnce(new Error("P2022: The column `googleReviewUrl` does not exist"))
+      .mockResolvedValueOnce({
+        id: "setting-1",
+        schoolId: "school-1",
+        googleConnected: true,
+        googleAccountId: "owner@example.com",
+        googleRefreshToken: "refresh-token",
+        selectedGbpLocationId: "locations/100",
+        updatedAt: new Date("2026-07-30T10:00:00.000Z"),
+      } as never);
+
+    const response = await GET(
+      new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting).toMatchObject({
+      googleAccountId: "owner@example.com",
+      selectedGbpLocationId: "locations/100",
+      googleReviewUrl: "",
+    });
   });
 
   it("serializes empty Google fields for a newly created setting", async () => {

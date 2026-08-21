@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
+import { buildEmptySchoolSetting } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import {
   buildScopedSchoolFilter,
@@ -15,7 +16,22 @@ function toSettingResponse(setting: {
   selectedGbpLocationId: string | null;
   googleReviewUrl: string | null;
   updatedAt: Date;
-}) {
+} | null, schoolId: string) {
+  if (!setting) {
+    const emptySetting = buildEmptySchoolSetting(schoolId);
+
+    return {
+      id: emptySetting.id,
+      schoolId: emptySetting.schoolId,
+      googleConnected: emptySetting.googleConnected,
+      googleAccountId: emptySetting.googleAccountId,
+      googleRefreshToken: emptySetting.googleRefreshToken,
+      selectedGbpLocationId: emptySetting.selectedGbpLocationId,
+      googleReviewUrl: emptySetting.googleReviewUrl,
+      updatedAt: emptySetting.updatedAt,
+    };
+  }
+
   return {
     id: setting.id,
     schoolId: setting.schoolId,
@@ -26,6 +42,53 @@ function toSettingResponse(setting: {
     googleReviewUrl: setting.googleReviewUrl || "",
     updatedAt: setting.updatedAt.toISOString().slice(0, 16).replace("T", " "),
   };
+}
+
+const googleSettingSelect = {
+  id: true,
+  schoolId: true,
+  googleConnected: true,
+  googleAccountId: true,
+  googleRefreshToken: true,
+  selectedGbpLocationId: true,
+  googleReviewUrl: true,
+  updatedAt: true,
+};
+
+const legacyGoogleSettingSelect = {
+  ...googleSettingSelect,
+  googleReviewUrl: false,
+};
+
+function isMissingColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("does not exist") ||
+    message.includes("Unknown column") ||
+    message.includes("P2022")
+  );
+}
+
+async function findGoogleSetting(schoolId: string) {
+  try {
+    return await prisma.schoolSetting.findUnique({
+      where: { schoolId },
+      select: googleSettingSelect,
+    });
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    console.error("Google setting column lookup failed. Retrying without new optional columns.", error);
+    const legacySetting = await prisma.schoolSetting.findUnique({
+      where: { schoolId },
+      select: legacyGoogleSettingSelect,
+    });
+
+    return legacySetting ? { ...legacySetting, googleReviewUrl: null } : null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -64,19 +127,7 @@ export async function GET(request: Request) {
           gbpLocationId: true,
         },
       }),
-      prisma.schoolSetting.findUnique({
-        where: { schoolId },
-        select: {
-          id: true,
-          schoolId: true,
-          googleConnected: true,
-          googleAccountId: true,
-          googleRefreshToken: true,
-          selectedGbpLocationId: true,
-          googleReviewUrl: true,
-          updatedAt: true,
-        },
-      }),
+      findGoogleSetting(schoolId),
     ]);
 
     if (!school) {
@@ -88,7 +139,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       school,
-      setting: setting ? toSettingResponse(setting) : null,
+      setting: toSettingResponse(setting, schoolId),
       access: {
         role: accessResult.access.role,
         effectiveSchoolId: schoolId,

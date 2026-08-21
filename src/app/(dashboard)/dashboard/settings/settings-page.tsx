@@ -152,14 +152,20 @@ export default function SettingsPage({
         return;
       }
 
+      const endpoint =
+        activeTab === "google" ? "/api/settings/google" : "/api/settings/school";
       const response = await fetch(
-        `/api/settings/school?schoolId=${encodeURIComponent(schoolId)}`,
+        `${endpoint}?schoolId=${encodeURIComponent(schoolId)}`,
         { headers },
       );
       const data = (await response.json()) as {
         message?: string;
         setting?: NullableSchoolSettingState | null;
-        school?: { id: string; name: string; gbpLocationId?: string | null };
+        school?: {
+          id: string;
+          name: string;
+          gbpLocationId?: string | null;
+        };
       };
 
       if (!response.ok) {
@@ -169,11 +175,13 @@ export default function SettingsPage({
 
       if (data.setting) {
         const nextSetting = normalizeSchoolSetting({
+          ...setting,
           ...data.setting,
           schoolId: data.school?.id || data.setting.schoolId,
           selectedGbpLocationId:
             data.setting.selectedGbpLocationId ||
             data.school?.gbpLocationId ||
+            setting.selectedGbpLocationId ||
             "",
         });
         setSetting(nextSetting);
@@ -466,7 +474,7 @@ export default function SettingsPage({
   useEffect(() => {
     void loadSchoolSetting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [activeTab, searchParams]);
 
   return (
     <main className={styles.page}>
