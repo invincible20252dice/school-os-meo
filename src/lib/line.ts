@@ -94,7 +94,7 @@ function getAppBaseUrl() {
 }
 
 function buildReplyUrl(reviewId: string) {
-  return `${getAppBaseUrl()}/api/gbp/reply?reviewId=${encodeURIComponent(reviewId)}`;
+  return `${getAppBaseUrl()}/dashboard/reviews?reviewId=${encodeURIComponent(reviewId)}`;
 }
 
 function buildTextBox(text: string, size = "sm") {

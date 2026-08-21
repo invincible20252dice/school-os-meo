@@ -105,6 +105,171 @@
   margin-top: 20px;
 }
 
+.livePanel {
+  margin-top: 28px;
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
+}
+
+.liveHeader,
+.reviewCardHeader,
+.reviewActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.liveHeader h2 {
+  margin: 0;
+  color: #17202a;
+  font-size: 22px;
+}
+
+.liveHeader p,
+.muted {
+  margin: 6px 0 0;
+  color: #66737d;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.reviewCards {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.reviewCard {
+  border: 1px solid #dde5e1;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fbfcfb;
+}
+
+.highlightedCard {
+  border-color: #27b58c;
+  box-shadow: 0 0 0 3px rgba(39, 181, 140, 0.12);
+}
+
+.reviewCardHeader strong,
+.reviewActions span {
+  display: block;
+  color: #17202a;
+  font-weight: 800;
+}
+
+.reviewCardHeader span {
+  display: block;
+  margin-top: 4px;
+  color: #66737d;
+  font-size: 13px;
+}
+
+.reviewCardHeader b {
+  color: #f26d5b;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.reviewCardText {
+  margin: 16px 0 0;
+  color: #34414b;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.replyEditor {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.replyEditor span {
+  color: #17202a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.replyEditor textarea {
+  min-height: 120px;
+  resize: vertical;
+  border: 1px solid #cbd8d2;
+  border-radius: 8px;
+  padding: 12px;
+  color: #17202a;
+  font: inherit;
+  line-height: 1.7;
+}
+
+.reviewActions {
+  margin-top: 14px;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 6px;
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 0;
+  background: #147d68;
+  color: #ffffff;
+}
+
+.secondaryButton {
+  border: 1px solid #cbd8d2;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.smallIcon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+.successMessage,
+.errorMessage {
+  margin: 16px 0 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.successMessage {
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.errorMessage {
+  background: #fff0ee;
+  color: #c43b2f;
+}
+
 .panel,
 .trendPanel,
 .linePanel {
@@ -349,8 +514,18 @@
 
   .mainGrid,
   .trendGrid,
-  .linePreview {
+  .linePreview,
+  .liveHeader,
+  .reviewCardHeader,
+  .reviewActions {
     grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .liveHeader,
+  .reviewCardHeader,
+  .reviewActions {
+    flex-direction: column;
   }
 }
 

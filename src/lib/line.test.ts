@@ -58,7 +58,7 @@ describe("line", () => {
     expect(JSON.stringify(message)).toContain("青葉ゼミナール");
     expect(JSON.stringify(message)).toContain("★★★★☆");
     expect(JSON.stringify(message)).toContain(
-      "https://app.example.com/api/gbp/reply?reviewId=review_123",
+      "https://app.example.com/dashboard/reviews?reviewId=review_123",
     );
   });
 
@@ -77,7 +77,7 @@ describe("line", () => {
     const serialized = JSON.stringify(message);
 
     expect(serialized).toContain(
-      "https://school-os-meo.vercel.app/api/gbp/reply?reviewId=review%20with%20spaces",
+      "https://school-os-meo.vercel.app/dashboard/reviews?reviewId=review%20with%20spaces",
     );
     expect(serialized).toContain("Google口コミを開く");
     expect(serialized).toContain("https://google.example.com/review");

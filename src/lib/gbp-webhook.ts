@@ -19,6 +19,13 @@ type SchoolRecord = {
   googlePlaceId?: string | null;
   gbpLocationId?: string | null;
   lineChannelId?: string | null;
+  schoolSetting?: {
+    lineNotifyEnabled?: boolean | null;
+    lineChannelAccessToken?: string | null;
+    lineDestinationId?: string | null;
+    notifyOnNewReview?: boolean | null;
+    notifyOnLowRating?: boolean | null;
+  } | null;
 };
 
 type ReviewRecord = {
@@ -115,11 +122,45 @@ async function findSchoolForReview(
 
   return prisma.school.findFirst({
     where: buildSchoolWhere(review),
+    include: {
+      schoolSetting: true,
+    },
   });
 }
 
-function getLineRecipient(school: SchoolRecord) {
-  return school.lineChannelId || process.env.LINE_DEFAULT_TO_ID || null;
+function normalizeToken(value?: string | null) {
+  const token = value?.trim() || "";
+
+  return token && !token.includes("*") ? token : "";
+}
+
+function shouldNotifyLine(school: SchoolRecord, review: IncomingGbpReview) {
+  const setting = school.schoolSetting;
+
+  if (setting?.lineNotifyEnabled === false) {
+    return false;
+  }
+
+  const notifyOnLowRating = setting?.notifyOnLowRating ?? true;
+  const notifyOnNewReview = setting?.notifyOnNewReview ?? true;
+
+  return notifyOnNewReview || (notifyOnLowRating && review.rating <= 3);
+}
+
+function getLineDelivery(school: SchoolRecord, review: IncomingGbpReview) {
+  if (!shouldNotifyLine(school, review)) {
+    return null;
+  }
+
+  const channelAccessToken =
+    normalizeToken(school.schoolSetting?.lineChannelAccessToken) ||
+    normalizeToken(process.env.LINE_CHANNEL_ACCESS_TOKEN);
+  const to =
+    normalizeToken(school.schoolSetting?.lineDestinationId) ||
+    normalizeToken(school.lineChannelId) ||
+    normalizeToken(process.env.LINE_DEFAULT_TO_ID);
+
+  return channelAccessToken && to ? { channelAccessToken, to } : null;
 }
 
 export async function processGbpReviews({
@@ -179,11 +220,12 @@ export async function processGbpReviews({
 
     summary.saved += 1;
 
-    const lineTo = getLineRecipient(school);
-    if (lineTo) {
+    const lineDelivery = getLineDelivery(school, review);
+    if (lineDelivery) {
       await sendLineReviewNotification(
         {
-          to: lineTo,
+          to: lineDelivery.to,
+          channelAccessToken: lineDelivery.channelAccessToken,
           reviewId: savedReview.id,
           schoolName: school.name,
           rating: review.rating,

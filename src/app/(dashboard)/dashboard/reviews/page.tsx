@@ -4,6 +4,7 @@ import {
   buildReviewTrendPath,
 } from "@/lib/mock/meoExtendedData";
 import TestReviewNotificationButton from "@/components/dashboard/TestReviewNotificationButton";
+import ReviewsClient from "./reviews-client";
 import styles from "./page.module.css";
 
 function MessageIcon() {
@@ -61,6 +62,8 @@ export default function ReviewsPage() {
         </p>
         <TestReviewNotificationButton />
       </header>
+
+      <ReviewsClient />
 
       <section className={styles.flowGrid}>
         {demo.timeline.map((item, index) => (

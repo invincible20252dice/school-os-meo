@@ -116,6 +116,13 @@ describe("gbp-webhook", () => {
           googlePlaceId: "place_1",
           gbpLocationId: "location_1",
           lineChannelId: "school-line-group",
+          schoolSetting: {
+            lineNotifyEnabled: true,
+            lineChannelAccessToken: "school-line-token",
+            lineDestinationId: "school-line-user",
+            notifyOnNewReview: true,
+            notifyOnLowRating: true,
+          },
         })),
       },
       review: {
@@ -156,6 +163,15 @@ describe("gbp-webhook", () => {
       }),
     );
     expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/push",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer school-line-token",
+        }),
+        body: expect.stringContaining("school-line-user"),
+      }),
+    );
   });
 
   it("updates existing GBP reviews without creating duplicates", async () => {
@@ -167,6 +183,13 @@ describe("gbp-webhook", () => {
           id: "school_1",
           name: "青葉ゼミナール",
           lineChannelId: null,
+          schoolSetting: {
+            lineNotifyEnabled: false,
+            lineChannelAccessToken: "line-token",
+            lineDestinationId: "line-group",
+            notifyOnNewReview: true,
+            notifyOnLowRating: true,
+          },
         })),
       },
       review: {
@@ -196,6 +219,49 @@ describe("gbp-webhook", () => {
         where: { id: "review_db_1" },
       }),
     );
+  });
+
+  it("does not send LINE notifications when school settings disable them", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const prisma = {
+      school: {
+        findFirst: vi.fn(async () => ({
+          id: "school_1",
+          name: "青葉ゼミナール",
+          lineChannelId: "school-line-group",
+          schoolSetting: {
+            lineNotifyEnabled: false,
+            lineChannelAccessToken: "line-token",
+            lineDestinationId: "line-group",
+            notifyOnNewReview: true,
+            notifyOnLowRating: true,
+          },
+        })),
+      },
+      review: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: "review_db_1", ...data })),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn();
+
+    const result = await processGbpReviews({
+      reviews: [
+        {
+          googleReviewId: "google_review_1",
+          gbpLocationId: "location_1",
+          rating: 4,
+          reviewText: "助かりました。",
+        },
+      ],
+      prisma,
+      fetchImpl: fetchMock,
+    });
+
+    expect(result).toEqual({ received: 1, saved: 1, notified: 0, skipped: 0 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("skips reviews when a school cannot be matched", async () => {
