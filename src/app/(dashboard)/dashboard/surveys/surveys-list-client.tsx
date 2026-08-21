@@ -107,13 +107,13 @@ export default function SurveysListClient() {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [publicOrigin, setPublicOrigin] = useState("");
 
-  function getSurveyPublicUrl(schoolId: string) {
-    return buildSurveyPublicUrl(publicOrigin, schoolId);
+  function getSurveyPublicUrl(schoolId: string, surveyId: string) {
+    return buildSurveyPublicUrl(publicOrigin, schoolId, surveyId);
   }
 
-  async function copySurveyUrl(schoolId: string) {
+  async function copySurveyUrl(schoolId: string, surveyId: string) {
     try {
-      const url = getSurveyPublicUrl(schoolId);
+      const url = getSurveyPublicUrl(schoolId, surveyId);
       await navigator.clipboard.writeText(url);
       setCopyMessage("URLをコピーしました");
       window.setTimeout(() => setCopyMessage(null), 2400);
@@ -222,14 +222,16 @@ export default function SurveysListClient() {
                   <button
                     type="button"
                     disabled={!publicOrigin}
-                    onClick={() => void copySurveyUrl(survey.schoolId)}
+                    onClick={() => void copySurveyUrl(survey.schoolId, survey.id)}
                   >
                     <CopyIcon />
                     URLをコピー
                   </button>
                   <a
                     href={
-                      publicOrigin ? getSurveyPublicUrl(survey.schoolId) : "#"
+                      publicOrigin
+                        ? getSurveyPublicUrl(survey.schoolId, survey.id)
+                        : "#"
                     }
                     target="_blank"
                     rel="noreferrer"

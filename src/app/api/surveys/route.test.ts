@@ -129,6 +129,25 @@ describe("/api/surveys", () => {
     expect(body.access.effectiveSchoolId).toBe("all");
   });
 
+  it("filters by survey id for edit screen loading", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/surveys?id=survey-1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          schoolId: "school-own",
+          id: "survey-1",
+        },
+      }),
+    );
+  });
+
   it("returns Japanese errors when survey listing fails", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")

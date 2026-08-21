@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
   activateSurveySetting,
-  buildMockSurveySettingList,
-  buildMockSurveyEditorState,
   buildSurveyPreviewSteps,
   deleteSurveySetting,
   saveSurveySetting,
@@ -24,6 +23,39 @@ const itemTypes: Array<{ label: string; value: SurveyItemType }> = [
   { label: "自由記述", value: "TEXT" },
 ];
 const weekdays: SurveyWeekday[] = ["月", "火", "水", "木", "金", "土", "日"];
+
+type SurveyApiItem = {
+  id: string;
+  type: string;
+  question: string;
+  maxSelect?: number | null;
+  options: string[];
+  order: number;
+};
+
+type SurveyApiListItem = {
+  id: string;
+  schoolId: string;
+  title: string;
+  requiredKeywords: string;
+  minCharCount: number;
+  maxCharCount: number;
+  isValid: boolean;
+  hasIncentive: boolean;
+  benefitType: string;
+  benefitShowTiming: string;
+  items: SurveyApiItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type SurveysApiResponse = {
+  surveys?: SurveyApiListItem[];
+  access?: {
+    effectiveSchoolId?: string;
+  };
+  message?: string;
+};
 
 function PhoneIcon() {
   return (
@@ -64,17 +96,99 @@ function createItem(order: number): SurveyEditorItem {
   };
 }
 
-function buildNewSurveyState(settings: SurveySettingListItem[]): SurveyEditorState {
-  const base = buildMockSurveyEditorState();
-
+function buildNewSurveyState(schoolId: string): SurveyEditorState {
   return {
-    ...base,
     id: "new",
+    schoolId,
     title: "新しいアンケート",
+    requiredKeywords: "",
+    minCharCount: 100,
+    maxCharCount: 300,
     isValid: false,
     hasIncentive: false,
     benefitType: "",
     benefitShowTiming: "",
+    activeWeekdays: ["月", "火", "水", "木", "金"],
+    items: [
+      {
+        id: "item-1",
+        type: "MULTI_SELECT",
+        question: "良かったと感じた点を選んでください",
+        maxSelect: 3,
+        options: ["先生の説明", "質問しやすさ", "教室の雰囲気"],
+        order: 1,
+      },
+      {
+        id: "item-2",
+        type: "TEXT",
+        question: "印象に残っている変化を教えてください",
+        options: [],
+        order: 2,
+      },
+    ],
+  };
+}
+
+function normalizeItemType(type: string): SurveyItemType {
+  if (type === "SINGLE_CHOICE") {
+    return "SINGLE_SELECT";
+  }
+
+  if (type === "MULTIPLE_CHOICE") {
+    return "MULTI_SELECT";
+  }
+
+  if (type === "FREE_TEXT") {
+    return "TEXT";
+  }
+
+  return ["SINGLE_SELECT", "MULTI_SELECT", "TEXT"].includes(type)
+    ? (type as SurveyItemType)
+    : "TEXT";
+}
+
+function formatApiDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "日時なし";
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(date)
+    .replaceAll("/", "-");
+}
+
+function toEditorState(row: SurveyApiListItem): SurveySettingListItem {
+  return {
+    id: row.id,
+    schoolId: row.schoolId,
+    title: row.title,
+    requiredKeywords: row.requiredKeywords,
+    minCharCount: row.minCharCount,
+    maxCharCount: row.maxCharCount,
+    isValid: row.isValid,
+    hasIncentive: row.hasIncentive,
+    benefitType: row.benefitType,
+    benefitShowTiming: row.benefitShowTiming,
+    activeWeekdays: ["月", "火", "水", "木", "金"],
+    items: row.items.map((item, index) => ({
+      id: item.id,
+      type: normalizeItemType(item.type),
+      question: item.question,
+      maxSelect: item.maxSelect ?? undefined,
+      options: item.options,
+      order: item.order || index + 1,
+    })),
+    createdAt: formatApiDate(row.createdAt),
+    updatedAt: formatApiDate(row.updatedAt),
   };
 }
 
@@ -93,24 +207,17 @@ function nowLabel() {
 }
 
 export default function SurveyEditor({ surveyId }: { surveyId: string }) {
-  const [settings, setSettings] = useState<SurveySettingListItem[]>(() =>
-    buildMockSurveySettingList(),
+  const searchParams = useSearchParams();
+  const [settings, setSettings] = useState<SurveySettingListItem[]>([]);
+  const [survey, setSurvey] = useState<SurveyEditorState>(() =>
+    buildNewSurveyState(searchParams.get("schoolId") || ""),
   );
-  const [survey, setSurvey] = useState<SurveyEditorState>(() => {
-    const list = buildMockSurveySettingList();
-    const existing = list.find((setting) => setting.id === surveyId);
-
-    if (surveyId === "new") {
-      return buildNewSurveyState(list);
-    }
-
-    return existing ?? { ...buildMockSurveyEditorState(), id: surveyId };
-  });
   const [editingExistingId, setEditingExistingId] = useState<string | null>(() =>
     surveyId === "new" ? null : surveyId,
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const errors = useMemo(() => validateSurveyEditorState(survey), [survey]);
   const previewSteps = useMemo(() => buildSurveyPreviewSteps(survey), [survey]);
 
@@ -166,6 +273,66 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  async function loadSurveys() {
+    setIsLoading(true);
+    setNotice(null);
+
+    try {
+      const params = new URLSearchParams();
+      const requestedSchoolId = searchParams.get("schoolId");
+
+      if (requestedSchoolId) {
+        params.set("schoolId", requestedSchoolId);
+      }
+
+      const response = await fetch(`/api/surveys?${params.toString()}`, {
+        headers: await getAuthHeaders(),
+        cache: "no-store",
+      });
+      const data = (await response.json()) as SurveysApiResponse;
+
+      if (!response.ok) {
+        throw new Error(data.message || "アンケート設定を取得できませんでした。");
+      }
+
+      const loadedSettings = (data.surveys || []).map(toEditorState);
+      const activeSchoolId =
+        requestedSchoolId ||
+        data.access?.effectiveSchoolId ||
+        loadedSettings[0]?.schoolId ||
+        "";
+      setSettings(loadedSettings);
+
+      if (surveyId === "new") {
+        setSurvey(buildNewSurveyState(activeSchoolId));
+        setEditingExistingId(null);
+        return;
+      }
+
+      const target = loadedSettings.find((setting) => setting.id === surveyId);
+
+      if (!target) {
+        setSurvey(buildNewSurveyState(activeSchoolId));
+        setEditingExistingId(null);
+        setNotice("対象のアンケート設定が見つかりませんでした。");
+        return;
+      }
+
+      setSurvey(target);
+      setEditingExistingId(target.id);
+      setNotice(`${target.title}をDBから読み込みました。`);
+    } catch (error) {
+      setSettings([]);
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "アンケート設定を取得できませんでした。",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function saveSurvey() {
     if (errors.length > 0) {
       setNotice("入力内容を確認してください。");
@@ -211,7 +378,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
   }
 
   function discardEdit() {
-    setSurvey(buildNewSurveyState(settings));
+    setSurvey(buildNewSurveyState(survey.schoolId));
     setEditingExistingId(null);
     setNotice("新規作成モードに切り替えました。");
   }
@@ -249,7 +416,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       }
 
       if (survey.id === settingId) {
-        setSurvey(buildNewSurveyState(result.settings));
+        setSurvey(buildNewSurveyState(survey.schoolId));
         setEditingExistingId(null);
       }
 
@@ -257,6 +424,11 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       return result.settings;
     });
   }
+
+  useEffect(() => {
+    void loadSurveys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surveyId, searchParams]);
 
   return (
     <main className={styles.page}>
@@ -291,6 +463,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
               </button>
             </div>
             {notice ? <p className={styles.toast}>{notice}</p> : null}
+            {isLoading ? <p className={styles.toast}>DBから読み込み中です。</p> : null}
           </section>
 
           <section className={styles.panel}>

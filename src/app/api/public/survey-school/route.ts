@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const schoolId = normalizeString(url.searchParams.get("schoolId"));
+    const surveyId = normalizeString(url.searchParams.get("surveyId"));
 
     if (!schoolId) {
       return NextResponse.json(
@@ -46,11 +47,60 @@ export async function GET(request: Request) {
       );
     }
 
+    const survey = surveyId
+      ? await prisma.survey.findFirst({
+          where: {
+            id: surveyId,
+            schoolId: school.id,
+            isValid: true,
+          },
+          select: {
+            id: true,
+            title: true,
+            requiredKeywords: true,
+            minCharCount: true,
+            maxCharCount: true,
+            benefitType: true,
+            benefitShowTiming: true,
+            items: {
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                type: true,
+                question: true,
+                maxSelect: true,
+                options: true,
+                order: true,
+              },
+            },
+          },
+        })
+      : null;
+
     return NextResponse.json({
       school: {
         id: school.id,
         name: school.name,
       },
+      survey: survey
+        ? {
+            id: survey.id,
+            title: survey.title,
+            requiredKeywords: survey.requiredKeywords || "",
+            minCharCount: survey.minCharCount,
+            maxCharCount: survey.maxCharCount,
+            benefitType: survey.benefitType || "",
+            benefitShowTiming: survey.benefitShowTiming || "",
+            items: survey.items.map((item) => ({
+              id: item.id,
+              type: item.type,
+              question: item.question,
+              maxSelect: item.maxSelect,
+              options: item.options,
+              order: item.order,
+            })),
+          }
+        : null,
       googleReviewUrl: resolveGoogleReviewUrl({
         settingReviewUrl: school.schoolSetting?.googleReviewUrl,
         schoolGoogleMapsUrl: school.googleMapsUrl,

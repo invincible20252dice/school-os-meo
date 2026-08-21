@@ -69,6 +69,8 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
+    const requestedSurveyId =
+      url.searchParams.get("id") || url.searchParams.get("surveyId") || undefined;
     const accessResult = await resolveRequestAccess(request, url);
 
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
@@ -83,9 +85,12 @@ export async function GET(request: Request) {
       requestedSchoolId,
     );
     const surveys = (await prisma.survey.findMany({
-      where: scopedSchool.effectiveSchoolId
-        ? { schoolId: scopedSchool.effectiveSchoolId }
-        : {},
+      where: {
+        ...(scopedSchool.effectiveSchoolId
+          ? { schoolId: scopedSchool.effectiveSchoolId }
+          : {}),
+        ...(requestedSurveyId ? { id: requestedSurveyId } : {}),
+      },
       include: {
         school: {
           select: {
