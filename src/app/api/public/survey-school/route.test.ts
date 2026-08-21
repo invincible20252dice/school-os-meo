@@ -207,7 +207,7 @@ describe("GET /api/public/survey-school", () => {
 
   it("returns the iSchool review URL when the school is missing", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.survey.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(null);
 
     const response = await GET(
@@ -232,9 +232,16 @@ describe("GET /api/public/survey-school", () => {
     expect(body.school.name).toBe("大学受験専門塾 iスクール予備校");
   });
 
-  it("returns school information with empty questions when no active survey exists", async () => {
+  it("falls back to the latest school survey when the first school lookup is empty", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.survey.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        buildSurvey({
+          id: "latest-survey",
+          title: "最新アンケート",
+        }),
+      );
 
     const response = await GET(
       new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
@@ -243,30 +250,32 @@ describe("GET /api/public/survey-school", () => {
 
     expect(response.status).toBe(200);
     expect(body.schoolName).toBe("大学受験専門塾 iスクール予備校");
-    expect(body.survey).toBeNull();
-    expect(body.questions).toEqual([]);
+    expect(body.survey.id).toBe("latest-survey");
+    expect(body.questions).toHaveLength(1);
   });
 
   it("falls back to school Google Maps URL and then Place ID", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.survey.findFirst).mockResolvedValue(null);
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
-      id: "school-1",
-      name: "大学受験専門塾 iスクール予備校",
-      googlePlaceId: "place-school",
-      googleMapsUrl:
-        "https://search.google.com/local/writereview?placeid=school-url",
-      schoolSetting: {
-        googleReviewUrl: null,
-      },
-    });
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
-      id: "school-1",
-      name: "大学受験専門塾 iスクール予備校",
-      googlePlaceId: "place-school",
-      googleMapsUrl: null,
-      schoolSetting: null,
-    });
+    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
+      buildSurvey({
+        school: buildSchool({
+          googleMapsUrl:
+            "https://search.google.com/local/writereview?placeid=school-url",
+          schoolSetting: {
+            googleReviewUrl: null,
+          },
+        }),
+      }),
+    );
+    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
+      buildSurvey({
+        school: buildSchool({
+          googlePlaceId: "place-school",
+          googleMapsUrl: null,
+          schoolSetting: null,
+        }),
+      }),
+    );
 
     const schoolUrlResponse = await GET(
       new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
@@ -281,6 +290,23 @@ describe("GET /api/public/survey-school", () => {
     expect((await placeIdResponse.json()).googleReviewUrl).toBe(
       "https://search.google.com/local/writereview?placeid=place-school",
     );
+  });
+
+  it("returns 404 when neither survey id nor school fallback can find a survey", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(null);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1&surveyId=missing-survey",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe("Survey not found");
+    expect(body.questions).toEqual([]);
   });
 
   it("queries surveys by the requested survey id without requiring school id match", async () => {
@@ -353,7 +379,7 @@ describe("GET /api/public/survey-school", () => {
     expect(body.questions).toHaveLength(1);
   });
 
-  it("loads the latest active survey for the requested school when survey id is absent", async () => {
+  it("loads the latest school survey without status filtering when survey id is absent", async () => {
     const { prisma } = await import("@/lib/prisma");
 
     await GET(
@@ -364,7 +390,6 @@ describe("GET /api/public/survey-school", () => {
       expect.objectContaining({
         where: {
           schoolId: "school-1",
-          isValid: true,
         },
         include: expect.objectContaining({
           items: expect.any(Object),

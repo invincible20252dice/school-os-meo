@@ -94,11 +94,7 @@ function serializeNormalizedQuestion(item: PublicSurveyQuestion) {
   };
 }
 
-function serializeSurvey(survey: PublicSurveyRow | null) {
-  if (!survey) {
-    return null;
-  }
-
+function serializeSurvey(survey: PublicSurveyRow) {
   const questions = extractPublicSurveyQuestions({ survey }).map(
     serializeNormalizedQuestion,
   );
@@ -148,7 +144,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const survey = surveyId
+    let survey = surveyId
       ? ((await prisma.survey.findUnique({
           where: {
             id: surveyId,
@@ -158,11 +154,21 @@ export async function GET(request: Request) {
       : ((await prisma.survey.findFirst({
           where: {
             schoolId,
-            isValid: true,
           },
           include: publicSurveyInclude,
           orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
         })) as PublicSurveyRow | null);
+
+    if (!survey && schoolId) {
+      survey = (await prisma.survey.findFirst({
+        where: {
+          schoolId,
+        },
+        include: publicSurveyInclude,
+        orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+      })) as PublicSurveyRow | null;
+    }
+
     const school = survey?.school || (schoolId
       ? await prisma.school.findUnique({
           where: { id: schoolId },
@@ -180,16 +186,17 @@ export async function GET(request: Request) {
         })
       : null);
 
-    if (!school && !survey) {
+    if (!survey) {
       return NextResponse.json(
         {
-          message: "対象校舎が見つかりませんでした。",
+          message: "アンケートが見つかりませんでした。",
+          error: "Survey not found",
           success: false,
           school: {
             id: schoolId,
-            name: DEFAULT_PUBLIC_SCHOOL_NAME,
+            name: school?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
           },
-          schoolName: DEFAULT_PUBLIC_SCHOOL_NAME,
+          schoolName: school?.name || DEFAULT_PUBLIC_SCHOOL_NAME,
           survey: null,
           questions: [],
           googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
@@ -199,7 +206,7 @@ export async function GET(request: Request) {
     }
 
     const serializedSurvey = serializeSurvey(survey);
-    const questions = serializedSurvey?.questions || [];
+    const questions = serializedSurvey.questions;
     const responseSchool = school || survey?.school;
 
     return NextResponse.json({
