@@ -41,10 +41,11 @@
   line-height: 1.28;
 }
 
-.schoolId {
+.schoolName {
   margin: 12px 0 0;
   color: #5e6b75;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.7;
 }
 

@@ -67,7 +67,7 @@ function ExternalIcon() {
 }
 
 export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) {
-  const [schoolName, setSchoolName] = useState("サンプル学習塾");
+  const [schoolName, setSchoolName] = useState("");
   const [surveyTitle, setSurveyTitle] = useState("通塾体験を口コミ文に整えます");
   const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>([]);
   const [googleReviewUrl, setGoogleReviewUrl] = useState(
@@ -84,10 +84,11 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [responseNotice, setResponseNotice] = useState("");
-  const [publicSettingNotice, setPublicSettingNotice] = useState("");
+  const [isSettingLoading, setIsSettingLoading] = useState(true);
 
   useEffect(() => {
     async function loadPublicSurveySetting() {
+      setIsSettingLoading(true);
       try {
         const response = await fetch(
           `/api/public/survey-school?schoolId=${encodeURIComponent(
@@ -114,16 +115,13 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
           setSurveyItems(data.survey.items);
         }
 
-        if (!response.ok && data.message) {
-          setPublicSettingNotice(
-            "校舎設定を確認できなかったため、iスクール予備校の口コミ投稿リンクを使用します。",
-          );
+        if (!response.ok) {
+          setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
         }
       } catch {
         setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
-        setPublicSettingNotice(
-          "校舎設定を確認できなかったため、iスクール予備校の口コミ投稿リンクを使用します。",
-        );
+      } finally {
+        setIsSettingLoading(false);
       }
     }
 
@@ -213,22 +211,13 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
       <section className={styles.formPanel}>
         <div className={styles.kicker}>Survey</div>
         <h1 className={styles.title}>{surveyTitle}</h1>
-        <p className={styles.schoolId}>校舎 ID: {schoolId}</p>
+        <p className={styles.schoolName}>
+          {isSettingLoading
+            ? "校舎情報を読み込んでいます"
+            : schoolName || "校舎情報を確認しています"}
+        </p>
 
         <div className={styles.formStack}>
-          <label className={styles.field}>
-            <span className={styles.label}>校舎名</span>
-            <input
-              value={schoolName}
-              onChange={(event) => setSchoolName(event.target.value)}
-              className={styles.input}
-            />
-          </label>
-
-          {publicSettingNotice ? (
-            <p className={styles.success}>{publicSettingNotice}</p>
-          ) : null}
-
           {surveyItems.length ? (
             surveyItems.map((item) => (
               <div className={styles.field} key={item.id}>
