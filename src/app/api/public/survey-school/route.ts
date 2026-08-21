@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { DEFAULT_GOOGLE_REVIEW_URL, resolveGoogleReviewUrl } from "@/lib/google-review-url";
+import {
+  DEFAULT_GOOGLE_REVIEW_URL,
+  DEFAULT_PUBLIC_SCHOOL_NAME,
+  resolveGoogleReviewUrl,
+} from "@/lib/google-review-url";
 import { prisma } from "@/lib/prisma";
 
 function normalizeString(value: string | null | undefined) {
@@ -7,15 +11,21 @@ function normalizeString(value: string | null | undefined) {
 }
 
 export async function GET(request: Request) {
+  let schoolId = "";
+
   try {
     const url = new URL(request.url);
-    const schoolId = normalizeString(url.searchParams.get("schoolId"));
+    schoolId = normalizeString(url.searchParams.get("schoolId"));
     const surveyId = normalizeString(url.searchParams.get("surveyId"));
 
     if (!schoolId) {
       return NextResponse.json(
         {
           message: "校舎IDを指定してください。",
+          school: {
+            id: "",
+            name: DEFAULT_PUBLIC_SCHOOL_NAME,
+          },
           googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
         },
         { status: 400 },
@@ -41,6 +51,10 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           message: "対象校舎が見つかりませんでした。",
+          school: {
+            id: schoolId,
+            name: DEFAULT_PUBLIC_SCHOOL_NAME,
+          },
           googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
         },
         { status: 404 },
@@ -112,6 +126,10 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         message: "アンケート公開設定を取得できませんでした。",
+        school: {
+          id: schoolId,
+          name: DEFAULT_PUBLIC_SCHOOL_NAME,
+        },
         googleReviewUrl: DEFAULT_GOOGLE_REVIEW_URL,
       },
       { status: 500 },

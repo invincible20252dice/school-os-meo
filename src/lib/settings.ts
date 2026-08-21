@@ -63,8 +63,7 @@ export function buildMockSchoolSetting(): SchoolSettingState {
     googleAccountId: "owner@example.com",
     googleRefreshToken: "••••••••••••••••",
     selectedGbpLocationId: "locations/aoba-yokohama-main",
-    googleReviewUrl:
-      "https://search.google.com/local/writereview?placeid=ChIJyXGfWkGvQTUR0pD1oA7w0_0",
+    googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
     lineNotifyEnabled: true,
     lineChannelAccessToken: "LINE_CHANNEL_TOKEN_********",
     lineDestinationId: "Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",

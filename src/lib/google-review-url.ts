@@ -1,7 +1,8 @@
 import { buildGoogleReviewUrl } from "./review-generator";
 
 export const DEFAULT_GOOGLE_REVIEW_URL =
-  "https://search.google.com/local/writereview?placeid=ChIJyXGfWkGvQTUR0pD1oA7w0_0";
+  "https://g.page/r/CcECT8Glzr4bEBM/review";
+export const DEFAULT_PUBLIC_SCHOOL_NAME = "大学受験専門塾 iスクール予備校";
 
 export function normalizeGoogleReviewUrl(value: string | null | undefined) {
   const trimmed = value?.trim() || "";

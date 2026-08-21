@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_GOOGLE_REVIEW_URL } from "@/lib/google-review-url";
+import {
+  DEFAULT_GOOGLE_REVIEW_URL,
+  DEFAULT_PUBLIC_SCHOOL_NAME,
+} from "@/lib/google-review-url";
 import { GET } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
@@ -73,6 +76,7 @@ describe("GET /api/public/survey-school", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
+    expect(body.school.name).toBe(DEFAULT_PUBLIC_SCHOOL_NAME);
     expect(body.googleReviewUrl).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });
 
@@ -86,7 +90,20 @@ describe("GET /api/public/survey-school", () => {
     const body = await response.json();
 
     expect(response.status).toBe(404);
+    expect(body.school.name).toBe(DEFAULT_PUBLIC_SCHOOL_NAME);
     expect(body.googleReviewUrl).toBe(DEFAULT_GOOGLE_REVIEW_URL);
+  });
+
+  it("does not require an authorization header for public survey access", async () => {
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.school.name).toBe("大学受験専門塾 iスクール予備校");
   });
 
   it("falls back to school Google Maps URL and then Place ID", async () => {

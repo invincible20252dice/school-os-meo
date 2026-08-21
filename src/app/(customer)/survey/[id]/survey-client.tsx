@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_GOOGLE_REVIEW_URL } from "@/lib/google-review-url";
+import {
+  DEFAULT_GOOGLE_REVIEW_URL,
+  DEFAULT_PUBLIC_SCHOOL_NAME,
+} from "@/lib/google-review-url";
 import styles from "./survey.module.css";
 
 const reasonOptions = [
@@ -67,7 +70,7 @@ function ExternalIcon() {
 }
 
 export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) {
-  const [schoolName, setSchoolName] = useState("");
+  const [schoolName, setSchoolName] = useState(DEFAULT_PUBLIC_SCHOOL_NAME);
   const [surveyTitle, setSurveyTitle] = useState("通塾体験を口コミ文に整えます");
   const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>([]);
   const [googleReviewUrl, setGoogleReviewUrl] = useState(
@@ -87,13 +90,18 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
   const [isSettingLoading, setIsSettingLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
     async function loadPublicSurveySetting() {
       setIsSettingLoading(true);
+
       try {
         const response = await fetch(
           `/api/public/survey-school?schoolId=${encodeURIComponent(
             schoolId,
           )}${surveyId ? `&surveyId=${encodeURIComponent(surveyId)}` : ""}`,
+          { signal: controller.signal },
         );
         const data = (await response.json()) as {
           school?: { name?: string };
@@ -116,16 +124,24 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         }
 
         if (!response.ok) {
+          setSchoolName(data.school?.name || DEFAULT_PUBLIC_SCHOOL_NAME);
           setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
         }
       } catch {
+        setSchoolName(DEFAULT_PUBLIC_SCHOOL_NAME);
         setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
       } finally {
+        window.clearTimeout(timeoutId);
         setIsSettingLoading(false);
       }
     }
 
     void loadPublicSurveySetting();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [schoolId, surveyId]);
 
   function toggleReason(reason: string) {
@@ -214,7 +230,7 @@ export default function SurveyClient({ schoolId, surveyId }: SurveyClientProps) 
         <p className={styles.schoolName}>
           {isSettingLoading
             ? "校舎情報を読み込んでいます"
-            : schoolName || "校舎情報を確認しています"}
+            : schoolName || DEFAULT_PUBLIC_SCHOOL_NAME}
         </p>
 
         <div className={styles.formStack}>
