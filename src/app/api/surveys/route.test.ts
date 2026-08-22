@@ -135,6 +135,101 @@ describe("/api/surveys", () => {
     expect(body.access.effectiveSchoolId).toBe("all");
   });
 
+  it("keeps all-school scope when admin users request schoolId=all", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "admin",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "本部",
+        email: "admin@example.com",
+        status: "active",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/surveys?schoolId=all"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: {} }),
+    );
+    expect(body.access).toMatchObject({
+      role: "admin",
+      effectiveSchoolId: "all",
+      requestedSchoolId: "all",
+    });
+  });
+
+  it("loads the survey list when the production DB is missing the optional placeholder column", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockReset();
+    vi.mocked(prisma.survey.findMany)
+      .mockRejectedValueOnce({
+        code: "P2022",
+        message: "The column SurveyItem.placeholder does not exist",
+      } as never)
+      .mockResolvedValueOnce([
+        {
+          id: "survey-1",
+          schoolId: "school-own",
+          title: "予備校下通り校",
+          requiredKeywords: "下通り, 大学受験",
+          minCharCount: 100,
+          maxCharCount: 300,
+          isValid: true,
+          benefitType: null,
+          benefitShowTiming: null,
+          createdAt: new Date("2026-07-20T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-21T00:00:00.000Z"),
+          school: { id: "school-own", name: "iスクール予備校" },
+          items: [
+            {
+              id: "item-1",
+              type: "TEXT",
+              question: "高校はどこですか？",
+              maxSelect: null,
+              options: [],
+              order: 1,
+            },
+          ],
+        },
+      ] as never);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.survey.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        include: expect.objectContaining({
+          items: expect.objectContaining({
+            select: expect.not.objectContaining({ placeholder: true }),
+          }),
+        }),
+      }),
+    );
+    expect(body.surveys[0]).toMatchObject({
+      title: "予備校下通り校",
+      schoolName: "iスクール予備校",
+      items: [expect.objectContaining({ placeholder: null })],
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
   it("filters by survey id for edit screen loading", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);

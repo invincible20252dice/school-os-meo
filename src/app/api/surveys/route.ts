@@ -32,7 +32,7 @@ type SurveyListRow = {
     id: string;
     type: string;
     question: string;
-    placeholder: string | null;
+    placeholder?: string | null;
     maxSelect: number | null;
     options: string[];
     order: number;
@@ -57,7 +57,7 @@ function serializeSurvey(row: SurveyListRow) {
       id: item.id,
       type: item.type,
       question: item.question,
-      placeholder: item.placeholder,
+      placeholder: item.placeholder ?? null,
       maxSelect: item.maxSelect,
       options: item.options,
       order: item.order,
@@ -65,6 +65,68 @@ function serializeSurvey(row: SurveyListRow) {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function isMissingColumnError(error: unknown, columnName: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2022" &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.includes(columnName)
+  );
+}
+
+function buildSurveyListWhere({
+  requestedSurveyId,
+  shouldApplySchoolFilter,
+  effectiveSchoolId,
+}: {
+  requestedSurveyId?: string;
+  shouldApplySchoolFilter: boolean;
+  effectiveSchoolId?: string;
+}) {
+  return {
+    ...(shouldApplySchoolFilter && effectiveSchoolId
+      ? { schoolId: effectiveSchoolId }
+      : {}),
+    ...(requestedSurveyId ? { id: requestedSurveyId } : {}),
+  };
+}
+
+async function findSurveyListRows({
+  where,
+  includePlaceholder,
+}: {
+  where: Record<string, unknown>;
+  includePlaceholder: boolean;
+}) {
+  return (await prisma.survey.findMany({
+    where,
+    include: {
+      school: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      items: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          type: true,
+          question: true,
+          ...(includePlaceholder ? { placeholder: true } : {}),
+          maxSelect: true,
+          options: true,
+          order: true,
+        },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  })) as SurveyListRow[];
 }
 
 export async function GET(request: Request) {
@@ -88,26 +150,26 @@ export async function GET(request: Request) {
     );
     const shouldApplySchoolFilter =
       !requestedSurveyId || !scopedSchool.canSwitchSchool;
-    const surveys = (await prisma.survey.findMany({
-      where: {
-        ...(shouldApplySchoolFilter && scopedSchool.effectiveSchoolId
-          ? { schoolId: scopedSchool.effectiveSchoolId }
-          : {}),
-        ...(requestedSurveyId ? { id: requestedSurveyId } : {}),
-      },
-      include: {
-        school: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        items: {
-          orderBy: { order: "asc" },
-        },
-      },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    })) as SurveyListRow[];
+    const where = buildSurveyListWhere({
+      requestedSurveyId,
+      shouldApplySchoolFilter,
+      effectiveSchoolId: scopedSchool.effectiveSchoolId,
+    });
+    let surveys: SurveyListRow[];
+
+    try {
+      surveys = await findSurveyListRows({ where, includePlaceholder: true });
+    } catch (error) {
+      if (!isMissingColumnError(error, "SurveyItem.placeholder")) {
+        throw error;
+      }
+
+      console.error(
+        "SurveyItem.placeholder is missing in the database. Run `npx prisma db push` to sync the schema.",
+        error,
+      );
+      surveys = await findSurveyListRows({ where, includePlaceholder: false });
+    }
 
     return NextResponse.json({
       surveys: surveys.map(serializeSurvey),
@@ -119,7 +181,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Failed to load survey settings list.", error);
     return NextResponse.json(
       { message: "アンケート設定一覧を取得できませんでした。" },
       { status: 500 },

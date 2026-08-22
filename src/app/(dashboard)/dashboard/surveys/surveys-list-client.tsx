@@ -153,11 +153,20 @@ export default function SurveysListClient() {
     setMessage(null);
 
     try {
-      const response = await fetch("/api/surveys", {
+      const params = new URLSearchParams();
+
+      if (selectedSchoolId) {
+        params.set("schoolId", selectedSchoolId);
+      }
+
+      const response = await fetch(
+        `/api/surveys${params.toString() ? `?${params.toString()}` : ""}`,
+        {
         method: "GET",
         headers: await getAuthHeaders(),
         cache: "no-store",
-      });
+        },
+      );
       const data = (await response.json()) as SurveysResponse;
 
       if (!response.ok) {
@@ -176,6 +185,7 @@ export default function SurveysListClient() {
       );
     } catch (error) {
       setSurveys([]);
+      setAccessLabel("権限情報を確認できませんでした");
       setMessage(
         error instanceof Error
           ? error.message
@@ -189,7 +199,7 @@ export default function SurveysListClient() {
   useEffect(() => {
     setPublicOrigin(window.location.origin);
     void loadSurveys();
-  }, [searchParams]);
+  }, [selectedSchoolId]);
 
   return (
     <>
