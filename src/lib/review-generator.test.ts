@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildFallbackReviews,
   buildGoogleReviewUrl,
+  buildReviewPromptUserContent,
   normalizeReviewRequest,
+  REVIEW_GENERATION_SYSTEM_PROMPT,
 } from "./review-generator";
 
 describe("review-generator", () => {
@@ -66,6 +68,39 @@ describe("review-generator", () => {
     expect(reviews.join("\n")).toContain("先生の説明がわかりやすい");
   });
 
+  it("builds natural fallback reviews without question labels or keyword lists", () => {
+    const input = normalizeReviewRequest({
+      schoolName: "大学受験専門塾 iスクール予備校",
+      rating: 5,
+      selectedReasons: ["大学受験対策", "価格", "成績の変化"],
+      freeText: "苦手だった数学が少しずつ解けるようになりました。",
+    });
+
+    const reviews = buildFallbackReviews(input);
+    const joinedReviews = reviews.join("\n");
+
+    expect(reviews).toHaveLength(3);
+    expect(joinedReviews).not.toContain("通塾のきっかけ");
+    expect(joinedReviews).not.toContain("良かったと感じた点");
+    expect(joinedReviews).not.toContain("大学受験対策、価格、成績の変化");
+    expect(joinedReviews).toContain("苦手だった数学が少しずつ解けるようになりました。");
+  });
+
+  it("builds prompt content that forbids question labels and raw keyword lists", () => {
+    const input = normalizeReviewRequest({
+      schoolName: "大学受験専門塾 iスクール予備校",
+      selectedReasons: ["大学受験対策", "価格", "成績の変化"],
+      freeText: "模試の成績が上がりました。",
+    });
+    const userContent = buildReviewPromptUserContent(input);
+
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("設問文や質問文自体");
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("キーワード羅列は禁止");
+    expect(userContent).toContain("selectedKeywords");
+    expect(userContent).toContain("episode");
+    expect(userContent).not.toContain("通塾のきっかけを教えてください");
+  });
+
   it("uses fallback detail and fallback reasons when building reviews", () => {
     const reviews = buildFallbackReviews({
       schoolName: "青葉ゼミナール",
@@ -74,7 +109,7 @@ describe("review-generator", () => {
     });
 
     expect(reviews).toHaveLength(3);
-    expect(reviews.join("\n")).toContain("子どもの様子をよく見ながら");
+    expect(reviews.join("\n")).toContain("家庭でも自分から机に向かう時間");
     expect(reviews.join("\n")).toContain("先生が丁寧に見てくれる");
   });
 

@@ -113,17 +113,16 @@ export function buildReviewGenerationInputFromSurveyAnswers({
 }) {
   const questionAnswers = buildPublicSurveyQuestionAnswers(questions, answers);
   const selectedReasons = questionAnswers
+    .filter((answer) => answer.type !== "TEXT")
     .flatMap((answer) => (Array.isArray(answer.value) ? answer.value : [answer.value]))
     .map((value) => value.trim())
     .filter(Boolean);
   const freeText = questionAnswers
-    .map((answer) => {
+    .filter((answer) => answer.type === "TEXT")
+    .flatMap((answer) => {
       const values = Array.isArray(answer.value) ? answer.value : [answer.value];
-      const text = values.map((value) => value.trim()).filter(Boolean).join("、");
-
-      return text ? `${answer.question}: ${text}` : "";
+      return values.map((value) => value.trim()).filter(Boolean);
     })
-    .filter(Boolean)
     .join("\n");
 
   return {

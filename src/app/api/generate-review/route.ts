@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   buildFallbackReviews,
+  buildReviewPromptUserContent,
   type GenerateReviewRequest,
   type NormalizedReviewRequest,
   normalizeReviewRequest,
+  REVIEW_GENERATION_SYSTEM_PROMPT,
 } from "@/lib/review-generator";
 
 async function generateWithOpenAI(input: NormalizedReviewRequest) {
@@ -22,12 +24,11 @@ async function generateWithOpenAI(input: NormalizedReviewRequest) {
       input: [
         {
           role: "system",
-          content:
-            "あなたは学習塾の保護者口コミ作成を支援します。誇張や断定を避け、自然で投稿しやすい日本語の口コミを3案だけ作成してください。",
+          content: REVIEW_GENERATION_SYSTEM_PROMPT,
         },
         {
           role: "user",
-          content: JSON.stringify(input),
+          content: buildReviewPromptUserContent(input),
         },
       ],
       text: {

@@ -71,6 +71,17 @@ describe("POST /api/generate-review", () => {
         }),
       }),
     );
+    const [, requestInit] = fetchSpy.mock.calls[0];
+    const payload = JSON.parse(String(requestInit?.body)) as {
+      input: Array<{ role: string; content: string }>;
+    };
+    const systemPrompt = payload.input.find((item) => item.role === "system")?.content;
+    const userPrompt = payload.input.find((item) => item.role === "user")?.content;
+
+    expect(systemPrompt).toContain("設問文や質問文自体");
+    expect(systemPrompt).toContain("キーワード羅列は禁止");
+    expect(userPrompt).toContain("selectedKeywords");
+    expect(userPrompt).toContain("episode");
   });
 
   it("falls back when OpenAI returns a response without text", async () => {
@@ -96,6 +107,39 @@ describe("POST /api/generate-review", () => {
     expect(response.status).toBe(200);
     expect(body.reviews).toHaveLength(3);
     expect(body.reviews.join("\n")).toContain("青葉ゼミナール");
+  });
+
+  it("falls back when OpenAI JSON does not include reviews", async () => {
+    process.env.OPENAI_API_KEY = "openai-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ output_text: JSON.stringify({}) }), {
+            status: 200,
+          }),
+      ),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/generate-review", {
+        method: "POST",
+        body: JSON.stringify({
+          schoolName: "青葉ゼミナール",
+          rating: 4,
+          selectedReasons: ["大学受験対策", "価格"],
+          freeText: "苦手だった数学に向き合えるようになりました。",
+        }),
+      }),
+    );
+    const body = (await response.json()) as { reviews: string[] };
+
+    expect(response.status).toBe(200);
+    expect(body.reviews).toHaveLength(3);
+    expect(body.reviews.join("\n")).toContain(
+      "苦手だった数学に向き合えるようになりました。",
+    );
+    expect(body.reviews.join("\n")).not.toContain("大学受験対策、価格");
   });
 
   it("returns a 500 response when OpenAI rejects the request", async () => {
