@@ -206,8 +206,7 @@ describe("/api/settings/school", () => {
           schoolId: "school-1",
           googleConnected: false,
           selectedGbpLocationId: "",
-          googleReviewUrl:
-            "https://search.google.com/local/writereview?placeid=ischool",
+          googleReviewUrl: " https://g.page/r/CcECT8Glzr4bEBM/review ",
           lineNotifyEnabled: true,
           lineChannelAccessToken: "new-line-token",
           lineDestinationId: "C123",
@@ -227,10 +226,14 @@ describe("/api/settings/school", () => {
 
     expect(response.status).toBe(200);
     expect(body.setting.lineChannelAccessToken).toBe("new-line-token");
+    expect(body.setting.googleReviewUrl).toBe(
+      "https://g.page/r/CcECT8Glzr4bEBM/review",
+    );
     expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { schoolId: "school-1" },
         update: expect.objectContaining({
+          googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
           lineDestinationId: "C123",
           promptReviewTone: "FORMAL",
         }),
@@ -268,6 +271,28 @@ describe("/api/settings/school", () => {
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/school"),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("treats schoolId=all as missing for writes", async () => {
+    const access = await import("@/lib/supabase-access");
+    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
+      requestedSchoolId: "all",
+      effectiveSchoolId: undefined,
+      role: "admin",
+      canSwitchSchool: true,
+    });
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/school", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "all",
+          googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
+        }),
+      }),
     );
 
     expect(response.status).toBe(400);

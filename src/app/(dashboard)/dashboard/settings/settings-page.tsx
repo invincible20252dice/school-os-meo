@@ -118,11 +118,13 @@ export default function SettingsPage({
   }
 
   function getActiveSchoolId() {
-    return searchParams.get("schoolId") || setting.schoolId;
+    const schoolId = searchParams.get("schoolId") || setting.schoolId;
+
+    return schoolId === "all" ? "" : schoolId;
   }
 
   async function resolveActiveSchoolId(headers: Record<string, string>) {
-    const explicitSchoolId = searchParams.get("schoolId") || setting.schoolId;
+    const explicitSchoolId = getActiveSchoolId();
 
     if (explicitSchoolId && explicitSchoolId !== "school-demo-001") {
       return explicitSchoolId;
@@ -205,6 +207,13 @@ export default function SettingsPage({
 
     try {
       const headers = await buildAuthHeaders();
+      const schoolId = await resolveActiveSchoolId(headers);
+
+      if (!schoolId) {
+        setSaveMessage("保存する校舎を選択してください。");
+        return;
+      }
+
       const response = await fetch("/api/settings/school", {
         method: "PATCH",
         headers: {
@@ -213,7 +222,7 @@ export default function SettingsPage({
         },
         body: JSON.stringify({
           ...setting,
-          schoolId: getActiveSchoolId(),
+          schoolId,
           googleRefreshToken: undefined,
           instagramAccessToken: undefined,
         }),
@@ -411,6 +420,13 @@ export default function SettingsPage({
 
     try {
       const headers = await buildAuthHeaders();
+      const schoolId = await resolveActiveSchoolId(headers);
+
+      if (!schoolId) {
+        setGoogleMessage("保存する校舎を選択してください。");
+        return;
+      }
+
       const response = await fetch("/api/settings/google-review-url", {
         method: "PATCH",
         headers: {
@@ -418,7 +434,7 @@ export default function SettingsPage({
           ...headers,
         },
         body: JSON.stringify({
-          schoolId: getActiveSchoolId(),
+          schoolId,
           googleReviewUrl: setting.googleReviewUrl,
         }),
       });

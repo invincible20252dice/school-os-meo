@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PATCH } from "./route";
+import { PATCH, POST } from "./route";
 
 vi.mock("@/lib/supabase-access", () => ({
   resolveRequestAccess: vi.fn(async () => ({
@@ -98,6 +98,57 @@ describe("PATCH /api/settings/google-review-url", () => {
         }),
       }),
     );
+  });
+
+  it("accepts POST requests and the legacy reviewUrl request key", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const response = await POST(
+      new Request("https://app.example.com/api/settings/google-review-url", {
+        method: "POST",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          reviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting.googleReviewUrl).toBe(
+      "https://g.page/r/CcECT8Glzr4bEBM/review",
+    );
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { schoolId: "school-1" },
+        update: {
+          googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
+        },
+      }),
+    );
+  });
+
+  it("treats schoolId=all as missing instead of writing to a fake school", async () => {
+    const access = await import("@/lib/supabase-access");
+    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
+      requestedSchoolId: "all",
+      effectiveSchoolId: undefined,
+      role: "admin",
+      canSwitchSchool: true,
+    });
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/google-review-url", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "all",
+          googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toContain("校舎");
   });
 
   it("rejects invalid URLs without saving", async () => {

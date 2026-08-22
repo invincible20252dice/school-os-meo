@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
+import { normalizeGoogleReviewUrl } from "@/lib/google-review-url";
 import { buildEmptySchoolSetting, type NullableSchoolSettingState } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import {
@@ -13,6 +14,12 @@ type SchoolSettingPayload = Partial<NullableSchoolSettingState> & {
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSchoolId(value: unknown) {
+  const schoolId = normalizeString(value);
+
+  return schoolId === "all" ? "" : schoolId;
 }
 
 function normalizeStringList(value: unknown) {
@@ -170,7 +177,8 @@ function serializeSetting({
 async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) {
   const url = new URL(request.url);
   const requestedSchoolId =
-    normalizeString(bodySchoolId) || normalizeString(url.searchParams.get("schoolId"));
+    normalizeSchoolId(bodySchoolId) ||
+    normalizeSchoolId(url.searchParams.get("schoolId"));
   const accessResult = await resolveRequestAccess(request, url);
 
   if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
@@ -215,6 +223,8 @@ function toErrorResponse(error: unknown, fallbackMessage: string) {
         ? 403
         : message === "SCHOOL_NOT_FOUND"
           ? 404
+          : message === "INVALID_REVIEW_URL"
+            ? 422
           : 500;
 
   if (status === 500) {
@@ -230,6 +240,8 @@ function toErrorResponse(error: unknown, fallbackMessage: string) {
             ? "この校舎の設定は変更できません。"
             : status === 404
               ? "対象校舎が見つかりませんでした。"
+              : status === 422
+                ? "Google口コミ投稿リンクの形式を確認してください。"
               : fallbackMessage,
     },
     { status },
@@ -282,6 +294,15 @@ export async function PATCH(request: Request) {
       where: { schoolId: school.id },
       select: { googleRefreshToken: true },
     });
+    const rawGoogleReviewUrl = normalizeString(body.googleReviewUrl);
+    const googleReviewUrl = rawGoogleReviewUrl
+      ? normalizeGoogleReviewUrl(rawGoogleReviewUrl)
+      : "";
+
+    if (rawGoogleReviewUrl && !googleReviewUrl) {
+      throw new Error("INVALID_REVIEW_URL");
+    }
+
     const setting = await prisma.schoolSetting.upsert({
       where: { schoolId: school.id },
       create: {
@@ -290,7 +311,7 @@ export async function PATCH(request: Request) {
         googleAccountId: normalizeString(body.googleAccountId),
         googleRefreshToken: current?.googleRefreshToken || null,
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
-        googleReviewUrl: normalizeString(body.googleReviewUrl),
+        googleReviewUrl,
         lineNotifyEnabled: body.lineNotifyEnabled ?? true,
         lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
         lineDestinationId: normalizeString(body.lineDestinationId),
@@ -308,7 +329,7 @@ export async function PATCH(request: Request) {
         googleConnected: Boolean(body.googleConnected),
         googleAccountId: normalizeString(body.googleAccountId),
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
-        googleReviewUrl: normalizeString(body.googleReviewUrl),
+        googleReviewUrl,
         lineNotifyEnabled: body.lineNotifyEnabled ?? true,
         lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
         lineDestinationId: normalizeString(body.lineDestinationId),

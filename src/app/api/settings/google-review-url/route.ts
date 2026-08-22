@@ -11,10 +11,17 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeSchoolId(value: unknown) {
+  const schoolId = normalizeString(value);
+
+  return schoolId === "all" ? "" : schoolId;
+}
+
 async function resolveWritableSchool(request: Request, bodySchoolId?: string) {
   const url = new URL(request.url);
   const requestedSchoolId =
-    normalizeString(bodySchoolId) || normalizeString(url.searchParams.get("schoolId"));
+    normalizeSchoolId(bodySchoolId) ||
+    normalizeSchoolId(url.searchParams.get("schoolId"));
   const accessResult = await resolveRequestAccess(request, url);
 
   if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
@@ -77,14 +84,17 @@ function toErrorResponse(error: unknown) {
   );
 }
 
-export async function PATCH(request: Request) {
+async function saveGoogleReviewUrl(request: Request) {
   try {
     const body = (await request.json()) as {
       schoolId?: string;
       googleReviewUrl?: string;
+      reviewUrl?: string;
     };
     const school = await resolveWritableSchool(request, body.schoolId);
-    const rawGoogleReviewUrl = normalizeString(body.googleReviewUrl);
+    const rawGoogleReviewUrl = normalizeString(
+      body.googleReviewUrl ?? body.reviewUrl,
+    );
     const googleReviewUrl = rawGoogleReviewUrl
       ? normalizeGoogleReviewUrl(rawGoogleReviewUrl)
       : "";
@@ -124,4 +134,16 @@ export async function PATCH(request: Request) {
   } catch (error) {
     return toErrorResponse(error);
   }
+}
+
+export async function PATCH(request: Request) {
+  return saveGoogleReviewUrl(request);
+}
+
+export async function POST(request: Request) {
+  return saveGoogleReviewUrl(request);
+}
+
+export async function PUT(request: Request) {
+  return saveGoogleReviewUrl(request);
 }
