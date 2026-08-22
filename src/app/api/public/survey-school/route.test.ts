@@ -369,6 +369,113 @@ describe("GET /api/public/survey-school", () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it("retries survey-id lookup without SurveyItem.placeholder when production DB is missing that optional column", async () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    const error = new Error(
+      "The column SurveyItem.placeholder does not exist in the current database.",
+    ) as Error & { code: string };
+    error.code = "P2022";
+    vi.mocked(prisma.survey.findUnique)
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(
+        buildSurvey({
+          items: [
+            {
+              id: "item-text",
+              type: "TEXT",
+              question: "高校はどこですか？",
+              maxSelect: null,
+              options: [],
+              order: 1,
+            },
+          ],
+        }),
+      );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/public/survey-school?schoolId=school-1&surveyId=survey-1",
+      ),
+    );
+    const body = await response.json();
+    const firstCall = vi.mocked(prisma.survey.findUnique).mock.calls[0]?.[0];
+    const secondCall = vi.mocked(prisma.survey.findUnique).mock.calls[1]?.[0];
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.questions).toHaveLength(1);
+    expect(body.questions[0]).toMatchObject({
+      id: "item-text",
+      title: "高校はどこですか？",
+      type: "text",
+      placeholder: "例: 熊本高校、済々黌高校、第一高校 など",
+    });
+    expect(firstCall?.include?.items?.select).toHaveProperty("placeholder", true);
+    expect(secondCall?.include?.items?.select).not.toHaveProperty("placeholder");
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "[PublicSurveyQuery] SurveyItem.placeholder is missing. Retrying public survey lookup without the optional column.",
+      expect.objectContaining({
+        schoolId: "school-1",
+        surveyId: "survey-1",
+        error: expect.objectContaining({
+          code: "P2022",
+        }),
+      }),
+    );
+    consoleWarnSpy.mockRestore();
+  });
+
+  it("retries latest-school survey lookup without SurveyItem.placeholder when school-only public URL is used", async () => {
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    const error = new Error(
+      "P2022: The column SurveyItem.placeholder does not exist in the current database.",
+    );
+    vi.mocked(prisma.survey.findFirst)
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(
+        buildSurvey({
+          id: "latest-survey",
+          items: [
+            {
+              id: "item-single",
+              type: "SINGLE_SELECT",
+              question: "通塾のきっかけを教えてください",
+              maxSelect: null,
+              options: ["大学受験対策", "苦手科目の克服"],
+              order: 1,
+            },
+          ],
+        }),
+      );
+
+    const response = await GET(
+      new Request("https://app.example.com/api/public/survey-school?schoolId=school-1"),
+    );
+    const body = await response.json();
+    const firstCall = vi.mocked(prisma.survey.findFirst).mock.calls[0]?.[0];
+    const secondCall = vi.mocked(prisma.survey.findFirst).mock.calls[1]?.[0];
+
+    expect(response.status).toBe(200);
+    expect(body.survey.id).toBe("latest-survey");
+    expect(body.questions).toHaveLength(1);
+    expect(firstCall?.include?.items?.select).toHaveProperty("placeholder", true);
+    expect(secondCall?.include?.items?.select).not.toHaveProperty("placeholder");
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "[PublicSurveyQuery] SurveyItem.placeholder is missing. Retrying public survey lookup without the optional column.",
+      expect.objectContaining({
+        schoolId: "school-1",
+        surveyId: "",
+      }),
+    );
+    consoleWarnSpy.mockRestore();
+  });
+
   it("returns 404 when neither survey id nor school fallback can find a survey", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(null);

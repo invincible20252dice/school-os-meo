@@ -16,7 +16,7 @@ type PublicSurveyItemRow = {
   id: string;
   type: string;
   question: string;
-  placeholder: string | null;
+  placeholder?: string | null;
   maxSelect: number | null;
   options: string[];
   order: number;
@@ -57,19 +57,32 @@ function normalizeQuestionType(type: string) {
   return "text";
 }
 
-export const publicSurveyInclude = {
-  items: {
-    orderBy: { order: "asc" as const },
-  },
-  school: {
-    select: {
-      id: true,
-      name: true,
-      googlePlaceId: true,
-      googleMapsUrl: true,
+export function buildPublicSurveyInclude(includePlaceholder = true) {
+  return {
+    items: {
+      orderBy: { order: "asc" as const },
+      select: {
+        id: true,
+        type: true,
+        question: true,
+        ...(includePlaceholder ? { placeholder: true } : {}),
+        maxSelect: true,
+        options: true,
+        order: true,
+      },
     },
-  },
-};
+    school: {
+      select: {
+        id: true,
+        name: true,
+        googlePlaceId: true,
+        googleMapsUrl: true,
+      },
+    },
+  };
+}
+
+export const publicSurveyInclude = buildPublicSurveyInclude(true);
 
 function serializePublicSurveyQueryError(error: unknown) {
   if (error instanceof Error) {
@@ -81,6 +94,30 @@ function serializePublicSurveyQueryError(error: unknown) {
   }
 
   return { message: String(error) };
+}
+
+function isMissingSurveyItemPlaceholderColumn(error: unknown) {
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : "";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ? error.message
+        : String(error);
+
+  return (
+    (code === "P2022" || message.includes("P2022")) &&
+    message.includes("SurveyItem.placeholder")
+  );
 }
 
 function serializeNormalizedQuestion(item: PublicSurveyQuestion) {
@@ -124,6 +161,59 @@ export function serializePublicSurvey(survey: PublicSurveyRow) {
   };
 }
 
+async function findUniquePublicSurvey(id: string, includePlaceholder = true) {
+  return (await prisma.survey.findUnique({
+    where: {
+      id,
+    },
+    include: buildPublicSurveyInclude(includePlaceholder),
+  })) as PublicSurveyRow | null;
+}
+
+async function findFirstPublicSurveyBySchool(
+  schoolId: string,
+  includePlaceholder = true,
+) {
+  return (await prisma.survey.findFirst({
+    where: {
+      schoolId,
+    },
+    include: buildPublicSurveyInclude(includePlaceholder),
+    orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
+  })) as PublicSurveyRow | null;
+}
+
+async function findPublicSurveyWithPlaceholderFallback({
+  schoolId,
+  surveyId,
+}: {
+  schoolId: string;
+  surveyId: string;
+}) {
+  try {
+    return surveyId
+      ? await findUniquePublicSurvey(surveyId, true)
+      : await findFirstPublicSurveyBySchool(schoolId, true);
+  } catch (error) {
+    if (!isMissingSurveyItemPlaceholderColumn(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "[PublicSurveyQuery] SurveyItem.placeholder is missing. Retrying public survey lookup without the optional column.",
+      {
+        schoolId,
+        surveyId,
+        error: serializePublicSurveyQueryError(error),
+      },
+    );
+
+    return surveyId
+      ? await findUniquePublicSurvey(surveyId, false)
+      : await findFirstPublicSurveyBySchool(schoolId, false);
+  }
+}
+
 export type SerializedPublicSurveyResponse = Awaited<
   ReturnType<typeof buildPublicSurveyResponse>
 >;
@@ -144,20 +234,10 @@ export async function findPublicSurvey({
     mode: normalizedSurveyId ? "findUnique" : "findFirstBySchool",
   });
 
-  let survey = normalizedSurveyId
-    ? ((await prisma.survey.findUnique({
-        where: {
-          id: normalizedSurveyId,
-        },
-        include: publicSurveyInclude,
-      })) as PublicSurveyRow | null)
-    : ((await prisma.survey.findFirst({
-        where: {
-          schoolId: normalizedSchoolId,
-        },
-        include: publicSurveyInclude,
-        orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
-      })) as PublicSurveyRow | null);
+  let survey = await findPublicSurveyWithPlaceholderFallback({
+    schoolId: normalizedSchoolId,
+    surveyId: normalizedSurveyId,
+  });
 
   console.log("[PublicSurveyQuery] findPublicSurvey:primaryResult", {
     found: Boolean(survey),
@@ -169,13 +249,10 @@ export async function findPublicSurvey({
   });
 
   if (!survey && normalizedSchoolId) {
-    survey = (await prisma.survey.findFirst({
-      where: {
-        schoolId: normalizedSchoolId,
-      },
-      include: publicSurveyInclude,
-      orderBy: [{ updatedAt: "desc" as const }, { createdAt: "desc" as const }],
-    })) as PublicSurveyRow | null;
+    survey = await findPublicSurveyWithPlaceholderFallback({
+      schoolId: normalizedSchoolId,
+      surveyId: "",
+    });
 
     console.log("[PublicSurveyQuery] findPublicSurvey:fallbackResult", {
       found: Boolean(survey),
