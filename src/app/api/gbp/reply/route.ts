@@ -148,6 +148,8 @@ export async function POST(request: Request) {
       where: { id: review.id },
       data: {
         aiReplyText: replyText,
+        aiReplyDraft: replyText,
+        replyText,
         status: "REPLIED",
         repliedAt: new Date(),
       },

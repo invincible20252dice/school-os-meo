@@ -107,6 +107,13 @@ function buildTextBox(text: string, size = "sm") {
   };
 }
 
+export function buildLineTextMessage(text: string) {
+  return {
+    type: "text",
+    text,
+  };
+}
+
 export function buildLineReviewMessage(
   notification: Omit<LineReviewNotification, "to">,
 ): LineFlexMessage {
@@ -124,7 +131,7 @@ export function buildLineReviewMessage(
         contents: [
           {
             type: "text",
-            text: "📩 新着口コミを受信しました！",
+            text: `🌟 新着Google口コミ（★${notification.rating} / ${notification.schoolName}）`,
             weight: "bold",
             size: "lg",
             color: "#147D68",
@@ -136,8 +143,9 @@ export function buildLineReviewMessage(
             size: "lg",
             color: "#F26D5B",
           },
-          buildTextBox(`口コミ: ${notification.reviewText}`),
-          buildTextBox(`AI返信案: ${notification.aiReplyText}`),
+          buildTextBox(`【投稿内容】${notification.reviewText}`),
+          buildTextBox(`【AI返信ドラフト】${notification.aiReplyText}`),
+          buildTextBox("修正して投稿したい場合は、このメッセージに修正したい返信文をそのまま返信してください。", "xs"),
         ],
       },
       footer: {
@@ -150,8 +158,18 @@ export function buildLineReviewMessage(
             style: "primary",
             color: "#27B58C",
             action: {
+              type: "postback",
+              label: "この内容でGBPに投稿",
+              data: `action=approve_reply&reviewId=${encodeURIComponent(notification.reviewId)}`,
+              displayText: "この内容で返信",
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            action: {
               type: "uri",
-              label: "返信を確認する",
+              label: "管理画面で確認",
               uri: buildReplyUrl(notification.reviewId),
             },
           },
@@ -221,4 +239,45 @@ export async function sendLineReviewNotification(
   console.info("LINE API Push Accepted:", JSON.stringify(result, null, 2));
 
   return result;
+}
+
+export async function replyLineMessage({
+  replyToken,
+  channelAccessToken,
+  text,
+  fetchImpl = fetch,
+}: {
+  replyToken: string;
+  channelAccessToken?: string;
+  text: string;
+  fetchImpl?: FetchLike;
+}) {
+  const token = channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+  if (!token) {
+    throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  }
+
+  const response = await fetchImpl("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      replyToken,
+      messages: [buildLineTextMessage(text)],
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await parseLineErrorResponse(response);
+    console.error("LINE API Error Details:", JSON.stringify(details, null, 2));
+    throw new LineApiError(response.status, details);
+  }
+
+  return {
+    status: response.status,
+    requestId: response.headers.get("x-line-request-id"),
+  };
 }

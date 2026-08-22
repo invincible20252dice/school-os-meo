@@ -43,7 +43,7 @@ describe("line", () => {
   });
 
 
-  it("builds a review notification message with a reply action button", () => {
+  it("builds a review notification message with approval and dashboard action buttons", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const message = buildLineReviewMessage({
@@ -57,6 +57,10 @@ describe("line", () => {
     expect(message.type).toBe("flex");
     expect(JSON.stringify(message)).toContain("青葉ゼミナール");
     expect(JSON.stringify(message)).toContain("★★★★☆");
+    expect(JSON.stringify(message)).toContain("この内容でGBPに投稿");
+    expect(JSON.stringify(message)).toContain("action=approve_reply");
+    expect(JSON.stringify(message)).toContain("reviewId=review_123");
+    expect(JSON.stringify(message)).toContain("修正したい返信文をそのまま返信");
     expect(JSON.stringify(message)).toContain(
       "https://app.example.com/dashboard/reviews?reviewId=review_123",
     );

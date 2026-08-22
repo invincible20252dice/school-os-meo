@@ -34,6 +34,10 @@ enum ReviewSource {
 enum ReviewStatus {
   DRAFT
   GENERATED
+  PENDING
+  APPROVED
+  REVISED
+  MANUAL
   COPIED
   POSTED
   REPLIED
@@ -265,10 +269,16 @@ model Review {
   rating             Int?
   surveyAnswers      Json?
   originalText       String?
+  comment            String?      @db.Text
   generatedPatterns  Json?
   selectedReviewText String?
   googleReviewId     String?
+  gbpReviewId        String?
+  authorName         String?
   aiReplyText        String?
+  aiReplyDraft       String?      @db.Text
+  replyText          String?      @db.Text
+  lineUserId         String?
   aiReplyGeneratedAt DateTime?
   copiedAt           DateTime?
   postedAt           DateTime?
@@ -283,6 +293,8 @@ model Review {
   @@index([schoolId, source])
   @@index([schoolId, postedAt])
   @@index([authorId])
+  @@index([gbpReviewId])
+  @@index([lineUserId, status])
   @@index([rating])
   @@index([createdAt])
 }

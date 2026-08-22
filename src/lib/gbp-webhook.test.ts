@@ -155,10 +155,15 @@ describe("gbp-webhook", () => {
         data: expect.objectContaining({
           schoolId: "school_1",
           googleReviewId: "google_review_1",
+          gbpReviewId: "google_review_1",
           source: "GOOGLE",
-          status: "GENERATED",
+          status: "PENDING",
+          authorName: "保護者A",
           rating: 5,
           originalText: "先生が丁寧でした。",
+          comment: "先生が丁寧でした。",
+          aiReplyDraft: expect.stringContaining("青葉ゼミナール"),
+          lineUserId: "school-line-user",
         }),
       }),
     );
@@ -217,6 +222,10 @@ describe("gbp-webhook", () => {
     expect(prisma.review.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "review_db_1" },
+        data: expect.objectContaining({
+          status: "PENDING",
+          aiReplyDraft: expect.any(String),
+        }),
       }),
     );
   });

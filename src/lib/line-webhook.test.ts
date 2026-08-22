@@ -1,0 +1,391 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { handleLineWebhookEvents } from "./line-webhook";
+
+const originalEnv = process.env;
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+  vi.clearAllMocks();
+});
+
+function buildReview(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "review-1",
+    schoolId: "school-1",
+    status: "PENDING",
+    googleReviewId: "google-review-1",
+    gbpReviewId: "google-review-1",
+    aiReplyText: "温かい口コミをありがとうございます。",
+    aiReplyDraft: "温かい口コミをありがとうございます。",
+    replyText: null,
+    school: {
+      gbpAccountId: "accounts/1",
+      gbpLocationId: "locations/100",
+      schoolSetting: {
+        googleRefreshToken: null,
+        selectedGbpLocationId: "locations/100",
+        lineChannelAccessToken: "school-line-token",
+      },
+    },
+    ...overrides,
+  };
+}
+
+describe("line-webhook", () => {
+  it("posts an approved AI draft to GBP from a LINE postback", async () => {
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const review = buildReview();
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(async ({ data }) => ({ ...review, ...data })),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          source: { userId: "U-review-admin" },
+          postback: {
+            data: "action=approve_reply&reviewId=review-1",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["approved"] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://mybusiness.googleapis.com/v4/accounts/1/locations/100/reviews/google-review-1/reply",
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({
+          Authorization: "Bearer gbp-token",
+        }),
+        body: JSON.stringify({ comment: "温かい口コミをありがとうございます。" }),
+      }),
+    );
+    expect(prisma.review.update).toHaveBeenCalledWith({
+      where: { id: "review-1" },
+      data: expect.objectContaining({
+        replyText: "温かい口コミをありがとうございます。",
+        status: "APPROVED",
+        repliedAt: expect.any(Date),
+      }),
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer school-line-token",
+        }),
+        body: expect.stringContaining("Googleマップに返信を投稿しました"),
+      }),
+    );
+  });
+
+  it("posts a revised LINE text message to the latest pending review", async () => {
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const review = buildReview({ lineUserId: "C-review-group" });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(async () => review),
+        update: vi.fn(async ({ data }) => ({ ...review, ...data })),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          source: { groupId: "C-review-group" },
+          message: {
+            type: "text",
+            text: "修正した返信文です。",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["revised"] });
+    expect(prisma.review.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          lineUserId: "C-review-group",
+          status: "PENDING",
+        },
+      }),
+    );
+    expect(prisma.review.update).toHaveBeenCalledWith({
+      where: { id: "review-1" },
+      data: expect.objectContaining({
+        replyText: "修正した返信文です。",
+        aiReplyText: "修正した返信文です。",
+        status: "REVISED",
+      }),
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("修正した返信文です。"),
+      }),
+    );
+  });
+
+  it("does not post a duplicate reply for already replied reviews", async () => {
+    const review = buildReview({ status: "APPROVED" });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: "action=approve_reply&reviewId=review-1",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["already_replied"] });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("既に返信済み"),
+      }),
+    );
+  });
+
+  it("returns a LINE notice when no pending review matches a revision message", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(async () => null),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          source: { userId: "U-no-review" },
+          message: {
+            type: "text",
+            text: "修正文です。",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["pending_not_found"] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("未返信口コミが見つかりません"),
+      }),
+    );
+  });
+
+  it("reports missing reviews and missing AI drafts without posting to GBP", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const reviewWithoutDraft = buildReview({
+      aiReplyText: "",
+      aiReplyDraft: null,
+    });
+    const prisma = {
+      review: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(reviewWithoutDraft),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "missing-review-token",
+          postback: {
+            data: "action=approve_reply&reviewId=missing-review",
+          },
+        },
+        {
+          type: "postback",
+          replyToken: "missing-draft-token",
+          postback: {
+            data: "action=approve_reply&reviewId=review-without-draft",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 2,
+      results: ["not_found", "missing_draft"],
+    });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("対象の口コミが見つかりません"),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("AI返信ドラフトが見つかりません"),
+      }),
+    );
+  });
+
+  it("ignores unsupported LINE events and malformed approval postbacks", async () => {
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        { type: "follow" },
+        {
+          type: "postback",
+          postback: { data: "action=approve_reply" },
+        },
+        {
+          type: "postback",
+          postback: { data: "action=unknown&reviewId=review-1" },
+        },
+        {
+          type: "message",
+          message: { type: "image" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 4,
+      results: ["ignored", "missing_review_id", "ignored", "ignored"],
+    });
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    expect(prisma.review.findFirst).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores text revisions when the LINE source or message text is missing", async () => {
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          source: {},
+          message: { type: "text", text: "修正文です。" },
+        },
+        {
+          type: "message",
+          source: { userId: "U-review-admin" },
+          message: { type: "text", text: "   " },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 2, results: ["ignored", "ignored"] });
+    expect(prisma.review.findFirst).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the school setting GBP location and skips LINE reply when reply token is absent", async () => {
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const review = buildReview({
+      school: {
+        gbpAccountId: "accounts/1",
+        gbpLocationId: null,
+        schoolSetting: {
+          googleRefreshToken: null,
+          selectedGbpLocationId: "locations/from-setting",
+          lineChannelAccessToken: "school-line-token",
+        },
+      },
+    });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(async ({ data }) => ({ ...review, ...data })),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          postback: {
+            data: "action=approve_reply&reviewId=review-1",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["approved"] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://mybusiness.googleapis.com/v4/accounts/1/locations/from-setting/reviews/google-review-1/reply",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+});

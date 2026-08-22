@@ -195,20 +195,30 @@ export async function processGbpReviews({
     const existing = await prisma.review.findFirst({
       where: {
         schoolId: school.id,
-        googleReviewId: review.googleReviewId,
+        OR: [
+          { googleReviewId: review.googleReviewId },
+          { gbpReviewId: review.googleReviewId },
+        ],
       },
     });
+    const lineDelivery = getLineDelivery(school, review);
     const data = {
       schoolId: school.id,
       source: "GOOGLE",
-      status: "GENERATED",
+      status: "PENDING",
       parentName: review.reviewerName,
+      authorName: review.reviewerName,
       rating: review.rating,
       originalText: review.reviewText,
+      comment: review.reviewText,
       selectedReviewText: review.reviewText,
       googleReviewId: review.googleReviewId,
+      gbpReviewId: review.googleReviewId,
       aiReplyText,
+      aiReplyDraft: aiReplyText,
       aiReplyGeneratedAt: new Date(),
+      replyText: null,
+      lineUserId: lineDelivery?.to || null,
       postedAt: reviewedAt,
     };
     const savedReview = existing
@@ -220,7 +230,6 @@ export async function processGbpReviews({
 
     summary.saved += 1;
 
-    const lineDelivery = getLineDelivery(school, review);
     if (lineDelivery) {
       await sendLineReviewNotification(
         {

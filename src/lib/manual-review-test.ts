@@ -29,9 +29,10 @@ export async function buildManualReviewTest(input: ManualReviewTestInput = {}) {
   const savedReview = {
     id: `review_manual_${now.getTime().toString(36)}`,
     schoolName,
-    status: "GENERATED",
+    status: "PENDING",
     stars: buildStarRating(review.rating),
     aiReplyText,
+    aiReplyDraft: aiReplyText,
     dashboardUrl: "/dashboard/reviews",
   };
   const lineNotification = buildLineReviewMessage({

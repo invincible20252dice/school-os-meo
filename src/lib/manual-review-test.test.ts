@@ -17,9 +17,12 @@ describe("manual-review-test", () => {
       skipped: 0,
     });
     expect(result.review.googleReviewId).toBe("manual_review_1");
+    expect(result.savedReview.status).toBe("PENDING");
+    expect(result.savedReview.aiReplyDraft).toContain("青葉ゼミナール 本校");
     expect(result.savedReview.aiReplyText).toContain("青葉ゼミナール 本校");
     expect(result.lineNotification.altText).toContain("新着口コミ");
-    expect(JSON.stringify(result.lineNotification)).toContain("返信を確認する");
+    expect(JSON.stringify(result.lineNotification)).toContain("この内容でGBPに投稿");
+    expect(JSON.stringify(result.lineNotification)).toContain("管理画面で確認");
   });
 
   it("builds defaults for manual review dry-runs", async () => {

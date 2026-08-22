@@ -8,8 +8,10 @@ describe("ai-review-demo", () => {
     expect(demo.review.schoolName).toBe("青葉ゼミナール 本校");
     expect(demo.review.rating).toBe(5);
     expect(demo.aiReplyText).toContain("ありがとうございます");
-    expect(demo.savedReview.status).toBe("GENERATED");
+    expect(demo.savedReview.status).toBe("PENDING");
+    expect(demo.savedReview.aiReplyDraft).toContain("ありがとうございます");
     expect(demo.lineNotification.altText).toContain("新着口コミ");
-    expect(JSON.stringify(demo.lineNotification)).toContain("返信を確認する");
+    expect(JSON.stringify(demo.lineNotification)).toContain("この内容でGBPに投稿");
+    expect(JSON.stringify(demo.lineNotification)).toContain("管理画面で確認");
   });
 });

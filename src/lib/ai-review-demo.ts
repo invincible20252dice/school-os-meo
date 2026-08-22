@@ -33,7 +33,8 @@ export function buildAiReviewReplyDemo() {
     savedReview: {
       id: demoReview.id,
       source: "GOOGLE",
-      status: "GENERATED",
+      status: "PENDING",
+      aiReplyDraft: demoAiReplyText,
       aiReplyGeneratedAt: "2026-07-22 14:09",
       lineNotifiedAt: "2026-07-22 14:09",
     },
@@ -61,8 +62,8 @@ export function buildAiReviewReplyDemo() {
       },
       {
         label: "Googleへ返信投稿",
-        detail: "返信投稿APIと編集画面は次の実装対象です。",
-        done: false,
+        detail: "LINEの承認ボタン、または修正文メッセージからGBPへ投稿します。",
+        done: true,
       },
     ],
   };
