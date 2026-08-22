@@ -86,6 +86,47 @@ describe("public-survey-response", () => {
     });
   });
 
+  it("normalizes free-text aliases to TEXT questions", () => {
+    expect(
+      ["textarea", "free", "自由記述"].map((type, index) =>
+        normalizePublicSurveyQuestion(
+          {
+            id: `q${index + 1}`,
+            question: `自由記述${index + 1}`,
+            type,
+            options: [],
+          },
+          index + 1,
+        ),
+      ),
+    ).toEqual([
+      {
+        id: "q1",
+        type: "TEXT",
+        question: "自由記述1",
+        maxSelect: undefined,
+        options: [],
+        order: 1,
+      },
+      {
+        id: "q2",
+        type: "TEXT",
+        question: "自由記述2",
+        maxSelect: undefined,
+        options: [],
+        order: 2,
+      },
+      {
+        id: "q3",
+        type: "TEXT",
+        question: "自由記述3",
+        maxSelect: undefined,
+        options: [],
+        order: 3,
+      },
+    ]);
+  });
+
   it("parses JSON string question and option arrays before binding state", () => {
     const questions = extractPublicSurveyQuestions({
       survey: {

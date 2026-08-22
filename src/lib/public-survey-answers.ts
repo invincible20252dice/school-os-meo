@@ -25,7 +25,15 @@ export type PublicSurveyQuestionAnswer = {
 };
 
 function isTextQuestion(type: PublicSurveyQuestionType) {
-  return String(type).toUpperCase() === "TEXT" || String(type).toLowerCase() === "text";
+  const normalized = String(type).trim().toLowerCase();
+
+  return (
+    normalized === "text" ||
+    normalized === "textarea" ||
+    normalized === "free" ||
+    normalized === "free_text" ||
+    String(type).trim() === "自由記述"
+  );
 }
 
 export function createInitialPublicSurveyAnswers(
@@ -115,18 +123,26 @@ export function buildReviewGenerationInputFromSurveyAnswers({
   questions: PublicSurveyQuestion[];
   answers: PublicSurveyAnswerState;
 }) {
-  const questionAnswers = buildPublicSurveyQuestionAnswers(
-    questions.filter((question) => !isTextQuestion(question.type)),
-    answers,
-  ).filter((answer) => getAnswerValues(answers, answer.questionId).length > 0);
-  const selectedReasons = questionAnswers
+  const questionAnswers = buildPublicSurveyQuestionAnswers(questions, answers).filter(
+    (answer) => getAnswerValues(answers, answer.questionId).length > 0,
+  );
+  const choiceAnswers = questionAnswers.filter(
+    (answer) => !isTextQuestion(answer.type),
+  );
+  const textAnswers = questionAnswers.filter((answer) => isTextQuestion(answer.type));
+  const selectedReasons = choiceAnswers
     .flatMap((answer) => (Array.isArray(answer.value) ? answer.value : [answer.value]))
     .map((value) => value.trim())
     .filter(Boolean);
+  const freeText = textAnswers
+    .flatMap((answer) => (Array.isArray(answer.value) ? answer.value : [answer.value]))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n");
 
   return {
     selectedReasons,
-    freeText: "",
+    freeText,
     questionAnswers,
   };
 }

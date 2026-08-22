@@ -37,8 +37,9 @@ export const REVIEW_GENERATION_SYSTEM_PROMPT = `
 3. ユーザーが選択した項目を、自然な文章の流れ・文脈としてストーリー仕立てで繋ぎ合わせてください。
 4. 選択肢やSEOキーワードを「、」で羅列するだけの表現は禁止です。
 5. SEOキーワードが含まれている場合は、文章の自然さを損なわない範囲で文中に違和感なく1〜2箇所盛り込んでください。
-6. 指定文字数は150〜250文字程度の、読みやすく温かみのある日本語にしてください。
-7. 「通塾のきっかけ: 大学受験対策」のようなラベル付き出力は禁止です。
+6. 自由記述や補足情報がある場合は、固有名詞や具体的な背景を自然な体験談として反映してください。
+7. 指定文字数は150〜250文字程度の、読みやすく温かみのある日本語にしてください。
+8. 「通塾のきっかけ: 大学受験対策」のようなラベル付き出力は禁止です。
 `;
 
 export function normalizeReviewRequest(
@@ -153,6 +154,7 @@ export function buildReviewPromptUserContent(input: NormalizedReviewRequest) {
 【通塾のきっかけ】: ${trigger}
 【良かったと感じた点】: ${goodPoints.join(", ") || "先生の説明, 質問しやすさ"}
 【お子さんの変化】: ${changes.join(", ") || "模試の判定・順位が上がった, 勉強量が増えた"}
+【自由記述・補足】: ${input.freeText || "なし"}
 【含めたいキーワード】: ${input.keywords.join(", ") || "個別指導, 大学受験"}
 
 ※出力フォーマット:
@@ -183,9 +185,12 @@ export function buildFallbackReview(input: NormalizedReviewRequest) {
   const support = goodPoints[0] || "先生が丁寧に見てくれる";
   const environment = goodPoints[1] || "質問しやすい雰囲気";
   const growth = changes[0] || "家庭でも自分から机に向かう時間が増えた";
+  const freeTextPhrase = input.freeText
+    ? `${input.freeText}という具体的な状況も踏まえて相談でき、`
+    : "";
   const keywordPhrase = buildKeywordPhrase(input.keywords);
 
-  return `${grade}の子どもの${trigger}を考えて${input.schoolName}に通い始めました。${support}ところが特に安心でき、${environment}も本人には合っていたようです。通ううちに${growth}と感じる場面が増え、親としても前向きな変化を実感しています。${keywordPhrase}`.trim();
+  return `${grade}の子どもの${trigger}を考えて${input.schoolName}に通い始めました。${freeTextPhrase}${support}ところが特に安心でき、${environment}も本人には合っていたようです。通ううちに${growth}と感じる場面が増え、親としても前向きな変化を実感しています。${keywordPhrase}`.trim();
 }
 
 export function buildFallbackReviews(input: NormalizedReviewRequest) {

@@ -143,7 +143,8 @@ describe("POST /api/generate-review", () => {
 
     expect(response.status).toBe(200);
     expect(body.reviews).toEqual([body.review]);
-    expect(body.review).not.toContain("苦手だった数学に向き合えるようになりました。");
+    expect(body.review).toContain("苦手だった数学に向き合えるようになりました。");
+    expect(body.review).not.toContain("自由記述");
     expect(body.review).not.toContain("大学受験対策、価格");
   });
 

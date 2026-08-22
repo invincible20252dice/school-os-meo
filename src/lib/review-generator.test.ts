@@ -115,7 +115,7 @@ describe("review-generator", () => {
     expect(review).not.toContain("通塾のきっかけ");
     expect(review).not.toContain("良かったと感じた点");
     expect(review).not.toContain("大学受験対策、価格、成績の変化");
-    expect(review).not.toContain("苦手だった数学が少しずつ解けるようになりました。");
+    expect(review).toContain("苦手だった数学が少しずつ解けるようになりました。");
   });
 
   it("builds prompt content for one choice-based review", () => {
@@ -146,8 +146,8 @@ describe("review-generator", () => {
     expect(userContent).toContain("【学年】: 高校生");
     expect(userContent).toContain("【通塾のきっかけ】: 大学受験対策");
     expect(userContent).toContain("【良かったと感じた点】: 先生の説明, 質問しやすさ");
+    expect(userContent).toContain("【自由記述・補足】: 模試の成績が上がりました。");
     expect(userContent).toContain("【含めたいキーワード】: 個別指導, 大学受験");
-    expect(userContent).not.toContain("模試の成績が上がりました。");
   });
 
   it("uses fallback detail and fallback reasons when building reviews", () => {

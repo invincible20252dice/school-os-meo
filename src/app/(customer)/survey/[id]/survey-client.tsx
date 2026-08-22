@@ -87,11 +87,7 @@ function ExternalIcon() {
 }
 
 function getInitialQuestions(data?: SerializedPublicSurveyResponse | null) {
-  return data ? extractChoiceSurveyQuestions(data) : [];
-}
-
-function extractChoiceSurveyQuestions(data: SerializedPublicSurveyResponse | object) {
-  return extractPublicSurveyQuestions(data).filter((item) => item.type !== "TEXT");
+  return data ? extractPublicSurveyQuestions(data) : [];
 }
 
 function getInitialTextRange(data?: SerializedPublicSurveyResponse | null) {
@@ -159,7 +155,7 @@ export default function SurveyClient({
 
   useEffect(() => {
     if (initialData) {
-      const questions = extractChoiceSurveyQuestions(initialData);
+      const questions = extractPublicSurveyQuestions(initialData);
       setDebugError(
         !initialData.success || questions.length === 0
           ? JSON.stringify(
@@ -252,7 +248,7 @@ export default function SurveyClient({
           setGoogleReviewUrl(getPublicSurveyReviewDestinationUrl(data.googleReviewUrl));
         }
 
-        const questions = extractChoiceSurveyQuestions(data);
+        const questions = extractPublicSurveyQuestions(data);
 
         setDebugError(
           !response.ok || questions.length === 0
@@ -364,6 +360,7 @@ export default function SurveyClient({
           schoolName,
           rating: 5,
           selectedReasons: promptInput.selectedReasons,
+          freeText: promptInput.freeText,
           keywords: surveyKeywords,
           questionAnswers: promptInput.questionAnswers,
         }),
@@ -388,7 +385,7 @@ export default function SurveyClient({
           schoolName,
           rating: 5,
           selectedReasons: promptInput.selectedReasons,
-          freeText: "",
+          freeText: promptInput.freeText,
           questionAnswers: promptInput.questionAnswers,
           generatedReviews,
         }),

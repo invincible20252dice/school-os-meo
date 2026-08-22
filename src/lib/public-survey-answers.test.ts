@@ -113,7 +113,7 @@ describe("public-survey-answers", () => {
     expect(result[0].value).toEqual([]);
   });
 
-  it("builds prompt input from selected choices without free-text answers", () => {
+  it("builds prompt input from selected choices and free-text answers", () => {
     const answers = {
       q1: "大学受験",
       q2: ["質問しやすい", "自習室"],
@@ -130,14 +130,14 @@ describe("public-survey-answers", () => {
       "質問しやすい",
       "自習室",
     ]);
-    expect(input.freeText).toBe("");
+    expect(input.freeText).toBe("家での勉強時間が増えた");
     expect(input.freeText).not.toContain("通塾のきっかけ");
     expect(input.freeText).not.toContain("良かった点");
-    expect(input.questionAnswers).toHaveLength(2);
-    expect(input.questionAnswers.map((answer) => answer.question)).not.toContain("変化");
+    expect(input.questionAnswers).toHaveLength(3);
+    expect(input.questionAnswers.map((answer) => answer.question)).toContain("変化");
   });
 
-  it("excludes multiple free-text answers from generated prompt material", () => {
+  it("joins multiple free-text answers for generated prompt material", () => {
     const input = buildReviewGenerationInputFromSurveyAnswers({
       questions: [
         {
@@ -154,8 +154,17 @@ describe("public-survey-answers", () => {
     });
 
     expect(input.selectedReasons).toEqual([]);
-    expect(input.freeText).toBe("");
-    expect(input.questionAnswers).toEqual([]);
+    expect(input.freeText).toBe(
+      "苦手だった数学に向き合えた\n家庭学習の時間が増えた",
+    );
+    expect(input.questionAnswers).toEqual([
+      {
+        questionId: "q3",
+        question: "お子さまの変化",
+        type: "TEXT",
+        value: ["苦手だった数学に向き合えた", "家庭学習の時間が増えた"],
+      },
+    ]);
     expect(input.freeText).not.toContain("お子さまの変化");
   });
 
@@ -167,5 +176,34 @@ describe("public-survey-answers", () => {
 
     expect(input.selectedReasons).toEqual([]);
     expect(input.freeText).toBe("");
+  });
+
+  it("treats public free-text aliases as text answers", () => {
+    const input = buildReviewGenerationInputFromSurveyAnswers({
+      questions: [
+        {
+          id: "q-free",
+          type: "自由記述",
+          question: "高校はどこですか？",
+          options: [],
+          order: 1,
+        },
+        {
+          id: "q-textarea",
+          type: "textarea",
+          question: "印象に残っていること",
+          options: [],
+          order: 2,
+        },
+      ],
+      answers: {
+        "q-free": "熊本高校",
+        "q-textarea": "質問しやすかった",
+      },
+    });
+
+    expect(input.selectedReasons).toEqual([]);
+    expect(input.freeText).toBe("熊本高校\n質問しやすかった");
+    expect(input.questionAnswers).toHaveLength(2);
   });
 });

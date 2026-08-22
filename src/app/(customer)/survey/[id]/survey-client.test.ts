@@ -105,10 +105,12 @@ describe("SurveyClient", () => {
     expect(html).toContain("予備校下通り校");
     expect(html).toContain("通塾のきっかけを教えてください");
     expect(html).toContain("良かったと感じた点を選んでください");
+    expect(html).toContain("お子さまの変化を教えてください");
+    expect(html).toContain("100〜300文字を目安に入力");
+    expect(html).toContain("<textarea");
     expect(html).toContain("口コミに入れてもよい学年を選んでください");
     expect(html).toContain("選択設問");
     expect(html).toContain("AIで口コミを生成");
-    expect(html).not.toContain("お子さまの変化を教えてください");
     expect(html).not.toContain("AIで口コミを3案生成");
     expect(html).not.toContain("設問データを取得できませんでした");
   });
