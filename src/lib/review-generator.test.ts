@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildFallbackReview,
   buildFallbackReviews,
   buildGoogleReviewUrl,
   buildReviewPromptUserContent,
@@ -13,7 +14,13 @@ describe("review-generator", () => {
       schoolName: "  ",
       rating: 99,
       selectedReasons: ["質問しやすい雰囲気", "", "学習習慣がついた"],
-      freeText: "  苦手科目に向き合えるようになった  ",
+      keywords: " 個別指導, 大学受験 ",
+      questionAnswers: [
+        {
+          question: "口コミに入れてもよい学年を選んでください",
+          value: "高校生",
+        },
+      ],
     });
 
     expect(input.schoolName).toBe("こちらの塾");
@@ -22,7 +29,14 @@ describe("review-generator", () => {
       "質問しやすい雰囲気",
       "学習習慣がついた",
     ]);
-    expect(input.freeText).toBe("苦手科目に向き合えるようになった");
+    expect(input.keywords).toEqual(["個別指導", "大学受験"]);
+    expect(input.questionAnswers).toEqual([
+      {
+        question: "口コミに入れてもよい学年を選んでください",
+        type: undefined,
+        value: "高校生",
+      },
+    ]);
   });
 
   it("uses fallback reasons and minimum rating when reason input is missing", () => {
@@ -51,17 +65,37 @@ describe("review-generator", () => {
     expect(input.selectedReasons).toEqual(["1", "2", "3", "4", "5"]);
   });
 
-  it("builds exactly three fallback reviews with school context", () => {
+  it("normalizes array keywords and removes blank question answers", () => {
+    const input = normalizeReviewRequest({
+      schoolName: "青葉ゼミナール",
+      selectedReasons: ["大学受験対策"],
+      keywords: [" 個別指導 ", "", "大学受験"],
+      questionAnswers: [
+        { question: "学年", value: " " },
+        { question: "良かった点", value: ["質問しやすさ", " "] },
+      ],
+    });
+
+    expect(input.keywords).toEqual(["個別指導", "大学受験"]);
+    expect(input.questionAnswers).toEqual([
+      {
+        question: "良かった点",
+        type: undefined,
+        value: ["質問しやすさ"],
+      },
+    ]);
+  });
+
+  it("builds exactly one fallback review with school context", () => {
     const input = normalizeReviewRequest({
       schoolName: "青葉ゼミナール",
       rating: 5,
       selectedReasons: ["先生の説明がわかりやすい"],
-      freeText: "家でも自分から机に向かう日が増えました。",
     });
 
     const reviews = buildFallbackReviews(input);
 
-    expect(reviews).toHaveLength(3);
+    expect(reviews).toHaveLength(1);
     expect(reviews.every((review) => review.includes("青葉ゼミナール"))).toBe(
       true,
     );
@@ -76,29 +110,44 @@ describe("review-generator", () => {
       freeText: "苦手だった数学が少しずつ解けるようになりました。",
     });
 
-    const reviews = buildFallbackReviews(input);
-    const joinedReviews = reviews.join("\n");
+    const review = buildFallbackReview(input);
 
-    expect(reviews).toHaveLength(3);
-    expect(joinedReviews).not.toContain("通塾のきっかけ");
-    expect(joinedReviews).not.toContain("良かったと感じた点");
-    expect(joinedReviews).not.toContain("大学受験対策、価格、成績の変化");
-    expect(joinedReviews).toContain("苦手だった数学が少しずつ解けるようになりました。");
+    expect(review).not.toContain("通塾のきっかけ");
+    expect(review).not.toContain("良かったと感じた点");
+    expect(review).not.toContain("大学受験対策、価格、成績の変化");
+    expect(review).not.toContain("苦手だった数学が少しずつ解けるようになりました。");
   });
 
-  it("builds prompt content that forbids question labels and raw keyword lists", () => {
+  it("builds prompt content for one choice-based review", () => {
     const input = normalizeReviewRequest({
       schoolName: "大学受験専門塾 iスクール予備校",
       selectedReasons: ["大学受験対策", "価格", "成績の変化"],
       freeText: "模試の成績が上がりました。",
+      keywords: "個別指導, 大学受験",
+      questionAnswers: [
+        {
+          question: "口コミに入れてもよい学年を選んでください",
+          value: "高校生",
+        },
+        {
+          question: "通塾のきっかけを教えてください",
+          value: "大学受験対策",
+        },
+        {
+          question: "良かったと感じた点を選んでください",
+          value: ["先生の説明", "質問しやすさ"],
+        },
+      ],
     });
     const userContent = buildReviewPromptUserContent(input);
 
-    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("設問文や質問文自体");
-    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("キーワード羅列は禁止");
-    expect(userContent).toContain("selectedKeywords");
-    expect(userContent).toContain("episode");
-    expect(userContent).not.toContain("通塾のきっかけを教えてください");
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("1つの口コミ文");
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("複数案は不要");
+    expect(userContent).toContain("【学年】: 高校生");
+    expect(userContent).toContain("【通塾のきっかけ】: 大学受験対策");
+    expect(userContent).toContain("【良かったと感じた点】: 先生の説明, 質問しやすさ");
+    expect(userContent).toContain("【含めたいキーワード】: 個別指導, 大学受験");
+    expect(userContent).not.toContain("模試の成績が上がりました。");
   });
 
   it("uses fallback detail and fallback reasons when building reviews", () => {
@@ -106,11 +155,13 @@ describe("review-generator", () => {
       schoolName: "青葉ゼミナール",
       rating: 5,
       selectedReasons: [],
+      keywords: ["個別指導", "大学受験"],
     });
 
-    expect(reviews).toHaveLength(3);
+    expect(reviews).toHaveLength(1);
     expect(reviews.join("\n")).toContain("家庭でも自分から机に向かう時間");
     expect(reviews.join("\n")).toContain("先生が丁寧に見てくれる");
+    expect(reviews.join("\n")).toContain("地域で個別指導や大学受験");
   });
 
   it("builds a Google review URL from a place id", () => {

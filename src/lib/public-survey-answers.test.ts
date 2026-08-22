@@ -113,7 +113,7 @@ describe("public-survey-answers", () => {
     expect(result[0].value).toEqual([]);
   });
 
-  it("builds prompt input without mixing question labels into free text", () => {
+  it("builds prompt input from selected choices without free-text answers", () => {
     const answers = {
       q1: "大学受験",
       q2: ["質問しやすい", "自習室"],
@@ -130,13 +130,14 @@ describe("public-survey-answers", () => {
       "質問しやすい",
       "自習室",
     ]);
-    expect(input.freeText).toBe("家での勉強時間が増えた");
+    expect(input.freeText).toBe("");
     expect(input.freeText).not.toContain("通塾のきっかけ");
     expect(input.freeText).not.toContain("良かった点");
-    expect(input.questionAnswers).toHaveLength(3);
+    expect(input.questionAnswers).toHaveLength(2);
+    expect(input.questionAnswers.map((answer) => answer.question)).not.toContain("変化");
   });
 
-  it("joins multiple free-text answers without adding question labels", () => {
+  it("excludes multiple free-text answers from generated prompt material", () => {
     const input = buildReviewGenerationInputFromSurveyAnswers({
       questions: [
         {
@@ -153,9 +154,8 @@ describe("public-survey-answers", () => {
     });
 
     expect(input.selectedReasons).toEqual([]);
-    expect(input.freeText).toBe(
-      "苦手だった数学に向き合えた\n家庭学習の時間が増えた",
-    );
+    expect(input.freeText).toBe("");
+    expect(input.questionAnswers).toEqual([]);
     expect(input.freeText).not.toContain("お子さまの変化");
   });
 

@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("POST /api/generate-review", () => {
-  it("returns three fallback reviews when OpenAI is not configured", async () => {
+  it("returns one fallback review when OpenAI is not configured", async () => {
     delete process.env.OPENAI_API_KEY;
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
@@ -25,21 +25,21 @@ describe("POST /api/generate-review", () => {
         }),
       }),
     );
-    const body = (await response.json()) as { reviews: string[] };
+    const body = (await response.json()) as { review: string; reviews: string[] };
 
     expect(response.status).toBe(200);
-    expect(body.reviews).toHaveLength(3);
-    expect(body.reviews.join("\n")).toContain("青葉ゼミナール");
+    expect(body.review).toContain("青葉ゼミナール");
+    expect(body.reviews).toEqual([body.review]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("returns OpenAI generated reviews when the response schema is valid", async () => {
+  it("returns one OpenAI generated review when the response schema is valid", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
     const fetchSpy = vi.fn(async () =>
       new Response(
         JSON.stringify({
           output_text: JSON.stringify({
-            reviews: ["生成口コミ1", "生成口コミ2", "生成口コミ3", "余分な口コミ"],
+            review: "生成口コミ1",
           }),
         }),
         { status: 200 },
@@ -54,14 +54,20 @@ describe("POST /api/generate-review", () => {
           schoolName: "青葉ゼミナール",
           rating: 4,
           selectedReasons: ["面倒見がよい"],
-          freeText: "定期テスト前の声かけが助かりました。",
+          keywords: "個別指導, 大学受験",
+          questionAnswers: [
+            { question: "学年", value: "高校生" },
+            { question: "通塾のきっかけ", value: "大学受験対策" },
+            { question: "良かった点", value: ["面倒見がよい"] },
+          ],
         }),
       }),
     );
-    const body = (await response.json()) as { reviews: string[] };
+    const body = (await response.json()) as { review: string; reviews: string[] };
 
     expect(response.status).toBe(200);
-    expect(body.reviews).toEqual(["生成口コミ1", "生成口コミ2", "生成口コミ3"]);
+    expect(body.review).toBe("生成口コミ1");
+    expect(body.reviews).toEqual(["生成口コミ1"]);
     expect(fetchSpy).toHaveBeenCalledWith(
       "https://api.openai.com/v1/responses",
       expect.objectContaining({
@@ -78,10 +84,11 @@ describe("POST /api/generate-review", () => {
     const systemPrompt = payload.input.find((item) => item.role === "system")?.content;
     const userPrompt = payload.input.find((item) => item.role === "user")?.content;
 
-    expect(systemPrompt).toContain("設問文や質問文自体");
-    expect(systemPrompt).toContain("キーワード羅列は禁止");
-    expect(userPrompt).toContain("selectedKeywords");
-    expect(userPrompt).toContain("episode");
+    expect(systemPrompt).toContain("1つの口コミ文");
+    expect(systemPrompt).toContain("複数案は不要");
+    expect(userPrompt).toContain("【学年】: 高校生");
+    expect(userPrompt).toContain("【通塾のきっかけ】: 大学受験対策");
+    expect(userPrompt).toContain("【含めたいキーワード】: 個別指導, 大学受験");
   });
 
   it("falls back when OpenAI returns a response without text", async () => {
@@ -102,14 +109,14 @@ describe("POST /api/generate-review", () => {
         }),
       }),
     );
-    const body = (await response.json()) as { reviews: string[] };
+    const body = (await response.json()) as { review: string; reviews: string[] };
 
     expect(response.status).toBe(200);
-    expect(body.reviews).toHaveLength(3);
-    expect(body.reviews.join("\n")).toContain("青葉ゼミナール");
+    expect(body.review).toContain("青葉ゼミナール");
+    expect(body.reviews).toEqual([body.review]);
   });
 
-  it("falls back when OpenAI JSON does not include reviews", async () => {
+  it("falls back when OpenAI JSON does not include a review", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
     vi.stubGlobal(
       "fetch",
@@ -132,14 +139,12 @@ describe("POST /api/generate-review", () => {
         }),
       }),
     );
-    const body = (await response.json()) as { reviews: string[] };
+    const body = (await response.json()) as { review: string; reviews: string[] };
 
     expect(response.status).toBe(200);
-    expect(body.reviews).toHaveLength(3);
-    expect(body.reviews.join("\n")).toContain(
-      "苦手だった数学に向き合えるようになりました。",
-    );
-    expect(body.reviews.join("\n")).not.toContain("大学受験対策、価格");
+    expect(body.reviews).toEqual([body.review]);
+    expect(body.review).not.toContain("苦手だった数学に向き合えるようになりました。");
+    expect(body.review).not.toContain("大学受験対策、価格");
   });
 
   it("returns a 500 response when OpenAI rejects the request", async () => {

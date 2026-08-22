@@ -24,6 +24,10 @@ export type PublicSurveyQuestionAnswer = {
   value: PublicSurveyAnswerValue;
 };
 
+function isTextQuestion(type: PublicSurveyQuestionType) {
+  return String(type).toUpperCase() === "TEXT" || String(type).toLowerCase() === "text";
+}
+
 export function createInitialPublicSurveyAnswers(
   questions: PublicSurveyQuestion[],
 ): PublicSurveyAnswerState {
@@ -111,23 +115,18 @@ export function buildReviewGenerationInputFromSurveyAnswers({
   questions: PublicSurveyQuestion[];
   answers: PublicSurveyAnswerState;
 }) {
-  const questionAnswers = buildPublicSurveyQuestionAnswers(questions, answers);
+  const questionAnswers = buildPublicSurveyQuestionAnswers(
+    questions.filter((question) => !isTextQuestion(question.type)),
+    answers,
+  ).filter((answer) => getAnswerValues(answers, answer.questionId).length > 0);
   const selectedReasons = questionAnswers
-    .filter((answer) => answer.type !== "TEXT")
     .flatMap((answer) => (Array.isArray(answer.value) ? answer.value : [answer.value]))
     .map((value) => value.trim())
     .filter(Boolean);
-  const freeText = questionAnswers
-    .filter((answer) => answer.type === "TEXT")
-    .flatMap((answer) => {
-      const values = Array.isArray(answer.value) ? answer.value : [answer.value];
-      return values.map((value) => value.trim()).filter(Boolean);
-    })
-    .join("\n");
 
   return {
     selectedReasons,
-    freeText,
+    freeText: "",
     questionAnswers,
   };
 }

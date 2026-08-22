@@ -87,7 +87,11 @@ function ExternalIcon() {
 }
 
 function getInitialQuestions(data?: SerializedPublicSurveyResponse | null) {
-  return data ? extractPublicSurveyQuestions(data) : [];
+  return data ? extractChoiceSurveyQuestions(data) : [];
+}
+
+function extractChoiceSurveyQuestions(data: SerializedPublicSurveyResponse | object) {
+  return extractPublicSurveyQuestions(data).filter((item) => item.type !== "TEXT");
 }
 
 function getInitialTextRange(data?: SerializedPublicSurveyResponse | null) {
@@ -117,6 +121,9 @@ export default function SurveyClient({
   );
   const [surveyTitle, setSurveyTitle] = useState(
     initialData?.survey?.title || "通塾体験を口コミ文に整えます",
+  );
+  const [surveyKeywords, setSurveyKeywords] = useState(
+    initialData?.survey?.keywords || initialData?.survey?.requiredKeywords || "",
   );
   const [surveyItems, setSurveyItems] = useState<PublicSurveyItem[]>(initialQuestions);
   const [surveyTextRange, setSurveyTextRange] = useState(() =>
@@ -152,7 +159,7 @@ export default function SurveyClient({
 
   useEffect(() => {
     if (initialData) {
-      const questions = extractPublicSurveyQuestions(initialData);
+      const questions = extractChoiceSurveyQuestions(initialData);
       setDebugError(
         !initialData.success || questions.length === 0
           ? JSON.stringify(
@@ -180,6 +187,9 @@ export default function SurveyClient({
 
       if (initialData.survey) {
         setSurveyTitle(initialData.survey.title);
+        setSurveyKeywords(
+          initialData.survey.keywords || initialData.survey.requiredKeywords || "",
+        );
         setSurveyItems(questions);
         setSurveyTextRange(getInitialTextRange(initialData));
         setAnswers(createInitialPublicSurveyAnswers(questions));
@@ -242,7 +252,7 @@ export default function SurveyClient({
           setGoogleReviewUrl(getPublicSurveyReviewDestinationUrl(data.googleReviewUrl));
         }
 
-        const questions = extractPublicSurveyQuestions(data);
+        const questions = extractChoiceSurveyQuestions(data);
 
         setDebugError(
           !response.ok || questions.length === 0
@@ -267,6 +277,7 @@ export default function SurveyClient({
 
         if (data.survey) {
           setSurveyTitle(data.survey.title);
+          setSurveyKeywords(data.survey.keywords || data.survey.requiredKeywords || "");
           setSurveyItems(questions);
           setSurveyTextRange({
             min: data.survey.minChars || data.survey.minCharCount,
@@ -353,7 +364,8 @@ export default function SurveyClient({
           schoolName,
           rating: 5,
           selectedReasons: promptInput.selectedReasons,
-          freeText: promptInput.freeText,
+          keywords: surveyKeywords,
+          questionAnswers: promptInput.questionAnswers,
         }),
       });
 
@@ -361,8 +373,11 @@ export default function SurveyClient({
         throw new Error("生成に失敗しました");
       }
 
-      const data = (await response.json()) as { reviews: string[] };
-      setReviews(data.reviews);
+      const data = (await response.json()) as { review?: string; reviews?: string[] };
+      const generatedReviews = data.review
+        ? [data.review]
+        : data.reviews?.slice(0, 1) ?? [];
+      setReviews(generatedReviews);
 
       const saveResponse = await fetch("/api/survey-responses", {
         method: "POST",
@@ -373,9 +388,9 @@ export default function SurveyClient({
           schoolName,
           rating: 5,
           selectedReasons: promptInput.selectedReasons,
-          freeText: promptInput.freeText,
+          freeText: "",
           questionAnswers: promptInput.questionAnswers,
-          generatedReviews: data.reviews,
+          generatedReviews,
         }),
       });
       const saveData = (await saveResponse.json()) as { message?: string };
@@ -490,7 +505,7 @@ export default function SurveyClient({
             className={styles.primaryButton}
           >
             <SparkIcon />
-            {isLoading ? "生成中..." : "AIで口コミを3案生成"}
+            {isLoading ? "生成中..." : "AIで口コミを生成"}
           </button>
 
           {error ? <p className={styles.error}>{error}</p> : null}
@@ -502,7 +517,7 @@ export default function SurveyClient({
 
       <section className={styles.resultPanel}>
         <div>
-          <div className={styles.resultKicker}>Review Patterns</div>
+          <div className={styles.resultKicker}>Review</div>
           <h2 className={styles.resultTitle}>コピーして Google 口コミ投稿へ</h2>
         </div>
 
@@ -514,7 +529,7 @@ export default function SurveyClient({
           reviews.map((review, index) => (
             <article key={`${review}-${index}`} className={styles.reviewCard}>
               <div className={styles.reviewHeader}>
-                <h3>パターン {index + 1}</h3>
+                <h3>パターン 1</h3>
                 {copiedIndex === index ? (
                   <span className={styles.copiedBadge}>コピー済み</span>
                 ) : null}

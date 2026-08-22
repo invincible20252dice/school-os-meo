@@ -3,6 +3,8 @@ export type GenerateReviewRequest = {
   rating?: number;
   selectedReasons?: string[];
   freeText?: string;
+  keywords?: string | string[];
+  questionAnswers?: ReviewQuestionAnswer[];
 };
 
 export type NormalizedReviewRequest = {
@@ -10,6 +12,14 @@ export type NormalizedReviewRequest = {
   rating: number;
   selectedReasons: string[];
   freeText?: string;
+  keywords: string[];
+  questionAnswers: ReviewQuestionAnswer[];
+};
+
+export type ReviewQuestionAnswer = {
+  question?: string;
+  type?: string;
+  value?: string | string[];
 };
 
 const fallbackReasons = [
@@ -19,19 +29,16 @@ const fallbackReasons = [
 ];
 
 export const REVIEW_GENERATION_SYSTEM_PROMPT = `
-あなたは学習塾・予備校の保護者または生徒本人として、Googleビジネスプロフィールに投稿する自然で説得力のある口コミ文を生成するプロのライターです。
+あなたは学習塾・予備校に通う生徒の保護者として、Googleマップに投稿する自然で高評価な口コミ文を1件執筆するプロライターです。
 
-【絶対遵守ルール】
-1. アンケートの設問文や質問文自体は文章内に絶対に出力しないでください。
-2. 選択されたキーワードを単語の羅列のまま貼り付けず、自然な会話文・感想文の文脈に溶け込ませてください。
-3. 自由記述の具体的なエピソードや変化を主軸にし、保護者のリアルな感情や感謝が伝わるトーンで構成してください。
-4. それぞれ切り口の異なる自然な3パターンを作成してください。
-   - パターン1: 全体的な感謝と変化
-   - パターン2: 先生の指導や対応の良さ
-   - パターン3: 成績アップと学習習慣の定着
-5. 各案は100〜300文字程度に収めてください。
-6. 「通塾のきっかけを教えてください: 大学受験対策」のようなラベル付き出力は禁止です。
-7. 「大学受験対策、価格、成績の変化が良かったです」のようなキーワード羅列は禁止です。
+【執筆ルール】
+1. 出力は「1つの口コミ文（パターン1）」のみ作成してください。複数案は不要です。
+2. アンケートの設問文や質問文自体は文章内に一切出力しないでください。
+3. ユーザーが選択した項目を、自然な文章の流れ・文脈としてストーリー仕立てで繋ぎ合わせてください。
+4. 選択肢やSEOキーワードを「、」で羅列するだけの表現は禁止です。
+5. SEOキーワードが含まれている場合は、文章の自然さを損なわない範囲で文中に違和感なく1〜2箇所盛り込んでください。
+6. 指定文字数は150〜250文字程度の、読みやすく温かみのある日本語にしてください。
+7. 「通塾のきっかけ: 大学受験対策」のようなラベル付き出力は禁止です。
 `;
 
 export function normalizeReviewRequest(
@@ -45,76 +52,144 @@ export function normalizeReviewRequest(
       .filter(Boolean)
       .slice(0, 5) ?? fallbackReasons;
   const freeText = body.freeText?.trim() || undefined;
+  const keywords = normalizeList(body.keywords);
+  const questionAnswers =
+    body.questionAnswers
+      ?.map((answer) => ({
+        question: answer.question?.trim(),
+        type: answer.type,
+        value: Array.isArray(answer.value)
+          ? answer.value.map((value) => value.trim()).filter(Boolean)
+          : answer.value?.trim(),
+      }))
+      .filter((answer) => {
+        const values = Array.isArray(answer.value)
+          ? answer.value
+          : answer.value
+            ? [answer.value]
+            : [];
+        return values.length > 0;
+      }) ?? [];
 
-  return { schoolName, rating, selectedReasons, freeText };
+  return { schoolName, rating, selectedReasons, freeText, keywords, questionAnswers };
 }
 
-function sentenceFromReason(reason: string | undefined, fallback: string) {
-  return reason || fallback;
+function normalizeList(value: string | string[] | undefined) {
+  const values = Array.isArray(value)
+    ? value
+    : value
+      ? value.split(/[,\n、]/)
+      : [];
+
+  return values.map((item) => item.trim()).filter(Boolean).slice(0, 6);
 }
 
-function buildContextPhrase(reasons: string[]) {
-  const [first, second] = reasons;
-
-  if (first && second) {
-    return `${first}について相談したくて通い始めましたが、${second}の面でも安心して任せられています`;
+function answerValues(answer: ReviewQuestionAnswer) {
+  if (Array.isArray(answer.value)) {
+    return answer.value.map((value) => value.trim()).filter(Boolean);
   }
 
-  if (first) {
-    return `${first}について相談したくて通い始めました`;
-  }
-
-  return "学習面での不安を相談したくて通い始めました";
+  return answer.value?.trim() ? [answer.value.trim()] : [];
 }
 
-function buildSupportPhrase(reasons: string[]) {
-  const [first, second] = reasons;
+function findAnswerByQuestion(input: NormalizedReviewRequest, keywords: string[]) {
+  const answer = (input.questionAnswers ?? []).find((item) =>
+    keywords.some((keyword) => item.question?.includes(keyword)),
+  );
 
-  if (first && second) {
-    return `${first}ところに加えて、${second}についても丁寧に見ていただける`;
+  return answer ? answerValues(answer) : [];
+}
+
+function firstAnswerByQuestion(
+  input: NormalizedReviewRequest,
+  keywords: string[],
+  fallback: string,
+) {
+  return findAnswerByQuestion(input, keywords)[0] || fallback;
+}
+
+function answersByQuestion(
+  input: NormalizedReviewRequest,
+  keywords: string[],
+  fallback: string[],
+) {
+  const values = findAnswerByQuestion(input, keywords);
+  return values.length ? values : fallback;
+}
+
+function buildKeywordPhrase(keywords: string[]) {
+  const safeKeywords = keywords ?? [];
+
+  if (safeKeywords.length === 0) {
+    return "";
   }
 
-  if (first) {
-    return `${first}ところまで丁寧に見ていただける`;
-  }
-
-  return "子どもの理解度や性格に合わせて丁寧に見ていただける";
+  return `地域で${safeKeywords.slice(0, 2).join("や")}を考えているご家庭にも合う塾だと感じます。`;
 }
 
 export function buildReviewPromptUserContent(input: NormalizedReviewRequest) {
-  return JSON.stringify({
-    schoolName: input.schoolName,
-    rating: input.rating,
-    selectedKeywords: input.selectedReasons,
-    episode: input.freeText || "",
-    output: {
-      count: 3,
-      format: "JSONのみ",
-      note:
-        "selectedKeywordsは参考情報です。設問文やラベルは出さず、自然な体験談として書いてください。",
-    },
-  });
+  const grade = firstAnswerByQuestion(input, ["学年"], "高校生");
+  const trigger = firstAnswerByQuestion(
+    input,
+    ["きっかけ", "通塾", "入塾"],
+    "大学受験対策",
+  );
+  const goodPoints = answersByQuestion(
+    input,
+    ["良かった", "感じた点", "良かった点"],
+    input.selectedReasons.slice(0, 3),
+  );
+  const changes = answersByQuestion(
+    input,
+    ["変化", "成績", "習慣"],
+    input.selectedReasons.slice(2, 5),
+  );
+
+  return `
+以下のアンケート選択結果をもとに、Google口コミ文を1つ作成してください。
+
+【校舎名】: ${input.schoolName}
+【学年】: ${grade}
+【通塾のきっかけ】: ${trigger}
+【良かったと感じた点】: ${goodPoints.join(", ") || "先生の説明, 質問しやすさ"}
+【お子さんの変化】: ${changes.join(", ") || "模試の判定・順位が上がった, 勉強量が増えた"}
+【含めたいキーワード】: ${input.keywords.join(", ") || "個別指導, 大学受験"}
+
+※出力フォーマット:
+{"review": "完成した口コミ文本文"}
+`;
 }
 
-export function buildFallbackReviews(input: NormalizedReviewRequest) {
+export function buildFallbackReview(input: NormalizedReviewRequest) {
   const reasons = input.selectedReasons.length
     ? input.selectedReasons
     : fallbackReasons;
-  const detail = input.freeText
-    ? input.freeText
-    : "以前より家庭でも自分から机に向かう時間が増え、少しずつ自信がついてきたように感じます。";
-  const context = buildContextPhrase(reasons);
-  const support = buildSupportPhrase(reasons);
-  const growth = sentenceFromReason(
-    reasons.find((reason) => reason.includes("成績") || reason.includes("習慣")),
-    "日々の学習習慣",
+  const grade = firstAnswerByQuestion(input, ["学年"], "高校生");
+  const trigger = firstAnswerByQuestion(
+    input,
+    ["きっかけ", "通塾", "入塾"],
+    reasons[0] || "大学受験対策",
   );
+  const goodPoints = answersByQuestion(
+    input,
+    ["良かった", "感じた点", "良かった点"],
+    reasons.slice(1, 3),
+  );
+  const changes = answersByQuestion(
+    input,
+    ["変化", "成績", "習慣"],
+    reasons.slice(3, 5),
+  );
+  const support = goodPoints[0] || "先生が丁寧に見てくれる";
+  const environment = goodPoints[1] || "質問しやすい雰囲気";
+  const growth = changes[0] || "家庭でも自分から机に向かう時間が増えた";
+  const keywordPhrase = buildKeywordPhrase(input.keywords);
 
-  return [
-    `${input.schoolName}には、${context}。通い始めてから学習への向き合い方が前向きになり、${detail}親としても安心して見守れるようになりました。`,
-    `${input.schoolName}の先生方は、${support}のでありがたいです。質問しやすい雰囲気があり、本人も不安をため込まずに取り組めています。`,
-    `${input.schoolName}に通うようになって、${growth}が少しずつ定着してきました。苦手な単元にも逃げずに向き合う姿が増え、今後の伸びにも期待しています。`,
-  ];
+  return `${grade}の子どもの${trigger}を考えて${input.schoolName}に通い始めました。${support}ところが特に安心でき、${environment}も本人には合っていたようです。通ううちに${growth}と感じる場面が増え、親としても前向きな変化を実感しています。${keywordPhrase}`.trim();
+}
+
+export function buildFallbackReviews(input: NormalizedReviewRequest) {
+  return [buildFallbackReview(input)];
 }
 
 export function buildGoogleReviewUrl(placeId: string) {

@@ -34,18 +34,13 @@ async function generateWithOpenAI(input: NormalizedReviewRequest) {
       text: {
         format: {
           type: "json_schema",
-          name: "review_patterns",
+          name: "review_pattern",
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["reviews"],
+            required: ["review"],
             properties: {
-              reviews: {
-                type: "array",
-                minItems: 3,
-                maxItems: 3,
-                items: { type: "string" },
-              },
+              review: { type: "string" },
             },
           },
           strict: true,
@@ -64,8 +59,8 @@ async function generateWithOpenAI(input: NormalizedReviewRequest) {
     return null;
   }
 
-  const parsed = JSON.parse(text) as { reviews?: string[] };
-  return parsed.reviews?.slice(0, 3) ?? null;
+  const parsed = JSON.parse(text) as { review?: string };
+  return parsed.review?.trim() || null;
 }
 
 export async function POST(request: Request) {
@@ -73,9 +68,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as GenerateReviewRequest;
     const input = normalizeReviewRequest(body);
     const generated = await generateWithOpenAI(input);
+    const review = generated ?? buildFallbackReviews(input)[0];
 
     return NextResponse.json({
-      reviews: generated ?? buildFallbackReviews(input),
+      review,
+      reviews: [review],
     });
   } catch (error) {
     console.error(error);
