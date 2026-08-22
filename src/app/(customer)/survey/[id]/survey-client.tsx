@@ -133,6 +133,7 @@ export default function SurveyClient({
   );
   const [reviews, setReviews] = useState<string[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copyNotice, setCopyNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [debugError, setDebugError] = useState(initialDebugError);
@@ -408,6 +409,9 @@ export default function SurveyClient({
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     const targetUrl = getPublicSurveyReviewDestinationUrl(googleReviewUrl);
+    setCopyNotice(
+      "口コミ本文をコピーしました。開いたGoogle投稿画面の入力欄に貼り付けて投稿してください。",
+    );
     console.log("[Review Link Target]:", targetUrl);
     window.open(
       targetUrl,
@@ -523,26 +527,37 @@ export default function SurveyClient({
             アンケート入力後に生成された口コミ候補がここに表示されます。
           </div>
         ) : (
-          reviews.map((review, index) => (
-            <article key={`${review}-${index}`} className={styles.reviewCard}>
-              <div className={styles.reviewHeader}>
-                <h3>パターン 1</h3>
-                {copiedIndex === index ? (
-                  <span className={styles.copiedBadge}>コピー済み</span>
-                ) : null}
-              </div>
-              <p>{review}</p>
-              <button
-                type="button"
-                onClick={() => copyAndOpen(review, index)}
-                className={styles.copyButton}
-              >
+          <>
+            {copyNotice ? (
+              <div className={styles.copyNotice} role="status" aria-live="polite">
                 <CopyIcon />
-                コピーして投稿画面へ
-                <ExternalIcon />
-              </button>
-            </article>
-          ))
+                <div>
+                  <strong>コピー完了</strong>
+                  <p>{copyNotice}</p>
+                </div>
+              </div>
+            ) : null}
+            {reviews.map((review, index) => (
+              <article key={`${review}-${index}`} className={styles.reviewCard}>
+                <div className={styles.reviewHeader}>
+                  <h3>パターン 1</h3>
+                  {copiedIndex === index ? (
+                    <span className={styles.copiedBadge}>コピー済み</span>
+                  ) : null}
+                </div>
+                <p>{review}</p>
+                <button
+                  type="button"
+                  onClick={() => copyAndOpen(review, index)}
+                  className={styles.copyButton}
+                >
+                  <CopyIcon />
+                  コピーして投稿画面へ
+                  <ExternalIcon />
+                </button>
+              </article>
+            ))}
+          </>
         )}
       </section>
     </main>

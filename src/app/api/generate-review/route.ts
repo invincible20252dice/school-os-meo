@@ -5,7 +5,9 @@ import {
   type GenerateReviewRequest,
   type NormalizedReviewRequest,
   normalizeReviewRequest,
+  REVIEW_GENERATION_PRESENCE_PENALTY,
   REVIEW_GENERATION_SYSTEM_PROMPT,
+  REVIEW_GENERATION_TEMPERATURE,
 } from "@/lib/review-generator";
 
 async function generateWithOpenAI(input: NormalizedReviewRequest) {
@@ -21,6 +23,8 @@ async function generateWithOpenAI(input: NormalizedReviewRequest) {
     },
     body: JSON.stringify({
       model: "gpt-4.1-mini",
+      temperature: REVIEW_GENERATION_TEMPERATURE,
+      presence_penalty: REVIEW_GENERATION_PRESENCE_PENALTY,
       input: [
         {
           role: "system",

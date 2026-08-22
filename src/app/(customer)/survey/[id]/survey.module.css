@@ -337,6 +337,30 @@
   font-weight: 700;
 }
 
+.copyNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(39, 181, 140, 0.28);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.copyNotice strong {
+  display: block;
+  color: #0f6b59;
+  font-size: 14px;
+}
+
+.copyNotice p {
+  margin: 4px 0 0;
+  color: #43505a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .copyButton {
   margin-top: 18px;
   min-height: 42px;

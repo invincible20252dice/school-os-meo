@@ -79,16 +79,24 @@ describe("POST /api/generate-review", () => {
     );
     const [, requestInit] = fetchSpy.mock.calls[0];
     const payload = JSON.parse(String(requestInit?.body)) as {
+      temperature: number;
+      presence_penalty: number;
       input: Array<{ role: string; content: string }>;
     };
     const systemPrompt = payload.input.find((item) => item.role === "system")?.content;
     const userPrompt = payload.input.find((item) => item.role === "user")?.content;
 
+    expect(payload.temperature).toBeGreaterThanOrEqual(0.85);
+    expect(payload.temperature).toBeLessThanOrEqual(0.9);
+    expect(payload.presence_penalty).toBe(0.6);
     expect(systemPrompt).toContain("1つの口コミ文");
     expect(systemPrompt).toContain("複数案は不要");
+    expect(systemPrompt).toContain("固定テンプレート構文");
+    expect(systemPrompt).toContain("そのままコピペ結合しない");
     expect(userPrompt).toContain("【学年】: 高校生");
     expect(userPrompt).toContain("【通塾のきっかけ】: 大学受験対策");
     expect(userPrompt).toContain("【含めたいキーワード】: 個別指導, 大学受験");
+    expect(userPrompt).toContain("【今回の語り口】:");
   });
 
   it("falls back when OpenAI returns a response without text", async () => {
