@@ -70,6 +70,10 @@ export default function SettingsPage({
   const [manualGbpLocationId, setManualGbpLocationId] = useState("");
   const [googleMessage, setGoogleMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+  const [lineFieldsTouched, setLineFieldsTouched] = useState({
+    channelAccessToken: false,
+    destinationId: false,
+  });
   const [isLoadingSchoolSetting, setIsLoadingSchoolSetting] = useState(false);
   const [isLoadingGbpLocations, setIsLoadingGbpLocations] = useState(false);
   const [isSavingGbpLocation, setIsSavingGbpLocation] = useState(false);
@@ -187,10 +191,18 @@ export default function SettingsPage({
             "",
         });
         setSetting(nextSetting);
+        setLineFieldsTouched({
+          channelAccessToken: false,
+          destinationId: false,
+        });
         setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
         setManualGbpLocationId(nextSetting.selectedGbpLocationId);
       } else if (data.school?.id) {
         setSetting(buildEmptySchoolSetting(data.school.id));
+        setLineFieldsTouched({
+          channelAccessToken: false,
+          destinationId: false,
+        });
         setSelectedGbpLocationName("");
         setManualGbpLocationId("");
       }
@@ -223,10 +235,12 @@ export default function SettingsPage({
         body: JSON.stringify({
           ...setting,
           schoolId,
-          googleRefreshToken: undefined,
-          instagramAccessToken: undefined,
-        }),
-      });
+	          googleRefreshToken: undefined,
+	          instagramAccessToken: undefined,
+	          lineChannelAccessTokenTouched: lineFieldsTouched.channelAccessToken,
+	          lineDestinationIdTouched: lineFieldsTouched.destinationId,
+	        }),
+	      });
       const data = (await response.json()) as {
         message?: string;
         setting?: NullableSchoolSettingState;
@@ -237,9 +251,13 @@ export default function SettingsPage({
         return;
       }
 
-      if (data.setting) {
-        setSetting(normalizeSchoolSetting(data.setting));
-      }
+	      if (data.setting) {
+	        setSetting(normalizeSchoolSetting(data.setting));
+	        setLineFieldsTouched({
+	          channelAccessToken: false,
+	          destinationId: false,
+	        });
+	      }
       setSaveMessage("校舎設定を保存しました。");
     } catch {
       setSaveMessage("校舎設定を保存できませんでした。");
@@ -696,21 +714,29 @@ export default function SettingsPage({
               </label>
               <label>
                 <span>チャネルアクセストークン</span>
-                <input
-                  value={setting.lineChannelAccessToken}
-                  onChange={(event) =>
-                    update("lineChannelAccessToken", event.target.value)
-                  }
-                />
+	                <input
+	                  value={setting.lineChannelAccessToken}
+	                  onChange={(event) => {
+	                    setLineFieldsTouched((current) => ({
+	                      ...current,
+	                      channelAccessToken: true,
+	                    }));
+	                    update("lineChannelAccessToken", event.target.value);
+	                  }}
+	                />
               </label>
               <label>
                 <span>送信先グループID / ユーザーID</span>
-                <input
-                  value={setting.lineDestinationId}
-                  onChange={(event) =>
-                    update("lineDestinationId", event.target.value)
-                  }
-                />
+	                <input
+	                  value={setting.lineDestinationId}
+	                  onChange={(event) => {
+	                    setLineFieldsTouched((current) => ({
+	                      ...current,
+	                      destinationId: true,
+	                    }));
+	                    update("lineDestinationId", event.target.value);
+	                  }}
+	                />
               </label>
               <TestReviewNotificationButton
                 compact

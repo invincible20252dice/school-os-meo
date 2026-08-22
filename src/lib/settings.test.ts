@@ -135,6 +135,22 @@ describe("settings", () => {
     expect(setting.selectedGbpLocationId).toBe("");
   });
 
+  it("normalizes LINE alias keys returned by settings APIs", () => {
+    const setting = normalizeSchoolSetting({
+      schoolId: "school-1",
+      enabled: false,
+      channelAccessToken: "line-token-from-alias",
+      lineUserId: "Ualias",
+    });
+
+    expect(setting.lineNotifyEnabled).toBe(false);
+    expect(setting.lineChannelAccessToken).toBe("line-token-from-alias");
+    expect(setting.lineDestinationId).toBe("Ualias");
+    expect(validateSchoolSetting(setting)).not.toContain(
+      "LINE通知有効時はチャネルアクセストークンを入力してください。",
+    );
+  });
+
   it("masks saved secrets for display", () => {
     expect(maskSecret("")).toBe("未保存");
     expect(maskSecret("short")).toBe("********");

@@ -28,6 +28,13 @@ export type SchoolSettingState = {
 
 export type NullableSchoolSettingState = {
   [K in keyof SchoolSettingState]?: SchoolSettingState[K] | null;
+} & {
+  channelAccessToken?: string | null;
+  lineAccessToken?: string | null;
+  lineUserId?: string | null;
+  targetId?: string | null;
+  groupId?: string | null;
+  enabled?: boolean | null;
 };
 
 export function buildSettingsTabs() {
@@ -116,6 +123,10 @@ function normalizeString(value: string | null | undefined) {
   return value ?? "";
 }
 
+function normalizeFirstString(...values: Array<string | null | undefined>) {
+  return values.map(normalizeString).find(Boolean) || "";
+}
+
 function normalizeStringList(value: string[] | null | undefined) {
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }
@@ -138,9 +149,18 @@ export function normalizeSchoolSetting(
     selectedGbpLocationId: normalizeString(setting.selectedGbpLocationId),
     googleReviewUrl: normalizeString(setting.googleReviewUrl),
     lineNotifyEnabled:
-      setting.lineNotifyEnabled ?? fallback.lineNotifyEnabled,
-    lineChannelAccessToken: normalizeString(setting.lineChannelAccessToken),
-    lineDestinationId: normalizeString(setting.lineDestinationId),
+      setting.lineNotifyEnabled ?? setting.enabled ?? fallback.lineNotifyEnabled,
+    lineChannelAccessToken: normalizeFirstString(
+      setting.lineChannelAccessToken,
+      setting.channelAccessToken,
+      setting.lineAccessToken,
+    ),
+    lineDestinationId: normalizeFirstString(
+      setting.lineDestinationId,
+      setting.lineUserId,
+      setting.targetId,
+      setting.groupId,
+    ),
     notifyOnNewReview:
       setting.notifyOnNewReview ?? fallback.notifyOnNewReview,
     notifyOnLowRating:

@@ -10,10 +10,22 @@ import {
 
 type SchoolSettingPayload = Partial<NullableSchoolSettingState> & {
   schoolId?: string;
+  channelAccessToken?: string;
+  lineAccessToken?: string;
+  lineUserId?: string;
+  targetId?: string;
+  groupId?: string;
+  enabled?: boolean;
+  lineChannelAccessTokenTouched?: boolean;
+  lineDestinationIdTouched?: boolean;
 };
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function firstNormalizedString(...values: unknown[]) {
+  return values.map(normalizeString).find(Boolean) || "";
 }
 
 function normalizeSchoolId(value: unknown) {
@@ -147,7 +159,13 @@ function serializeSetting({
     lineNotifyEnabled:
       schoolSetting?.lineNotifyEnabled ?? fallback.lineNotifyEnabled,
     lineChannelAccessToken: schoolSetting?.lineChannelAccessToken || "",
+    channelAccessToken: schoolSetting?.lineChannelAccessToken || "",
+    lineAccessToken: schoolSetting?.lineChannelAccessToken || "",
     lineDestinationId: schoolSetting?.lineDestinationId || "",
+    lineUserId: schoolSetting?.lineDestinationId || "",
+    targetId: schoolSetting?.lineDestinationId || "",
+    groupId: schoolSetting?.lineDestinationId || "",
+    enabled: schoolSetting?.lineNotifyEnabled ?? fallback.lineNotifyEnabled,
     notifyOnNewReview:
       schoolSetting?.notifyOnNewReview ?? fallback.notifyOnNewReview,
     notifyOnLowRating:
@@ -292,7 +310,11 @@ export async function PATCH(request: Request) {
     );
     const current = await prisma.schoolSetting.findUnique({
       where: { schoolId: school.id },
-      select: { googleRefreshToken: true },
+      select: {
+        googleRefreshToken: true,
+        lineChannelAccessToken: true,
+        lineDestinationId: true,
+      },
     });
     const rawGoogleReviewUrl = normalizeString(body.googleReviewUrl);
     const googleReviewUrl = rawGoogleReviewUrl
@@ -303,6 +325,27 @@ export async function PATCH(request: Request) {
       throw new Error("INVALID_REVIEW_URL");
     }
 
+    const incomingLineChannelAccessToken = firstNormalizedString(
+      body.lineChannelAccessToken,
+      body.channelAccessToken,
+      body.lineAccessToken,
+    );
+    const incomingLineDestinationId = firstNormalizedString(
+      body.lineDestinationId,
+      body.lineUserId,
+      body.targetId,
+      body.groupId,
+    );
+    const lineChannelAccessToken =
+      body.lineChannelAccessTokenTouched || incomingLineChannelAccessToken
+        ? incomingLineChannelAccessToken
+        : current?.lineChannelAccessToken || "";
+    const lineDestinationId =
+      body.lineDestinationIdTouched || incomingLineDestinationId
+        ? incomingLineDestinationId
+        : current?.lineDestinationId || "";
+    const lineNotifyEnabled = body.lineNotifyEnabled ?? body.enabled ?? true;
+
     const setting = await prisma.schoolSetting.upsert({
       where: { schoolId: school.id },
       create: {
@@ -312,9 +355,9 @@ export async function PATCH(request: Request) {
         googleRefreshToken: current?.googleRefreshToken || null,
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
         googleReviewUrl,
-        lineNotifyEnabled: body.lineNotifyEnabled ?? true,
-        lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
-        lineDestinationId: normalizeString(body.lineDestinationId),
+        lineNotifyEnabled,
+        lineChannelAccessToken,
+        lineDestinationId,
         notifyOnNewReview: body.notifyOnNewReview ?? true,
         notifyOnLowRating: body.notifyOnLowRating ?? true,
         instagramConnected: Boolean(body.instagramConnected),
@@ -330,9 +373,9 @@ export async function PATCH(request: Request) {
         googleAccountId: normalizeString(body.googleAccountId),
         selectedGbpLocationId: normalizeString(body.selectedGbpLocationId),
         googleReviewUrl,
-        lineNotifyEnabled: body.lineNotifyEnabled ?? true,
-        lineChannelAccessToken: normalizeString(body.lineChannelAccessToken),
-        lineDestinationId: normalizeString(body.lineDestinationId),
+        lineNotifyEnabled,
+        lineChannelAccessToken,
+        lineDestinationId,
         notifyOnNewReview: body.notifyOnNewReview ?? true,
         notifyOnLowRating: body.notifyOnLowRating ?? true,
         instagramConnected: Boolean(body.instagramConnected),

@@ -107,6 +107,13 @@ describe("/api/settings/school", () => {
     expect(body.setting).toMatchObject({
       schoolId: "school-1",
       lineChannelAccessToken: "line-token",
+      channelAccessToken: "line-token",
+      lineAccessToken: "line-token",
+      lineDestinationId: "U123",
+      lineUserId: "U123",
+      targetId: "U123",
+      groupId: "U123",
+      enabled: true,
       instagramBusinessAccountId: "1784",
       instagramAccessToken: "********",
     });
@@ -197,7 +204,7 @@ describe("/api/settings/school", () => {
     });
   });
 
-  it("saves settings with upsert for the active school id", async () => {
+	  it("saves settings with upsert for the active school id", async () => {
     const { prisma } = await import("@/lib/prisma");
     const response = await PATCH(
       new Request("https://app.example.com/api/settings/school", {
@@ -236,6 +243,104 @@ describe("/api/settings/school", () => {
           googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
           lineDestinationId: "C123",
           promptReviewTone: "FORMAL",
+        }),
+      }),
+    );
+	  });
+
+  it("keeps saved LINE token and destination when untouched empty values are submitted", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/school", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          lineNotifyEnabled: true,
+          lineChannelAccessToken: "",
+          lineDestinationId: "",
+          notifyOnNewReview: true,
+          notifyOnLowRating: true,
+          promptReviewTone: "FRIENDLY",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting.lineChannelAccessToken).toBe("line-token");
+    expect(body.setting.lineDestinationId).toBe("U123");
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          lineChannelAccessToken: "line-token",
+          lineDestinationId: "U123",
+        }),
+      }),
+    );
+  });
+
+  it("allows explicitly touched LINE fields to be cleared", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/school", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          lineNotifyEnabled: false,
+          lineChannelAccessToken: "",
+          lineDestinationId: "",
+          lineChannelAccessTokenTouched: true,
+          lineDestinationIdTouched: true,
+          notifyOnNewReview: true,
+          notifyOnLowRating: true,
+          promptReviewTone: "FRIENDLY",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting.lineChannelAccessToken).toBe("");
+    expect(body.setting.lineDestinationId).toBe("");
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          lineChannelAccessToken: "",
+          lineDestinationId: "",
+          lineNotifyEnabled: false,
+        }),
+      }),
+    );
+  });
+
+  it("accepts LINE alias request keys when saving settings", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/school", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          enabled: true,
+          channelAccessToken: "alias-line-token",
+          lineUserId: "Ualias",
+          notifyOnNewReview: false,
+          notifyOnLowRating: true,
+          promptReviewTone: "FRIENDLY",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting.lineChannelAccessToken).toBe("alias-line-token");
+    expect(body.setting.lineDestinationId).toBe("Ualias");
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          lineNotifyEnabled: true,
+          lineChannelAccessToken: "alias-line-token",
+          lineDestinationId: "Ualias",
+          notifyOnNewReview: false,
         }),
       }),
     );
@@ -296,6 +401,22 @@ describe("/api/settings/school", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it("returns a Japanese validation error for invalid Google review URLs", async () => {
+    const response = await PATCH(
+      new Request("https://app.example.com/api/settings/school", {
+        method: "PATCH",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          googleReviewUrl: "javascript:alert(1)",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.message).toBe("Google口コミ投稿リンクの形式を確認してください。");
   });
 
   it("rejects pending authenticated users", async () => {
