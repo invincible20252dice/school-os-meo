@@ -32,6 +32,7 @@ type SurveyListRow = {
     id: string;
     type: string;
     question: string;
+    placeholder: string | null;
     maxSelect: number | null;
     options: string[];
     order: number;
@@ -56,6 +57,7 @@ function serializeSurvey(row: SurveyListRow) {
       id: item.id,
       type: item.type,
       question: item.question,
+      placeholder: item.placeholder,
       maxSelect: item.maxSelect,
       options: item.options,
       order: item.order,

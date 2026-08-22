@@ -83,17 +83,17 @@ model UserSchool {
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String   @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?  @db.Text
   session_state     String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -127,38 +127,38 @@ model VerificationToken {
 }
 
 model School {
-  id                String       @id @default(cuid())
-  ownerId           String
-  name              String
-  brandName         String?
-  status            SchoolStatus @default(ACTIVE)
-  postalCode        String?
-  prefecture        String?
-  city              String?
-  addressLine       String?
-  phoneNumber       String?
-  websiteUrl        String?
-  googlePlaceId     String       @unique
-  googleMapsUrl     String?
-  gbpAccountId      String?
-  gbpLocationId     String?
-  instagramUserId   String?
-  lineChannelId     String?
-  aiSearchPrompt    String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  ownerId         String
+  name            String
+  brandName       String?
+  status          SchoolStatus @default(ACTIVE)
+  postalCode      String?
+  prefecture      String?
+  city            String?
+  addressLine     String?
+  phoneNumber     String?
+  websiteUrl      String?
+  googlePlaceId   String       @unique
+  googleMapsUrl   String?
+  gbpAccountId    String?
+  gbpLocationId   String?
+  instagramUserId String?
+  lineChannelId   String?
+  aiSearchPrompt  String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  owner          User            @relation("SchoolOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  memberships    UserSchool[]
-  surveySettings SurveySetting[]
-  surveys        Survey[]
-  reviews        Review[]
-  keywordRanks   KeywordRank[]
-  gbpMetrics     GbpMetric[]
-  instagramSetting InstagramSetting?
-  schoolSetting SchoolSetting?
-  syncedPosts    SyncedPost[]
-  targetKeywords TargetKeyword[]
+  owner             User              @relation("SchoolOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships       UserSchool[]
+  surveySettings    SurveySetting[]
+  surveys           Survey[]
+  reviews           Review[]
+  keywordRanks      KeywordRank[]
+  gbpMetrics        GbpMetric[]
+  instagramSetting  InstagramSetting?
+  schoolSetting     SchoolSetting?
+  syncedPosts       SyncedPost[]
+  targetKeywords    TargetKeyword[]
   aioScoreHistories AioScoreHistory[]
 
   @@index([ownerId])
@@ -188,17 +188,17 @@ model SurveySetting {
 }
 
 model Survey {
-  id                String       @id @default(cuid())
+  id                String   @id @default(cuid())
   schoolId          String
   title             String
   requiredKeywords  String?
-  minCharCount      Int          @default(100)
-  maxCharCount      Int          @default(300)
-  isValid           Boolean      @default(true)
+  minCharCount      Int      @default(100)
+  maxCharCount      Int      @default(300)
+  isValid           Boolean  @default(true)
   benefitType       String?
   benefitShowTiming String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   school School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   items  SurveyItem[]
@@ -208,15 +208,16 @@ model Survey {
 }
 
 model SurveyItem {
-  id        String   @id @default(cuid())
-  surveyId  String
-  type      String
-  question  String
-  maxSelect Int?
-  options   String[]
-  order     Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  surveyId    String
+  type        String
+  question    String
+  maxSelect   Int?
+  options     String[]
+  placeholder String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
@@ -328,16 +329,16 @@ model GbpMetric {
 }
 
 model InstagramSetting {
-  id                         String   @id @default(cuid())
-  schoolId                   String   @unique
+  id                         String    @id @default(cuid())
+  schoolId                   String    @unique
   metaAppId                  String?
   metaAppSecret              String?
   instagramAccessToken       String
   instagramBusinessAccountId String
-  autoSyncEnabled            Boolean  @default(false)
+  autoSyncEnabled            Boolean   @default(false)
   lastSyncedAt               DateTime?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
@@ -379,8 +380,8 @@ model TargetKeyword {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  rankHistories RankHistory[]
+  school            School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  rankHistories     RankHistory[]
   aioScoreHistories AioScoreHistory[]
 
   @@unique([schoolId, keyword, location])

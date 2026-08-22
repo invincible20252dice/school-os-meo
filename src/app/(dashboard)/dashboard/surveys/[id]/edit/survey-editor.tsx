@@ -30,6 +30,7 @@ type SurveyApiItem = {
   id: string;
   type: string;
   question: string;
+  placeholder?: string | null;
   maxSelect?: number | null;
   options: string[];
   order: number;
@@ -206,6 +207,7 @@ function toEditorState(row: SurveyApiListItem): SurveySettingListItem {
           id: item.id,
           type: normalizeItemType(item.type),
           question: item.question,
+          placeholder: item.placeholder || undefined,
           maxSelect: item.maxSelect ?? undefined,
           options: item.options,
           order: item.order || index + 1,
@@ -714,6 +716,10 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                             type: event.target.value as SurveyItemType,
                             options:
                               event.target.value === "TEXT" ? [] : item.options,
+                            placeholder:
+                              event.target.value === "TEXT"
+                                ? item.placeholder
+                                : undefined,
                           })
                         }
                       >
@@ -761,6 +767,20 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                         />
                       </label>
                     ) : null}
+                    {item.type === "TEXT" ? (
+                      <label className={styles.full}>
+                        <span>入力例（プレースホルダー）</span>
+                        <input
+                          value={item.placeholder || ""}
+                          placeholder="未入力の場合は設問文から自動設定"
+                          onChange={(event) =>
+                            updateItem(item.id, {
+                              placeholder: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -798,7 +818,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                 <h3>{item.question}</h3>
                 <p>{item.helperText}</p>
                 {item.type === "TEXT" ? (
-                  <div className={styles.textPlaceholder}>自由記述入力欄</div>
+                  <div className={styles.textPlaceholder}>{item.placeholder}</div>
                 ) : (
                   <div className={styles.optionList}>
                     {item.options.map((option) => (

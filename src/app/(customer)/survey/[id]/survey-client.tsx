@@ -448,7 +448,7 @@ export default function SurveyClient({
                       value={String(answers[item.id] || "")}
                       onChange={(event) => updateTextAnswer(item, event.target.value)}
                       rows={5}
-                      placeholder="例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。"
+                      placeholder={item.placeholder}
                       className={styles.textarea}
                     />
                     <span className={styles.helpText}>

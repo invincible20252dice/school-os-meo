@@ -4,6 +4,8 @@ import {
   buildMockSurveySettingList,
   buildMockSurveyEditorState,
   buildSurveyPreviewSteps,
+  getTextQuestionHelperText,
+  getTextQuestionPlaceholder,
   deleteSurveySetting,
   moveSurveyItem,
   normalizeSurveyItemOrder,
@@ -80,6 +82,9 @@ describe("survey-builder", () => {
     ]);
     expect(preview.map((item) => item.order)).toEqual([1, 2, 3, 4]);
     expect(preview[1].helperText).toBe("100〜300文字を目安に入力");
+    expect(preview[1].placeholder).toBe(
+      "例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。",
+    );
   });
 
   it("builds preview helper text for each question type without max select", () => {
@@ -105,6 +110,41 @@ describe("survey-builder", () => {
       "1つ選択してください",
       "1つ選択してください",
     ]);
+  });
+
+  it("builds smart text placeholders and helper text from question wording", () => {
+    expect(getTextQuestionPlaceholder("高校はどこですか？")).toBe(
+      "例: 熊本高校、済々黌高校、第一高校 など",
+    );
+    expect(getTextQuestionHelperText("高校はどこですか？", 100, 300)).toBe(
+      "学校名を入力してください",
+    );
+    expect(getTextQuestionPlaceholder("入塾のきっかけを教えてください")).toBe(
+      "例: 大学受験に向けて苦手科目を個別でじっくり対策したかったため。",
+    );
+    expect(getTextQuestionPlaceholder("補足があれば教えてください", "例: 部活との両立")).toBe(
+      "例: 部活との両立",
+    );
+    expect(getTextQuestionPlaceholder("その他")).toBe("ご自由に入力してください");
+  });
+
+  it("uses school-name helper text for short free-text questions in preview", () => {
+    const survey = buildMockSurveyEditorState();
+    const preview = buildSurveyPreviewSteps({
+      ...survey,
+      items: [
+        {
+          id: "school-name",
+          type: "TEXT",
+          question: "高校はどこですか？",
+          options: [],
+          order: 1,
+        },
+      ],
+    });
+
+    expect(preview[0].helperText).toBe("学校名を入力してください");
+    expect(preview[0].placeholder).toBe("例: 熊本高校、済々黌高校、第一高校 など");
   });
 
   it("moves survey items up and down while renumbering display order", () => {

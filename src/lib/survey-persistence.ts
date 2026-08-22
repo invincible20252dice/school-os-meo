@@ -18,6 +18,7 @@ type SurveyPersistenceItemInput = {
   id?: string;
   type: SurveyItemType | string;
   question: string;
+  placeholder?: string | null;
   maxSelect?: number | null;
   options?: string[];
   order: number;
@@ -154,6 +155,7 @@ export function normalizeSurveyPersistenceInput(
       id: normalizeString(item.id) || `item-${index + 1}`,
       type: item.type as SurveyItemType,
       question,
+      placeholder: normalizeString(item.placeholder),
       maxSelect:
         item.maxSelect === null || item.maxSelect === undefined
           ? undefined
@@ -225,6 +227,7 @@ export async function persistSurvey(
         surveyId: persistedSurvey.id,
         type: item.type,
         question: item.question,
+        placeholder: item.placeholder || null,
         maxSelect: item.maxSelect || null,
         options: item.options,
         order: item.order,

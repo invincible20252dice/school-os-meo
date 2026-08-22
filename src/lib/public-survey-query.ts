@@ -6,6 +6,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import type { PublicSurveyQuestion } from "@/lib/public-survey-answers";
 import { extractPublicSurveyQuestions } from "@/lib/public-survey-response";
+import { getTextQuestionPlaceholder } from "@/lib/survey-builder";
 
 function normalizeString(value: string | null | undefined) {
   return value?.trim() || "";
@@ -15,6 +16,7 @@ type PublicSurveyItemRow = {
   id: string;
   type: string;
   question: string;
+  placeholder: string | null;
   maxSelect: number | null;
   options: string[];
   order: number;
@@ -93,7 +95,10 @@ function serializeNormalizedQuestion(item: PublicSurveyQuestion) {
     maxSelect: item.maxSelect ?? null,
     options: item.options,
     order: item.order,
-    placeholder: type === "text" ? "自由記述入力欄" : undefined,
+    placeholder:
+      type === "text"
+        ? getTextQuestionPlaceholder(item.question, item.placeholder)
+        : undefined,
   };
 }
 

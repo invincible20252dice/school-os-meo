@@ -158,7 +158,9 @@ describe("GET /api/public/survey-school", () => {
       "multiple",
       "text",
     ]);
-    expect(body.questions[2].placeholder).toBe("自由記述入力欄");
+    expect(body.questions[2].placeholder).toBe(
+      "例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。",
+    );
   });
 
   it("returns JSON-string questions as a top-level pure questions array", async () => {

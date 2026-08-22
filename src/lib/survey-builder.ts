@@ -5,6 +5,7 @@ export type SurveyEditorItem = {
   id: string;
   type: SurveyItemType;
   question: string;
+  placeholder?: string;
   maxSelect?: number;
   options: string[];
   order: number;
@@ -63,6 +64,7 @@ export function buildMockSurveyEditorState(): SurveyEditorState {
         id: "item-003",
         type: "TEXT",
         question: "お子さまの変化や印象に残っていることを教えてください",
+        placeholder: "例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。",
         options: [],
         order: 3,
       },
@@ -250,15 +252,61 @@ export function deleteSurveySetting(
   };
 }
 
+function includesAnyKeyword(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+export function getTextQuestionPlaceholder(question: string, customPlaceholder?: string) {
+  const placeholder = customPlaceholder?.trim();
+
+  if (placeholder) {
+    return placeholder;
+  }
+
+  if (includesAnyKeyword(question, ["高校", "学校", "どこ", "校名"])) {
+    return "例: 熊本高校、済々黌高校、第一高校 など";
+  }
+
+  if (includesAnyKeyword(question, ["変化", "印象", "成長", "様子"])) {
+    return "例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。";
+  }
+
+  if (includesAnyKeyword(question, ["理由", "きっかけ", "目的"])) {
+    return "例: 大学受験に向けて苦手科目を個別でじっくり対策したかったため。";
+  }
+
+  return "ご自由に入力してください";
+}
+
+export function getTextQuestionHelperText(
+  question: string,
+  minCharCount: number,
+  maxCharCount: number,
+) {
+  if (includesAnyKeyword(question, ["高校", "学校", "どこ", "校名"])) {
+    return "学校名を入力してください";
+  }
+
+  return `${minCharCount}〜${maxCharCount}文字を目安に入力`;
+}
+
 export function buildSurveyPreviewSteps(survey: SurveyEditorState) {
   return normalizeSurveyItemOrder(survey.items)
     .map((item) => ({
       ...item,
+      placeholder:
+        item.type === "TEXT"
+          ? getTextQuestionPlaceholder(item.question, item.placeholder)
+          : undefined,
       helperText:
         item.type === "MULTI_SELECT" && item.maxSelect
           ? `最大${item.maxSelect}つまで選択できます`
           : item.type === "TEXT"
-            ? `${survey.minCharCount}〜${survey.maxCharCount}文字を目安に入力`
+            ? getTextQuestionHelperText(
+                item.question,
+                survey.minCharCount,
+                survey.maxCharCount,
+              )
             : "1つ選択してください",
     }));
 }

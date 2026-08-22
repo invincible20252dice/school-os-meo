@@ -126,6 +126,7 @@ describe("survey-persistence", () => {
             id: "q3",
             type: "TEXT",
             question: "三番目から先頭へ移動した設問",
+            placeholder: "例: 熊本高校",
             order: 3,
           },
           {
@@ -144,6 +145,7 @@ describe("survey-persistence", () => {
       { id: "q3", order: 1 },
       { id: "q1", order: 2 },
     ]);
+    expect(survey.items[0].placeholder).toBe("例: 熊本高校");
   });
 
   it("persists a survey and replaces its items", async () => {
@@ -173,7 +175,14 @@ describe("survey-persistence", () => {
           id: "survey-1",
           schoolId: "school-own",
           title: "アンケート",
-          items: [{ type: "TEXT", question: "自由記述", order: 1 }],
+          items: [
+            {
+              type: "TEXT",
+              question: "自由記述",
+              placeholder: "例: 熊本高校",
+              order: 1,
+            },
+          ],
         },
         managerAccess,
       ),
@@ -194,6 +203,7 @@ describe("survey-persistence", () => {
         expect.objectContaining({
           surveyId: "survey-1",
           question: "自由記述",
+          placeholder: "例: 熊本高校",
         }),
       ],
     });

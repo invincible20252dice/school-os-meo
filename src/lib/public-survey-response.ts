@@ -107,6 +107,7 @@ export function normalizePublicSurveyQuestion(
       `question-${fallbackOrder}`,
     type: normalizeQuestionType(value.internalType || value.questionType || value.type),
     question,
+    placeholder: normalizeString(value.placeholder),
     maxSelect,
     options,
     order: normalizeNumber(value.order, fallbackOrder),
@@ -172,6 +173,7 @@ export function buildPublicSurveyPreviewSteps({
             ? question.type
             : "TEXT",
         question: question.question,
+        placeholder: question.placeholder,
         maxSelect:
           question.maxSelect === null || question.maxSelect === undefined
             ? undefined

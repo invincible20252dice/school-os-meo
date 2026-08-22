@@ -8,6 +8,7 @@ export type PublicSurveyQuestion = {
   id: string;
   type: PublicSurveyQuestionType;
   question: string;
+  placeholder?: string;
   maxSelect?: number | null;
   options: string[];
   order: number;

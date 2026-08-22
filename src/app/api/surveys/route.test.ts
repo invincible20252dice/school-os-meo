@@ -64,6 +64,7 @@ describe("/api/surveys", () => {
             id: "item-1",
             type: "TEXT",
             question: "自由記述",
+            placeholder: "例: 熊本高校",
             maxSelect: null,
             options: [],
             order: 1,
@@ -96,6 +97,11 @@ describe("/api/surveys", () => {
       title: "保護者アンケート",
       itemCount: 1,
       hasIncentive: true,
+      items: [
+        expect.objectContaining({
+          placeholder: "例: 熊本高校",
+        }),
+      ],
     });
   });
 
