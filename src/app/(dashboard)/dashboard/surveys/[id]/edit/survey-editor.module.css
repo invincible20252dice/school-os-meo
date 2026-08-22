@@ -467,6 +467,34 @@
   color: #17202a;
 }
 
+.itemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.itemHeader .moveButton {
+  width: 38px;
+  padding: 8px;
+}
+
+.itemHeader .moveButton:hover {
+  border-color: #27b58c;
+  background: #eef8f4;
+  color: #147d68;
+}
+
+.itemHeader .moveButton:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.itemHeader .moveButton:disabled:hover {
+  border-color: #dde5e1;
+  background: #ffffff;
+  color: #52606a;
+}
+
 .errors,
 .valid {
   margin-top: 16px;

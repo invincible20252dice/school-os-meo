@@ -7,6 +7,8 @@ import {
   activateSurveySetting,
   buildSurveyPreviewSteps,
   deleteSurveySetting,
+  moveSurveyItem,
+  normalizeSurveyItemOrder,
   saveSurveySetting,
   type SurveyEditorItem,
   type SurveyEditorState,
@@ -71,6 +73,24 @@ function PlusIcon() {
     <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.buttonIcon}>
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function ArrowUpIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.buttonIcon}>
+      <path d="M12 19V5" />
+      <path d="M5 12l7-7 7 7" />
+    </svg>
+  );
+}
+
+function ArrowDownIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.buttonIcon}>
+      <path d="M12 5v14" />
+      <path d="M19 12l-7 7-7-7" />
     </svg>
   );
 }
@@ -179,14 +199,18 @@ function toEditorState(row: SurveyApiListItem): SurveySettingListItem {
     benefitType: row.benefitType,
     benefitShowTiming: row.benefitShowTiming,
     activeWeekdays: ["月", "火", "水", "木", "金"],
-    items: row.items.map((item, index) => ({
-      id: item.id,
-      type: normalizeItemType(item.type),
-      question: item.question,
-      maxSelect: item.maxSelect ?? undefined,
-      options: item.options,
-      order: item.order || index + 1,
-    })),
+    items: normalizeSurveyItemOrder(
+      [...row.items]
+        .sort((a, b) => a.order - b.order)
+        .map((item, index) => ({
+          id: item.id,
+          type: normalizeItemType(item.type),
+          question: item.question,
+          maxSelect: item.maxSelect ?? undefined,
+          options: item.options,
+          order: item.order || index + 1,
+        })),
+    ),
     createdAt: formatApiDate(row.createdAt),
     updatedAt: formatApiDate(row.updatedAt),
   };
@@ -258,6 +282,13 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       items: current.items
         .filter((item) => item.id !== id)
         .map((item, index) => ({ ...item, order: index + 1 })),
+    }));
+  }
+
+  function moveItem(id: string, direction: "up" | "down") {
+    setSurvey((current) => ({
+      ...current,
+      items: moveSurveyItem(current.items, id, direction),
     }));
   }
 
@@ -360,6 +391,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       const surveyToSave = {
         ...survey,
         schoolId: getSaveSchoolId(),
+        items: normalizeSurveyItemOrder(survey.items),
       };
       const response = await fetch("/api/surveys", {
         method: "POST",
@@ -642,13 +674,35 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
             </div>
 
             <div className={styles.itemList}>
-              {survey.items.map((item) => (
+              {survey.items.map((item, index) => (
                 <article key={item.id} className={styles.itemCard}>
                   <div className={styles.itemHeader}>
-                    <strong>設問 {item.order}</strong>
-                    <button type="button" onClick={() => removeItem(item.id)}>
-                      削除
-                    </button>
+                    <strong>設問 {index + 1}</strong>
+                    <div className={styles.itemActions}>
+                      <button
+                        type="button"
+                        className={styles.moveButton}
+                        onClick={() => moveItem(item.id, "up")}
+                        disabled={index === 0}
+                        aria-label={`設問 ${index + 1} を上に移動`}
+                        title="上に移動"
+                      >
+                        <ArrowUpIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.moveButton}
+                        onClick={() => moveItem(item.id, "down")}
+                        disabled={index === survey.items.length - 1}
+                        aria-label={`設問 ${index + 1} を下に移動`}
+                        title="下に移動"
+                      >
+                        <ArrowDownIcon />
+                      </button>
+                      <button type="button" onClick={() => removeItem(item.id)}>
+                        削除
+                      </button>
+                    </div>
                   </div>
                   <div className={styles.fieldGrid}>
                     <label>

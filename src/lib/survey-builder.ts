@@ -119,6 +119,40 @@ function normalizeIncentive(survey: SurveyEditorState): SurveyEditorState {
   };
 }
 
+export function normalizeSurveyItemOrder(
+  items: SurveyEditorItem[],
+): SurveyEditorItem[] {
+  return items.map((item, index) => ({
+    ...item,
+    order: index + 1,
+  }));
+}
+
+export function moveSurveyItem(
+  items: SurveyEditorItem[],
+  itemId: string,
+  direction: "up" | "down",
+): SurveyEditorItem[] {
+  const currentIndex = items.findIndex((item) => item.id === itemId);
+
+  if (currentIndex < 0) {
+    return normalizeSurveyItemOrder(items);
+  }
+
+  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+  if (targetIndex < 0 || targetIndex >= items.length) {
+    return normalizeSurveyItemOrder(items);
+  }
+
+  const nextItems = [...items];
+  const currentItem = nextItems[currentIndex];
+  nextItems[currentIndex] = nextItems[targetIndex];
+  nextItems[targetIndex] = currentItem;
+
+  return normalizeSurveyItemOrder(nextItems);
+}
+
 export function validateSurveyEditorState(survey: SurveyEditorState) {
   const errors: string[] = [];
 
@@ -152,7 +186,10 @@ export function saveSurveySetting(
   survey: SurveyEditorState,
   now: string,
 ): SurveySettingListItem[] {
-  const normalizedSurvey = normalizeIncentive(survey);
+  const normalizedSurvey = normalizeIncentive({
+    ...survey,
+    items: normalizeSurveyItemOrder(survey.items),
+  });
   const existing = settings.find((setting) => setting.id === survey.id);
 
   if (existing) {
@@ -214,8 +251,7 @@ export function deleteSurveySetting(
 }
 
 export function buildSurveyPreviewSteps(survey: SurveyEditorState) {
-  return [...survey.items]
-    .sort((a, b) => a.order - b.order)
+  return normalizeSurveyItemOrder(survey.items)
     .map((item) => ({
       ...item,
       helperText:

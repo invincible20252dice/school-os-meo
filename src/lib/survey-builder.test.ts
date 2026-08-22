@@ -5,6 +5,8 @@ import {
   buildMockSurveyEditorState,
   buildSurveyPreviewSteps,
   deleteSurveySetting,
+  moveSurveyItem,
+  normalizeSurveyItemOrder,
   saveSurveySetting,
   validateSurveyEditorState,
 } from "./survey-builder";
@@ -70,8 +72,14 @@ describe("survey-builder", () => {
       items: [...survey.items].reverse(),
     });
 
+    expect(preview.map((item) => item.id)).toEqual([
+      "item-004",
+      "item-003",
+      "item-002",
+      "item-001",
+    ]);
     expect(preview.map((item) => item.order)).toEqual([1, 2, 3, 4]);
-    expect(preview[1].helperText).toBe("最大3つまで選択できます");
+    expect(preview[1].helperText).toBe("100〜300文字を目安に入力");
   });
 
   it("builds preview helper text for each question type without max select", () => {
@@ -88,14 +96,53 @@ describe("survey-builder", () => {
     });
 
     expect(preview.map((item) => item.id)).toEqual([
+      "item-003",
+      "item-001",
+      "item-002",
+    ]);
+    expect(preview.map((item) => item.helperText)).toEqual([
+      "80〜240文字を目安に入力",
+      "1つ選択してください",
+      "1つ選択してください",
+    ]);
+  });
+
+  it("moves survey items up and down while renumbering display order", () => {
+    const survey = buildMockSurveyEditorState();
+    const movedUp = moveSurveyItem(survey.items, "item-003", "up");
+
+    expect(movedUp.map((item) => item.id)).toEqual([
+      "item-001",
+      "item-003",
+      "item-002",
+      "item-004",
+    ]);
+    expect(movedUp.map((item) => item.order)).toEqual([1, 2, 3, 4]);
+
+    const movedDown = moveSurveyItem(movedUp, "item-003", "down");
+    expect(movedDown.map((item) => item.id)).toEqual([
       "item-001",
       "item-002",
       "item-003",
+      "item-004",
     ]);
-    expect(preview.map((item) => item.helperText)).toEqual([
-      "1つ選択してください",
-      "1つ選択してください",
-      "80〜240文字を目安に入力",
+    expect(moveSurveyItem(movedDown, "item-001", "up")).toEqual(movedDown);
+    expect(moveSurveyItem(movedDown, "item-004", "down")).toEqual(movedDown);
+  });
+
+  it("normalizes item order from the current array sequence", () => {
+    const survey = buildMockSurveyEditorState();
+
+    expect(
+      normalizeSurveyItemOrder([...survey.items].reverse()).map((item) => ({
+        id: item.id,
+        order: item.order,
+      })),
+    ).toEqual([
+      { id: "item-004", order: 1 },
+      { id: "item-003", order: 2 },
+      { id: "item-002", order: 3 },
+      { id: "item-001", order: 4 },
     ]);
   });
 

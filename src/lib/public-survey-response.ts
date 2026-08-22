@@ -161,22 +161,24 @@ export function buildPublicSurveyPreviewSteps({
     benefitType: "",
     benefitShowTiming: "",
     activeWeekdays: ["月", "火", "水", "木", "金"],
-    items: questions.map((question) => ({
-      id: question.id,
-      type:
-        question.type === "SINGLE_SELECT" ||
-        question.type === "MULTI_SELECT" ||
-        question.type === "TEXT"
-          ? question.type
-          : "TEXT",
-      question: question.question,
-      maxSelect:
-        question.maxSelect === null || question.maxSelect === undefined
-          ? undefined
-          : question.maxSelect,
-      options: question.options,
-      order: question.order,
-    })),
+    items: [...questions]
+      .sort((a, b) => a.order - b.order)
+      .map((question) => ({
+        id: question.id,
+        type:
+          question.type === "SINGLE_SELECT" ||
+          question.type === "MULTI_SELECT" ||
+          question.type === "TEXT"
+            ? question.type
+            : "TEXT",
+        question: question.question,
+        maxSelect:
+          question.maxSelect === null || question.maxSelect === undefined
+            ? undefined
+            : question.maxSelect,
+        options: question.options,
+        order: question.order,
+      })),
   };
 
   return buildSurveyPreviewSteps(survey);

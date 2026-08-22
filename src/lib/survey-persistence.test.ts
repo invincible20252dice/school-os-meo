@@ -116,6 +116,36 @@ describe("survey-persistence", () => {
     expect(survey.items[0].maxSelect).toBe(3);
   });
 
+  it("renumbers survey item order from the submitted array sequence", () => {
+    const survey = normalizeSurveyPersistenceInput(
+      {
+        schoolId: "school-own",
+        title: "アンケート",
+        items: [
+          {
+            id: "q3",
+            type: "TEXT",
+            question: "三番目から先頭へ移動した設問",
+            order: 3,
+          },
+          {
+            id: "q1",
+            type: "SINGLE_SELECT",
+            question: "元の一番目",
+            options: ["はい"],
+            order: 1,
+          },
+        ],
+      },
+      managerAccess,
+    );
+
+    expect(survey.items.map((item) => ({ id: item.id, order: item.order }))).toEqual([
+      { id: "q3", order: 1 },
+      { id: "q1", order: 2 },
+    ]);
+  });
+
   it("persists a survey and replaces its items", async () => {
     const prisma = {
       user: {

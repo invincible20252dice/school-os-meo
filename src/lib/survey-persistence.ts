@@ -12,6 +12,7 @@ import type {
   SurveyEditorState,
   SurveyItemType,
 } from "./survey-builder";
+import { normalizeSurveyItemOrder } from "./survey-builder";
 
 type SurveyPersistenceItemInput = {
   id?: string;
@@ -142,7 +143,7 @@ export function normalizeSurveyPersistenceInput(
     throw new Error("アンケート名を入力してください。");
   }
 
-  const items = input.items.map((item, index): SurveyEditorItem => {
+  const items = normalizeSurveyItemOrder(input.items.map((item, index): SurveyEditorItem => {
     const question = normalizeString(item.question);
 
     if (!question) {
@@ -160,7 +161,7 @@ export function normalizeSurveyPersistenceInput(
       options: normalizeOptions(item.options),
       order: normalizeInteger(item.order, index + 1),
     };
-  });
+  }));
 
   if (items.length === 0) {
     throw new Error("設問を1件以上設定してください。");
