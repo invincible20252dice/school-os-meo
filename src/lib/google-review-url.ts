@@ -1,8 +1,14 @@
-import { buildGoogleReviewUrl } from "./review-generator";
-
 export const DEFAULT_GOOGLE_REVIEW_URL =
   "https://g.page/r/CcECT8Glzr4bEBM/review";
 export const DEFAULT_PUBLIC_SCHOOL_NAME = "大学受験専門塾 iスクール予備校";
+
+function isInternalPlaceholderPlaceId(placeId: string | null) {
+  const normalizedPlaceId = placeId?.trim() || "";
+  return (
+    normalizedPlaceId.startsWith("manual-") ||
+    normalizedPlaceId.startsWith("system-")
+  );
+}
 
 export function normalizeGoogleReviewUrl(value: string | null | undefined) {
   const trimmed = value?.trim() || "";
@@ -21,7 +27,8 @@ export function normalizeGoogleReviewUrl(value: string | null | undefined) {
     if (
       url.hostname === "search.google.com" &&
       url.pathname === "/local/writereview" &&
-      !url.searchParams.get("placeid")
+      (!url.searchParams.get("placeid") ||
+        isInternalPlaceholderPlaceId(url.searchParams.get("placeid")))
     ) {
       return "";
     }
@@ -47,12 +54,6 @@ export function resolveGoogleReviewUrl(input: {
 
   if (schoolGoogleMapsUrl) {
     return schoolGoogleMapsUrl;
-  }
-
-  const googlePlaceId = input.googlePlaceId?.trim();
-
-  if (googlePlaceId) {
-    return buildGoogleReviewUrl(googlePlaceId);
   }
 
   return DEFAULT_GOOGLE_REVIEW_URL;

@@ -118,4 +118,12 @@ describe("SurveyClient", () => {
       ),
     ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });
+
+  it("falls back to the iSchool review URL when the saved review URL contains an internal manual id", () => {
+    expect(
+      getPublicSurveyReviewDestinationUrl(
+        "https://search.google.com/local/writereview?placeid=manual-f0f5e2ce-8579-4738-9c1b-c3065738323f",
+      ),
+    ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
+  });
 });

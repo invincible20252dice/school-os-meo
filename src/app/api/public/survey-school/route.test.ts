@@ -262,7 +262,7 @@ describe("GET /api/public/survey-school", () => {
     expect(body.questions).toHaveLength(1);
   });
 
-  it("falls back to school Google Maps URL and then Place ID", async () => {
+  it("falls back to school Google Maps URL and then the iSchool review URL", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
@@ -293,7 +293,7 @@ describe("GET /api/public/survey-school", () => {
       "https://search.google.com/local/writereview?placeid=school-url",
     );
     expect((await placeIdResponse.json()).googleReviewUrl).toBe(
-      "https://search.google.com/local/writereview?placeid=place-school",
+      DEFAULT_GOOGLE_REVIEW_URL,
     );
   });
 

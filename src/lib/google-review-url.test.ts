@@ -17,6 +17,11 @@ describe("google-review-url", () => {
     expect(
       normalizeGoogleReviewUrl("https://search.google.com/local/writereview"),
     ).toBe("");
+    expect(
+      normalizeGoogleReviewUrl(
+        "https://search.google.com/local/writereview?placeid=manual-f0f5e2ce-8579-4738-9c1b-c3065738323f",
+      ),
+    ).toBe("");
   });
 
   it("prefers the saved setting URL over school and place id values", () => {
@@ -31,7 +36,7 @@ describe("google-review-url", () => {
     ).toBe("https://search.google.com/local/writereview?placeid=custom");
   });
 
-  it("falls back to school url, place id, then iSchool review url", () => {
+  it("falls back to school url and then iSchool review url", () => {
     expect(
       resolveGoogleReviewUrl({
         schoolGoogleMapsUrl:
@@ -40,7 +45,7 @@ describe("google-review-url", () => {
       }),
     ).toBe("https://search.google.com/local/writereview?placeid=school");
     expect(resolveGoogleReviewUrl({ googlePlaceId: "place id" })).toBe(
-      "https://search.google.com/local/writereview?placeid=place%20id",
+      DEFAULT_GOOGLE_REVIEW_URL,
     );
     expect(resolveGoogleReviewUrl({})).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });
@@ -49,6 +54,16 @@ describe("google-review-url", () => {
     expect(
       resolveGoogleReviewUrl({
         settingReviewUrl: "https://search.google.com/local/writereview",
+      }),
+    ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
+  });
+
+  it("does not build a Google write-review URL from an internal placeholder id", () => {
+    expect(
+      resolveGoogleReviewUrl({
+        schoolGoogleMapsUrl:
+          "https://search.google.com/local/writereview?placeid=manual-f0f5e2ce-8579-4738-9c1b-c3065738323f",
+        googlePlaceId: "manual-f0f5e2ce-8579-4738-9c1b-c3065738323f",
       }),
     ).toBe(DEFAULT_GOOGLE_REVIEW_URL);
   });

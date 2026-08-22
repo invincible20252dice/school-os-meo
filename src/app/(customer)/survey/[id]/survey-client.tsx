@@ -395,8 +395,10 @@ export default function SurveyClient({
   async function copyAndOpen(text: string, index: number) {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
+    const targetUrl = getPublicSurveyReviewDestinationUrl(googleReviewUrl);
+    console.log("[Review Link Target]:", targetUrl);
     window.open(
-      getPublicSurveyReviewDestinationUrl(googleReviewUrl),
+      targetUrl,
       "_blank",
       "noopener,noreferrer",
     );
