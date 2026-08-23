@@ -6,6 +6,23 @@ import {
   resolveRequestAccess,
 } from "@/lib/supabase-access";
 
+type SchoolSettingLineFields = {
+  lineNotifyEnabled: boolean;
+  lineChannelAccessToken: string | null;
+  lineDestinationId: string | null;
+  notifyOnNewReview: boolean;
+  notifyOnLowRating: boolean;
+  updatedAt: Date;
+};
+
+type RawLineRecord = Record<string, unknown>;
+
+type LineSettingSources = {
+  schoolSetting: SchoolSettingLineFields | null;
+  rawSchoolSetting: RawLineRecord | null;
+  rawLineSetting: RawLineRecord | null;
+};
+
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -20,25 +37,94 @@ function toUpdatedAt(value?: Date | null) {
   return value ? value.toISOString().slice(0, 16).replace("T", " ") : "";
 }
 
+function firstNormalizedString(...values: unknown[]) {
+  return values.map(normalizeString).find(Boolean) || "";
+}
+
+function firstBoolean(
+  ...values: Array<boolean | null | undefined | unknown>
+): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function firstDate(...values: unknown[]) {
+  for (const value of values) {
+    if (value instanceof Date) {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      const date = new Date(value);
+
+      if (!Number.isNaN(date.getTime())) {
+        return date;
+      }
+    }
+  }
+
+  return null;
+}
+
+function pick(record: RawLineRecord | null, ...keys: string[]) {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    if (key in record) {
+      return record[key];
+    }
+  }
+
+  return undefined;
+}
+
 function serializeLineSetting({
   schoolId,
-  setting,
+  sources,
 }: {
   schoolId: string;
-  setting: {
-    lineNotifyEnabled: boolean;
-    lineChannelAccessToken: string | null;
-    lineDestinationId: string | null;
-    notifyOnNewReview: boolean;
-    notifyOnLowRating: boolean;
-    updatedAt: Date;
-  } | null;
+  sources: LineSettingSources;
 }) {
-  const channelAccessToken = setting?.lineChannelAccessToken || "";
-  const lineUserId = setting?.lineDestinationId || "";
-  const enabled = setting?.lineNotifyEnabled ?? true;
-  const notifyOnNewReview = setting?.notifyOnNewReview ?? true;
-  const notifyOnLowRating = setting?.notifyOnLowRating ?? true;
+  const channelAccessToken = firstNormalizedString(
+    pick(sources.rawLineSetting, "channelAccessToken", "lineAccessToken", "lineChannelAccessToken", "channel_access_token", "line_access_token"),
+    sources.schoolSetting?.lineChannelAccessToken,
+    pick(sources.rawSchoolSetting, "lineChannelAccessToken", "channelAccessToken", "lineAccessToken", "line_channel_access_token", "channel_access_token", "line_access_token"),
+  );
+  const lineUserId = firstNormalizedString(
+    pick(sources.rawLineSetting, "lineUserId", "targetId", "groupId", "lineDestinationId", "lineTargetId", "line_user_id", "target_id", "group_id", "line_destination_id", "line_target_id"),
+    sources.schoolSetting?.lineDestinationId,
+    pick(sources.rawSchoolSetting, "lineDestinationId", "lineUserId", "targetId", "groupId", "lineTargetId", "line_destination_id", "line_user_id", "target_id", "group_id", "line_target_id"),
+  );
+  const enabled =
+    firstBoolean(
+      pick(sources.rawLineSetting, "enabled", "lineNotifyEnabled", "line_notify_enabled"),
+      sources.schoolSetting?.lineNotifyEnabled,
+      pick(sources.rawSchoolSetting, "lineNotifyEnabled", "enabled", "line_notify_enabled"),
+    ) ?? Boolean(channelAccessToken && lineUserId);
+  const notifyOnNewReview =
+    firstBoolean(
+      pick(sources.rawLineSetting, "notifyOnNewReview", "notify_on_new_review"),
+      sources.schoolSetting?.notifyOnNewReview,
+      pick(sources.rawSchoolSetting, "notifyOnNewReview", "notify_on_new_review"),
+    ) ?? true;
+  const notifyOnLowRating =
+    firstBoolean(
+      pick(sources.rawLineSetting, "notifyOnLowRating", "notify_on_low_rating"),
+      sources.schoolSetting?.notifyOnLowRating,
+      pick(sources.rawSchoolSetting, "notifyOnLowRating", "notify_on_low_rating"),
+    ) ?? true;
+  const updatedAt = firstDate(
+    pick(sources.rawLineSetting, "updatedAt", "updated_at"),
+    sources.schoolSetting?.updatedAt,
+    pick(sources.rawSchoolSetting, "updatedAt", "updated_at"),
+  );
 
   return {
     schoolId,
@@ -53,7 +139,68 @@ function serializeLineSetting({
     groupId: lineUserId,
     notifyOnNewReview,
     notifyOnLowRating,
-    updatedAt: toUpdatedAt(setting?.updatedAt),
+    updatedAt: toUpdatedAt(updatedAt),
+  };
+}
+
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+async function findRawLineRecord(tableName: string, schoolId: string) {
+  try {
+    const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
+      tableName,
+    );
+    const columnNames = columns.map((column) => column.column_name);
+    const schoolColumn = columnNames.includes("schoolId")
+      ? "schoolId"
+      : columnNames.includes("school_id")
+        ? "school_id"
+        : "";
+
+    if (!schoolColumn) {
+      return null;
+    }
+
+    const rows = await prisma.$queryRawUnsafe<RawLineRecord[]>(
+      `SELECT * FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier(schoolColumn)} = $1 LIMIT 1`,
+      schoolId,
+    );
+
+    return rows[0] || null;
+  } catch (error) {
+    console.error(`[LINE settings raw lookup skipped: ${tableName}]`, error);
+
+    return null;
+  }
+}
+
+async function findLineSettingSources(schoolId: string): Promise<LineSettingSources> {
+  const [schoolSetting, rawSchoolSetting, lineSetting, lineSettings, lineSettingSnake] =
+    await Promise.all([
+      prisma.schoolSetting.findUnique({
+        where: { schoolId },
+        select: {
+          lineNotifyEnabled: true,
+          lineChannelAccessToken: true,
+          lineDestinationId: true,
+          notifyOnNewReview: true,
+          notifyOnLowRating: true,
+          updatedAt: true,
+        },
+      }),
+      findRawLineRecord("SchoolSetting", schoolId),
+      findRawLineRecord("LineSetting", schoolId),
+      findRawLineRecord("line_settings", schoolId),
+      findRawLineRecord("line_setting", schoolId),
+    ]);
+
+  return {
+    schoolSetting,
+    rawSchoolSetting,
+    rawLineSetting: lineSetting || lineSettings || lineSettingSnake,
   };
 }
 
@@ -129,20 +276,10 @@ function toErrorResponse(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { school, access } = await resolveReadableSchool(request);
-    const setting = await prisma.schoolSetting.findUnique({
-      where: { schoolId: school.id },
-      select: {
-        lineNotifyEnabled: true,
-        lineChannelAccessToken: true,
-        lineDestinationId: true,
-        notifyOnNewReview: true,
-        notifyOnLowRating: true,
-        updatedAt: true,
-      },
-    });
+    const sources = await findLineSettingSources(school.id);
     const lineSetting = serializeLineSetting({
       schoolId: school.id,
-      setting,
+      sources,
     });
 
     return NextResponse.json({

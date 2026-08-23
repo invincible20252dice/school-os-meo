@@ -25,6 +25,7 @@ vi.mock("@/lib/supabase-access", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    $queryRawUnsafe: vi.fn(async () => []),
     school: {
       findUnique: vi.fn(async () => ({
         id: "school-1",
@@ -46,8 +47,10 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 describe("/api/dashboard/settings/line", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([]);
   });
 
   it("returns canonical and alias keys for saved LINE settings", async () => {
@@ -97,12 +100,161 @@ describe("/api/dashboard/settings/line", () => {
 
     expect(response.status).toBe(200);
     expect(body.setting).toMatchObject({
-      lineNotifyEnabled: true,
+      lineNotifyEnabled: false,
       lineChannelAccessToken: "",
       lineDestinationId: "",
       notifyOnNewReview: true,
       notifyOnLowRating: true,
       updatedAt: "",
+    });
+  });
+
+  it("hydrates saved values from legacy raw SchoolSetting columns", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineNotifyEnabled: true,
+      lineChannelAccessToken: null,
+      lineDestinationId: null,
+      notifyOnNewReview: true,
+      notifyOnLowRating: true,
+      updatedAt: new Date("2026-08-22T06:46:00.000Z"),
+    });
+    vi.mocked(prisma.$queryRawUnsafe)
+      .mockResolvedValueOnce([
+        { column_name: "schoolId" },
+        { column_name: "channelAccessToken" },
+        { column_name: "lineUserId" },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          schoolId: "school-1",
+          channelAccessToken: "legacy-school-token",
+          lineUserId: "legacy-school-user",
+        },
+      ])
+      .mockResolvedValue([]);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting).toMatchObject({
+      lineChannelAccessToken: "legacy-school-token",
+      lineDestinationId: "legacy-school-user",
+    });
+  });
+
+  it("prefers the dedicated LineSetting table when it contains saved values", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineNotifyEnabled: true,
+      lineChannelAccessToken: null,
+      lineDestinationId: null,
+      notifyOnNewReview: false,
+      notifyOnLowRating: false,
+      updatedAt: new Date("2026-08-22T06:46:00.000Z"),
+    });
+    vi.mocked(prisma.$queryRawUnsafe)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { column_name: "schoolId" },
+        { column_name: "lineAccessToken" },
+        { column_name: "targetId" },
+        { column_name: "enabled" },
+        { column_name: "notifyOnNewReview" },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          schoolId: "school-1",
+          lineAccessToken: "line-setting-token",
+          targetId: "line-setting-target",
+          enabled: true,
+          notifyOnNewReview: true,
+        },
+      ])
+      .mockResolvedValue([]);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      channelAccessToken: "line-setting-token",
+      lineUserId: "line-setting-target",
+      enabled: true,
+      notifyOnNewReview: true,
+      notifyOnLowRating: false,
+    });
+  });
+
+  it("hydrates values from snake_case line_settings records", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.$queryRawUnsafe)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { column_name: "school_id" },
+        { column_name: "channel_access_token" },
+        { column_name: "line_user_id" },
+        { column_name: "updated_at" },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          school_id: "school-1",
+          channel_access_token: "snake-token",
+          line_user_id: "snake-user",
+          updated_at: "2026-08-22T06:46:00.000Z",
+        },
+      ]);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting).toMatchObject({
+      lineChannelAccessToken: "snake-token",
+      lineDestinationId: "snake-user",
+      updatedAt: "2026-08-22 06:46",
+    });
+  });
+
+  it("skips raw lookup errors and keeps canonical values", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.spyOn(console, "error").mockImplementationOnce(() => {});
+    vi.mocked(prisma.$queryRawUnsafe)
+      .mockRejectedValueOnce(new Error("information_schema unavailable"))
+      .mockResolvedValue([]);
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.setting).toMatchObject({
+      lineChannelAccessToken: "line-token",
+      lineDestinationId: "U123",
     });
   });
 
