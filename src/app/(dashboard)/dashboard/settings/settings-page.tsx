@@ -159,7 +159,11 @@ export default function SettingsPage({
       }
 
       const endpoint =
-        activeTab === "google" ? "/api/settings/google" : "/api/settings/school";
+        activeTab === "google"
+          ? "/api/settings/google"
+          : activeTab === "line"
+            ? "/api/dashboard/settings/line"
+            : "/api/settings/school";
       const response = await fetch(
         `${endpoint}?schoolId=${encodeURIComponent(schoolId)}`,
         { headers },
@@ -235,12 +239,12 @@ export default function SettingsPage({
         body: JSON.stringify({
           ...setting,
           schoolId,
-	          googleRefreshToken: undefined,
-	          instagramAccessToken: undefined,
-	          lineChannelAccessTokenTouched: lineFieldsTouched.channelAccessToken,
-	          lineDestinationIdTouched: lineFieldsTouched.destinationId,
-	        }),
-	      });
+          googleRefreshToken: undefined,
+          instagramAccessToken: undefined,
+          lineChannelAccessTokenTouched: lineFieldsTouched.channelAccessToken,
+          lineDestinationIdTouched: lineFieldsTouched.destinationId,
+        }),
+      });
       const data = (await response.json()) as {
         message?: string;
         setting?: NullableSchoolSettingState;
@@ -251,13 +255,13 @@ export default function SettingsPage({
         return;
       }
 
-	      if (data.setting) {
-	        setSetting(normalizeSchoolSetting(data.setting));
-	        setLineFieldsTouched({
-	          channelAccessToken: false,
-	          destinationId: false,
-	        });
-	      }
+      if (data.setting) {
+        setSetting(normalizeSchoolSetting(data.setting));
+        setLineFieldsTouched({
+          channelAccessToken: false,
+          destinationId: false,
+        });
+      }
       setSaveMessage("校舎設定を保存しました。");
     } catch {
       setSaveMessage("校舎設定を保存できませんでした。");
@@ -714,29 +718,29 @@ export default function SettingsPage({
               </label>
               <label>
                 <span>チャネルアクセストークン</span>
-	                <input
-	                  value={setting.lineChannelAccessToken}
-	                  onChange={(event) => {
-	                    setLineFieldsTouched((current) => ({
-	                      ...current,
-	                      channelAccessToken: true,
-	                    }));
-	                    update("lineChannelAccessToken", event.target.value);
-	                  }}
-	                />
+                <input
+                  value={setting.lineChannelAccessToken}
+                  onChange={(event) => {
+                    setLineFieldsTouched((current) => ({
+                      ...current,
+                      channelAccessToken: true,
+                    }));
+                    update("lineChannelAccessToken", event.target.value);
+                  }}
+                />
               </label>
               <label>
                 <span>送信先グループID / ユーザーID</span>
-	                <input
-	                  value={setting.lineDestinationId}
-	                  onChange={(event) => {
-	                    setLineFieldsTouched((current) => ({
-	                      ...current,
-	                      destinationId: true,
-	                    }));
-	                    update("lineDestinationId", event.target.value);
-	                  }}
-	                />
+                <input
+                  value={setting.lineDestinationId}
+                  onChange={(event) => {
+                    setLineFieldsTouched((current) => ({
+                      ...current,
+                      destinationId: true,
+                    }));
+                    update("lineDestinationId", event.target.value);
+                  }}
+                />
               </label>
               <TestReviewNotificationButton
                 compact
