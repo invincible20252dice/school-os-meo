@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GET } from "./route";
+import { GET, PATCH, POST } from "./route";
 
 vi.mock("@/lib/supabase-access", () => ({
   resolveRequestAccess: vi.fn(async () => ({
@@ -113,6 +113,186 @@ describe("/api/dashboard/settings/line", () => {
       notifyOnNewReview: true,
       notifyOnLowRating: true,
       updatedAt: "",
+    });
+  });
+
+  it("saves LINE settings with canonical columns from alias request keys", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineChannelAccessToken: "",
+      lineDestinationId: "",
+    });
+
+    const response = await POST(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            channelAccessToken: "new-line-token",
+            lineUserId: "new-line-user",
+            notifyOnNewReview: true,
+            notifyOnLowRating: false,
+            enabled: true,
+          }),
+        },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { schoolId: "school-1" },
+        update: expect.objectContaining({
+          lineNotifyEnabled: true,
+          lineChannelAccessToken: "new-line-token",
+          lineDestinationId: "new-line-user",
+          notifyOnNewReview: true,
+          notifyOnLowRating: false,
+        }),
+      }),
+    );
+    expect(body).toMatchObject({
+      channelAccessToken: "new-line-token",
+      lineUserId: "new-line-user",
+      updatedAt: "2026-08-22 06:46",
+    });
+  });
+
+  it("preserves existing LINE credentials when an untouched form submits empty strings", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineChannelAccessToken: "saved-token",
+      lineDestinationId: "saved-user",
+    });
+
+    const response = await PATCH(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            lineChannelAccessToken: "",
+            lineDestinationId: "",
+            lineChannelAccessTokenTouched: false,
+            lineDestinationIdTouched: false,
+            notifyOnNewReview: false,
+            notifyOnLowRating: true,
+            lineNotifyEnabled: true,
+          }),
+        },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          lineChannelAccessToken: "saved-token",
+          lineDestinationId: "saved-user",
+          notifyOnNewReview: false,
+          notifyOnLowRating: true,
+        }),
+      }),
+    );
+    expect(body).toMatchObject({
+      channelAccessToken: "saved-token",
+      lineUserId: "saved-user",
+    });
+  });
+
+  it("clears LINE credentials only when the fields are explicitly touched", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineChannelAccessToken: "saved-token",
+      lineDestinationId: "saved-user",
+    });
+
+    const response = await PATCH(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            lineChannelAccessToken: "",
+            lineDestinationId: "",
+            lineChannelAccessTokenTouched: true,
+            lineDestinationIdTouched: true,
+          }),
+        },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          lineNotifyEnabled: false,
+          lineChannelAccessToken: "",
+          lineDestinationId: "",
+        }),
+      }),
+    );
+    expect(body).toMatchObject({
+      enabled: false,
+      channelAccessToken: "",
+      lineUserId: "",
+    });
+  });
+
+  it("rejects LINE setting saves without a concrete school id", async () => {
+    const { buildScopedSchoolFilter } = await import("@/lib/supabase-access");
+    vi.mocked(buildScopedSchoolFilter).mockReturnValueOnce({
+      requestedSchoolId: "all",
+      effectiveSchoolId: undefined,
+      role: "admin",
+      canSwitchSchool: true,
+    });
+
+    const response = await POST(
+      new Request("https://app.example.com/api/dashboard/settings/line", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      success: false,
+      message: "LINE通知設定を取得する校舎を選択してください。",
+    });
+  });
+
+  it("returns a Japanese error when LINE setting save fails", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.spyOn(console, "error").mockImplementationOnce(() => {});
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      lineChannelAccessToken: "",
+      lineDestinationId: "",
+    });
+    vi.mocked(prisma.schoolSetting.upsert).mockRejectedValueOnce(
+      new Error("DB write failed"),
+    );
+
+    const response = await POST(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+        {
+          method: "POST",
+          body: JSON.stringify({ channelAccessToken: "token", lineUserId: "user" }),
+        },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({
+      success: false,
+      message: "LINE通知設定を取得できませんでした。",
     });
   });
 
@@ -331,6 +511,84 @@ describe("/api/dashboard/settings/line", () => {
         }),
       }),
     );
+  });
+
+  it("ignores fallback token records that do not include a destination column", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.$queryRawUnsafe).mockImplementation(
+      async (sql: string, tableName?: string) => {
+        if (sql.includes("information_schema") && tableName === "LineSetting") {
+          return [{ column_name: "lineAccessToken" }];
+        }
+
+        if (sql.includes('FROM "LineSetting"')) {
+          return [{ lineAccessToken: "token-without-destination" }];
+        }
+
+        return [];
+      },
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      syncedFromFallback: false,
+      channelAccessToken: "",
+      lineUserId: "",
+    });
+    expect(prisma.schoolSetting.upsert).not.toHaveBeenCalled();
+  });
+
+  it("syncs fallback values from tables that use updated_at ordering", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.$queryRawUnsafe).mockImplementation(
+      async (sql: string, tableName?: string) => {
+        if (sql.includes("information_schema") && tableName === "settings") {
+          return [
+            { column_name: "line_access_token" },
+            { column_name: "line_user_id" },
+            { column_name: "updated_at" },
+          ];
+        }
+
+        if (sql.includes('FROM "settings"')) {
+          expect(sql).toContain('ORDER BY "updated_at" DESC NULLS LAST');
+
+          return [
+            {
+              line_access_token: "settings-token",
+              line_user_id: "settings-user",
+              updated_at: "2026-08-22T06:46:00.000Z",
+            },
+          ];
+        }
+
+        return [];
+      },
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      syncedFromFallback: true,
+      channelAccessToken: "settings-token",
+      lineUserId: "settings-user",
+      updatedAt: "2026-08-22 06:46",
+    });
   });
 
   it("skips raw lookup errors and keeps canonical values", async () => {

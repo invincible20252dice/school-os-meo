@@ -25,6 +25,23 @@ type LineSettingSources = {
 
 type SerializedLineSetting = ReturnType<typeof serializeLineSetting>;
 
+type LineSettingPayload = {
+  schoolId?: string;
+  lineNotifyEnabled?: boolean;
+  enabled?: boolean;
+  lineChannelAccessToken?: string | null;
+  channelAccessToken?: string | null;
+  lineAccessToken?: string | null;
+  lineDestinationId?: string | null;
+  lineUserId?: string | null;
+  targetId?: string | null;
+  groupId?: string | null;
+  notifyOnNewReview?: boolean;
+  notifyOnLowRating?: boolean;
+  lineChannelAccessTokenTouched?: boolean;
+  lineDestinationIdTouched?: boolean;
+};
+
 const lineTokenKeys = [
   "channelAccessToken",
   "lineAccessToken",
@@ -385,6 +402,42 @@ async function resolveReadableSchool(request: Request) {
   };
 }
 
+function buildLineSettingResponse({
+  school,
+  access,
+  lineSetting,
+  syncedFromFallback = false,
+}: {
+  school: { id: string; name: string; status: string };
+  access: { role: string; source: string };
+  lineSetting: SerializedLineSetting;
+  syncedFromFallback?: boolean;
+}) {
+  return NextResponse.json({
+    success: true,
+    school,
+    setting: lineSetting,
+    syncedFromFallback,
+    lineNotifyEnabled: lineSetting.lineNotifyEnabled,
+    channelAccessToken: lineSetting.channelAccessToken,
+    lineAccessToken: lineSetting.lineAccessToken,
+    lineChannelAccessToken: lineSetting.lineChannelAccessToken,
+    lineDestinationId: lineSetting.lineDestinationId,
+    lineUserId: lineSetting.lineUserId,
+    targetId: lineSetting.targetId,
+    groupId: lineSetting.groupId,
+    notifyOnNewReview: lineSetting.notifyOnNewReview,
+    notifyOnLowRating: lineSetting.notifyOnLowRating,
+    enabled: lineSetting.enabled,
+    updatedAt: lineSetting.updatedAt,
+    access: {
+      role: access.role,
+      effectiveSchoolId: school.id,
+      source: access.source,
+    },
+  });
+}
+
 function toErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const status =
@@ -442,26 +495,98 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
+    return buildLineSettingResponse({
       school,
-      setting: lineSetting,
+      access,
+      lineSetting,
       syncedFromFallback,
-      channelAccessToken: lineSetting.channelAccessToken,
-      lineAccessToken: lineSetting.lineAccessToken,
-      lineUserId: lineSetting.lineUserId,
-      targetId: lineSetting.targetId,
-      groupId: lineSetting.groupId,
-      notifyOnNewReview: lineSetting.notifyOnNewReview,
-      notifyOnLowRating: lineSetting.notifyOnLowRating,
-      enabled: lineSetting.enabled,
-      access: {
-        role: access.role,
-        effectiveSchoolId: school.id,
-        source: access.source,
-      },
     });
   } catch (error) {
     return toErrorResponse(error);
   }
+}
+
+async function saveLineSetting(request: Request) {
+  try {
+    const body = (await request.json()) as LineSettingPayload;
+    const requestUrl = new URL(request.url);
+    const schoolId = normalizeSchoolId(body.schoolId) ||
+      normalizeSchoolId(requestUrl.searchParams.get("schoolId"));
+    const { school, access } = await resolveReadableSchool(
+      new Request(
+        `${requestUrl.origin}${requestUrl.pathname}?schoolId=${encodeURIComponent(schoolId)}`,
+        { headers: request.headers },
+      ),
+    );
+    const current = await prisma.schoolSetting.findUnique({
+      where: { schoolId: school.id },
+      select: {
+        lineChannelAccessToken: true,
+        lineDestinationId: true,
+      },
+    });
+    const incomingToken = firstNormalizedString(
+      body.lineChannelAccessToken,
+      body.channelAccessToken,
+      body.lineAccessToken,
+    );
+    const incomingDestinationId = firstNormalizedString(
+      body.lineDestinationId,
+      body.lineUserId,
+      body.targetId,
+      body.groupId,
+    );
+    const lineChannelAccessToken =
+      body.lineChannelAccessTokenTouched || incomingToken
+        ? incomingToken
+        : current?.lineChannelAccessToken || "";
+    const lineDestinationId =
+      body.lineDestinationIdTouched || incomingDestinationId
+        ? incomingDestinationId
+        : current?.lineDestinationId || "";
+    const lineNotifyEnabled = body.lineNotifyEnabled ?? body.enabled ??
+      Boolean(lineChannelAccessToken && lineDestinationId);
+    const saved = await prisma.schoolSetting.upsert({
+      where: { schoolId: school.id },
+      create: {
+        schoolId: school.id,
+        lineNotifyEnabled,
+        lineChannelAccessToken,
+        lineDestinationId,
+        notifyOnNewReview: body.notifyOnNewReview ?? true,
+        notifyOnLowRating: body.notifyOnLowRating ?? true,
+      },
+      update: {
+        lineNotifyEnabled,
+        lineChannelAccessToken,
+        lineDestinationId,
+        notifyOnNewReview: body.notifyOnNewReview ?? true,
+        notifyOnLowRating: body.notifyOnLowRating ?? true,
+      },
+    });
+    const lineSetting = serializeLineSetting({
+      schoolId: school.id,
+      sources: {
+        schoolSetting: saved,
+        rawSchoolSetting: null,
+        rawLineSetting: null,
+      },
+    });
+
+    return buildLineSettingResponse({
+      school,
+      access,
+      lineSetting,
+    });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+export async function POST(request: Request) {
+  return saveLineSetting(request);
+}
+
+export async function PATCH(request: Request) {
+  return saveLineSetting(request);
 }

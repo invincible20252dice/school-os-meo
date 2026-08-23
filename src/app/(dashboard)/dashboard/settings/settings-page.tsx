@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildEmptySchoolSetting,
   buildSettingsTabs,
@@ -79,6 +79,7 @@ export default function SettingsPage({
   const [isSavingGbpLocation, setIsSavingGbpLocation] = useState(false);
   const [isSavingGoogleReviewUrl, setIsSavingGoogleReviewUrl] = useState(false);
   const [isSavingSchoolSetting, setIsSavingSchoolSetting] = useState(false);
+  const loadRequestId = useRef(0);
   const tabs = buildSettingsTabs();
   const errors = useMemo(() => validateSchoolSetting(setting), [setting]);
   const activeTabErrors = useMemo(
@@ -145,11 +146,17 @@ export default function SettingsPage({
   }
 
   async function loadSchoolSetting() {
+    const requestId = loadRequestId.current + 1;
+    loadRequestId.current = requestId;
     setIsLoadingSchoolSetting(true);
     setSaveMessage("");
     try {
       const headers = await buildAuthHeaders();
       const schoolId = await resolveActiveSchoolId(headers);
+
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
 
       if (!schoolId) {
         setSetting(buildEmptySchoolSetting(""));
@@ -178,31 +185,43 @@ export default function SettingsPage({
         };
       };
 
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
+
       if (!response.ok) {
         setSaveMessage(data.message || "校舎設定を取得できませんでした。");
         return;
       }
 
       if (data.setting) {
-        const nextSetting = normalizeSchoolSetting({
-          ...setting,
-          ...data.setting,
-          schoolId: data.school?.id || data.setting.schoolId,
-          selectedGbpLocationId:
-            data.setting.selectedGbpLocationId ||
-            data.school?.gbpLocationId ||
-            setting.selectedGbpLocationId ||
-            "",
+        setSetting((current) => {
+          const nextSetting = normalizeSchoolSetting({
+            ...current,
+            ...data.setting,
+            schoolId: data.school?.id || data.setting?.schoolId || current.schoolId,
+            selectedGbpLocationId:
+              data.setting?.selectedGbpLocationId ||
+              data.school?.gbpLocationId ||
+              current.selectedGbpLocationId ||
+              "",
+          });
+
+          setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
+          setManualGbpLocationId(nextSetting.selectedGbpLocationId);
+
+          return nextSetting;
         });
-        setSetting(nextSetting);
         setLineFieldsTouched({
           channelAccessToken: false,
           destinationId: false,
         });
-        setSelectedGbpLocationName(nextSetting.selectedGbpLocationId);
-        setManualGbpLocationId(nextSetting.selectedGbpLocationId);
       } else if (data.school?.id) {
-        setSetting(buildEmptySchoolSetting(data.school.id));
+        setSetting((current) =>
+          current.schoolId === data.school?.id
+            ? current
+            : buildEmptySchoolSetting(data.school?.id || ""),
+        );
         setLineFieldsTouched({
           channelAccessToken: false,
           destinationId: false,
@@ -211,9 +230,15 @@ export default function SettingsPage({
         setManualGbpLocationId("");
       }
     } catch {
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
+
       setSaveMessage("校舎設定を取得できませんでした。");
     } finally {
-      setIsLoadingSchoolSetting(false);
+      if (requestId === loadRequestId.current) {
+        setIsLoadingSchoolSetting(false);
+      }
     }
   }
 
@@ -557,7 +582,11 @@ export default function SettingsPage({
             </div>
           </div>
 
-          {activeTab === "google" ? (
+          {isLoadingSchoolSetting ? (
+            <div className={styles.valid}>校舎設定を読み込んでいます。</div>
+          ) : null}
+
+          {!isLoadingSchoolSetting && activeTab === "google" ? (
             <div className={styles.formGrid}>
               <div className={styles.connectionSummary}>
                 <span
@@ -704,7 +733,7 @@ export default function SettingsPage({
             </div>
           ) : null}
 
-          {activeTab === "line" ? (
+          {!isLoadingSchoolSetting && activeTab === "line" ? (
             <div className={styles.formGrid}>
               <label className={styles.toggle}>
                 <input
@@ -770,7 +799,7 @@ export default function SettingsPage({
             </div>
           ) : null}
 
-          {activeTab === "instagram" ? (
+          {!isLoadingSchoolSetting && activeTab === "instagram" ? (
             <div className={styles.formGrid}>
               <div className={styles.connectionSummary}>
                 <span
@@ -857,7 +886,7 @@ export default function SettingsPage({
             </div>
           ) : null}
 
-          {activeTab === "prompts" ? (
+          {!isLoadingSchoolSetting && activeTab === "prompts" ? (
             <div className={styles.formGrid}>
               <label className={styles.full}>
                 <span>AIのペルソナ・立場設定</span>
@@ -906,7 +935,9 @@ export default function SettingsPage({
           ) : null}
 
           <div className={styles.footer}>
-            {activeTabErrors.length ? (
+            {isLoadingSchoolSetting ? (
+              <p className={styles.valid}>校舎設定を読み込んでいます。</p>
+            ) : activeTabErrors.length ? (
               <div className={styles.errors}>
                 {activeTabErrors.map((error) => (
                   <p key={error}>{error}</p>
