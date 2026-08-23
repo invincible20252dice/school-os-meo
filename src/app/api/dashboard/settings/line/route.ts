@@ -23,6 +23,30 @@ type LineSettingSources = {
   rawLineSetting: RawLineRecord | null;
 };
 
+type SerializedLineSetting = ReturnType<typeof serializeLineSetting>;
+
+const lineTokenKeys = [
+  "channelAccessToken",
+  "lineAccessToken",
+  "lineChannelAccessToken",
+  "channel_access_token",
+  "line_access_token",
+  "line_channel_access_token",
+];
+
+const lineDestinationKeys = [
+  "lineUserId",
+  "targetId",
+  "groupId",
+  "lineDestinationId",
+  "lineTargetId",
+  "line_user_id",
+  "target_id",
+  "group_id",
+  "line_destination_id",
+  "line_target_id",
+];
+
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -93,14 +117,14 @@ function serializeLineSetting({
   sources: LineSettingSources;
 }) {
   const channelAccessToken = firstNormalizedString(
-    pick(sources.rawLineSetting, "channelAccessToken", "lineAccessToken", "lineChannelAccessToken", "channel_access_token", "line_access_token"),
+    pick(sources.rawLineSetting, ...lineTokenKeys),
     sources.schoolSetting?.lineChannelAccessToken,
-    pick(sources.rawSchoolSetting, "lineChannelAccessToken", "channelAccessToken", "lineAccessToken", "line_channel_access_token", "channel_access_token", "line_access_token"),
+    pick(sources.rawSchoolSetting, ...lineTokenKeys),
   );
   const lineUserId = firstNormalizedString(
-    pick(sources.rawLineSetting, "lineUserId", "targetId", "groupId", "lineDestinationId", "lineTargetId", "line_user_id", "target_id", "group_id", "line_destination_id", "line_target_id"),
+    pick(sources.rawLineSetting, ...lineDestinationKeys),
     sources.schoolSetting?.lineDestinationId,
-    pick(sources.rawSchoolSetting, "lineDestinationId", "lineUserId", "targetId", "groupId", "lineTargetId", "line_destination_id", "line_user_id", "target_id", "group_id", "line_target_id"),
+    pick(sources.rawSchoolSetting, ...lineDestinationKeys),
   );
   const enabled =
     firstBoolean(
@@ -177,6 +201,50 @@ async function findRawLineRecord(tableName: string, schoolId: string) {
   }
 }
 
+async function findLatestRawLineRecord(tableName: string) {
+  try {
+    const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
+      tableName,
+    );
+    const columnNames = columns.map((column) => column.column_name);
+    const tokenColumns = lineTokenKeys.filter((key) => columnNames.includes(key));
+
+    if (!tokenColumns.length) {
+      return null;
+    }
+
+    const destinationColumns = lineDestinationKeys.filter((key) =>
+      columnNames.includes(key),
+    );
+    const tokenCondition = tokenColumns
+      .map((column) => `NULLIF(${quoteIdentifier(column)}, '') IS NOT NULL`)
+      .join(" OR ");
+    const destinationCondition = destinationColumns.length
+      ? ` AND (${destinationColumns
+          .map((column) => `NULLIF(${quoteIdentifier(column)}, '') IS NOT NULL`)
+          .join(" OR ")})`
+      : "";
+    const orderColumn = columnNames.includes("updatedAt")
+      ? "updatedAt"
+      : columnNames.includes("updated_at")
+        ? "updated_at"
+        : "";
+    const orderClause = orderColumn
+      ? ` ORDER BY ${quoteIdentifier(orderColumn)} DESC NULLS LAST`
+      : "";
+    const rows = await prisma.$queryRawUnsafe<RawLineRecord[]>(
+      `SELECT * FROM ${quoteIdentifier(tableName)} WHERE (${tokenCondition})${destinationCondition}${orderClause} LIMIT 1`,
+    );
+
+    return rows[0] || null;
+  } catch (error) {
+    console.error(`[LINE settings fallback lookup skipped: ${tableName}]`, error);
+
+    return null;
+  }
+}
+
 async function findLineSettingSources(schoolId: string): Promise<LineSettingSources> {
   const [schoolSetting, rawSchoolSetting, lineSetting, lineSettings, lineSettingSnake] =
     await Promise.all([
@@ -202,6 +270,81 @@ async function findLineSettingSources(schoolId: string): Promise<LineSettingSour
     rawSchoolSetting,
     rawLineSetting: lineSetting || lineSettings || lineSettingSnake,
   };
+}
+
+async function findFallbackLineSettingSources(): Promise<LineSettingSources> {
+  const [
+    schoolSetting,
+    rawSchoolSetting,
+    lineSetting,
+    lineSettings,
+    lineSettingSnake,
+    setting,
+    settings,
+  ] = await Promise.all([
+    prisma.schoolSetting.findFirst({
+      where: {
+        lineChannelAccessToken: {
+          not: null,
+        },
+        lineDestinationId: {
+          not: null,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        lineNotifyEnabled: true,
+        lineChannelAccessToken: true,
+        lineDestinationId: true,
+        notifyOnNewReview: true,
+        notifyOnLowRating: true,
+        updatedAt: true,
+      },
+    }),
+    findLatestRawLineRecord("SchoolSetting"),
+    findLatestRawLineRecord("LineSetting"),
+    findLatestRawLineRecord("line_settings"),
+    findLatestRawLineRecord("line_setting"),
+    findLatestRawLineRecord("Setting"),
+    findLatestRawLineRecord("settings"),
+  ]);
+
+  return {
+    schoolSetting,
+    rawSchoolSetting,
+    rawLineSetting:
+      lineSetting || lineSettings || lineSettingSnake || setting || settings,
+  };
+}
+
+function hasCompleteLineCredential(setting: SerializedLineSetting) {
+  return Boolean(setting.channelAccessToken && setting.lineUserId);
+}
+
+async function syncLineSettingToSchool(
+  schoolId: string,
+  setting: SerializedLineSetting,
+) {
+  await prisma.schoolSetting.upsert({
+    where: { schoolId },
+    create: {
+      schoolId,
+      lineNotifyEnabled: setting.lineNotifyEnabled,
+      lineChannelAccessToken: setting.channelAccessToken,
+      lineDestinationId: setting.lineUserId,
+      notifyOnNewReview: setting.notifyOnNewReview,
+      notifyOnLowRating: setting.notifyOnLowRating,
+    },
+    update: {
+      lineNotifyEnabled: setting.lineNotifyEnabled,
+      lineChannelAccessToken: setting.channelAccessToken,
+      lineDestinationId: setting.lineUserId,
+      notifyOnNewReview: setting.notifyOnNewReview,
+      notifyOnLowRating: setting.notifyOnLowRating,
+    },
+  });
+
+  return true;
 }
 
 async function resolveReadableSchool(request: Request) {
@@ -277,15 +420,33 @@ export async function GET(request: Request) {
   try {
     const { school, access } = await resolveReadableSchool(request);
     const sources = await findLineSettingSources(school.id);
-    const lineSetting = serializeLineSetting({
+    let lineSetting = serializeLineSetting({
       schoolId: school.id,
       sources,
     });
+    let syncedFromFallback = false;
+
+    if (!hasCompleteLineCredential(lineSetting)) {
+      const fallbackSources = await findFallbackLineSettingSources();
+      const fallbackLineSetting = serializeLineSetting({
+        schoolId: school.id,
+        sources: fallbackSources,
+      });
+
+      if (hasCompleteLineCredential(fallbackLineSetting)) {
+        syncedFromFallback = await syncLineSettingToSchool(
+          school.id,
+          fallbackLineSetting,
+        );
+        lineSetting = fallbackLineSetting;
+      }
+    }
 
     return NextResponse.json({
       success: true,
       school,
       setting: lineSetting,
+      syncedFromFallback,
       channelAccessToken: lineSetting.channelAccessToken,
       lineAccessToken: lineSetting.lineAccessToken,
       lineUserId: lineSetting.lineUserId,
