@@ -59,18 +59,25 @@ type HandleLineWebhookEventsInput = {
   fetchImpl?: FetchLike;
 };
 
-const repliedStatuses = new Set(["APPROVED", "REVISED", "REPLIED", "POSTED"]);
+const repliedStatuses = new Set([
+  "APPROVED",
+  "REVISED",
+  "REVISED_AND_REPLIED",
+  "REPLIED",
+  "POSTED",
+]);
+const excludedRevisionStatuses = [...repliedStatuses, "ARCHIVED"];
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function getLineSourceId(event: LineWebhookEvent) {
-  return (
-    normalizeString(event.source?.userId) ||
-    normalizeString(event.source?.groupId) ||
-    normalizeString(event.source?.roomId)
-  );
+function getLineSourceIds(event: LineWebhookEvent) {
+  return [
+    normalizeString(event.source?.groupId),
+    normalizeString(event.source?.userId),
+    normalizeString(event.source?.roomId),
+  ].filter(Boolean);
 }
 
 function parsePostbackData(data: string) {
@@ -210,7 +217,7 @@ async function approveReply({
   await replyToLine({
     event,
     review,
-    text: "✅ Googleマップに返信を投稿しました！",
+    text: "✅ AI返信ドラフトの内容でGoogleマップに返信を投稿しました！",
     fetchImpl,
   });
 
@@ -226,19 +233,23 @@ async function reviseReply({
   prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
-  const sourceId = getLineSourceId(event);
+  const sourceIds = getLineSourceIds(event);
   const replyText = normalizeString(event.message?.text);
 
-  if (!sourceId || !replyText) {
+  if (!sourceIds.length || !replyText) {
     return "ignored";
   }
 
   const review = (await prisma.review.findFirst({
     where: {
-      lineUserId: sourceId,
-      status: "PENDING",
+      lineUserId: {
+        in: sourceIds,
+      },
+      status: {
+        notIn: excludedRevisionStatuses,
+      },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     include: buildReviewInclude(),
   })) as ReviewWithSchool | null;
 
@@ -257,14 +268,15 @@ async function reviseReply({
     data: {
       replyText,
       aiReplyText: replyText,
-      status: "REVISED",
+      aiReplyDraft: replyText,
+      status: "REVISED_AND_REPLIED",
       repliedAt: new Date(),
     },
   });
   await replyToLine({
     event,
     review,
-    text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました：\n\n${replyText}`,
+    text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました！\n\n【投稿された返信文】\n${replyText}`,
     fetchImpl,
   });
 

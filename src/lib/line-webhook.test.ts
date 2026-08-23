@@ -84,7 +84,9 @@ describe("line-webhook", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer school-line-token",
         }),
-        body: expect.stringContaining("Googleマップに返信を投稿しました"),
+        body: expect.stringContaining(
+          "AI返信ドラフトの内容でGoogleマップに返信を投稿しました",
+        ),
       }),
     );
   });
@@ -108,7 +110,7 @@ describe("line-webhook", () => {
         {
           type: "message",
           replyToken: "line-reply-token",
-          source: { groupId: "C-review-group" },
+          source: { userId: "U-review-admin", groupId: "C-review-group" },
           message: {
             type: "text",
             text: "修正した返信文です。",
@@ -121,9 +123,21 @@ describe("line-webhook", () => {
     expect(prisma.review.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          lineUserId: "C-review-group",
-          status: "PENDING",
+          lineUserId: {
+            in: ["C-review-group", "U-review-admin"],
+          },
+          status: {
+            notIn: [
+              "APPROVED",
+              "REVISED",
+              "REVISED_AND_REPLIED",
+              "REPLIED",
+              "POSTED",
+              "ARCHIVED",
+            ],
+          },
         },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
     );
     expect(prisma.review.update).toHaveBeenCalledWith({
@@ -131,13 +145,16 @@ describe("line-webhook", () => {
       data: expect.objectContaining({
         replyText: "修正した返信文です。",
         aiReplyText: "修正した返信文です。",
-        status: "REVISED",
+        aiReplyDraft: "修正した返信文です。",
+        status: "REVISED_AND_REPLIED",
       }),
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/reply",
       expect.objectContaining({
-        body: expect.stringContaining("修正した返信文です。"),
+        body: expect.stringContaining(
+          "【投稿された返信文】\\n修正した返信文です。",
+        ),
       }),
     );
   });
