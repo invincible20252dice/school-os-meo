@@ -154,15 +154,14 @@ describe("line-webhook", () => {
     expect(body.messages[0]).toMatchObject({
       type: "flex",
       altText: "返信文の投稿確認",
-      contents: {
-        footer: {
-          contents: [
-            { action: { data: "action=confirm_custom_reply&reviewId=review-1" } },
-            { action: { data: "action=request_edit_text&reviewId=review-1" } },
-          ],
-        },
-      },
     });
+    const footerActions = body.messages[0].contents.footer.contents.map(
+      (content: { action: { data: string } }) => JSON.parse(content.action.data),
+    );
+    expect(footerActions).toEqual([
+      { action: "confirm_custom_reply", reviewId: "review-1" },
+      { action: "request_edit_text", reviewId: "review-1" },
+    ]);
   });
 
   it("posts the pending custom reply to GBP after LINE confirmation", async () => {
@@ -471,6 +470,52 @@ describe("line-webhook", () => {
         type: "text",
         text: expect.stringContaining("青葉ゼミナール 本校への温かい口コミ"),
       },
+    ]);
+  });
+
+  it("replies to JSON postback data for edit requests", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const review = buildReview();
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "review-1",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(prisma.review.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "review-1" } }),
+    );
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages).toEqual([
+      {
+        type: "text",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+      },
+      { type: "text", text: "温かい口コミをありがとうございます。" },
     ]);
   });
 

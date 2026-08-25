@@ -93,6 +93,30 @@ function getLineSourceIds(event: LineWebhookEvent) {
 }
 
 function parsePostbackData(data: string) {
+  if (data.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(data) as {
+        action?: unknown;
+        reviewId?: unknown;
+      };
+      const params = new URLSearchParams();
+      const action = normalizeString(parsed.action);
+      const reviewId = normalizeString(parsed.reviewId);
+
+      if (action) {
+        params.set("action", action);
+      }
+
+      if (reviewId) {
+        params.set("reviewId", reviewId);
+      }
+
+      return params;
+    } catch {
+      return new URLSearchParams();
+    }
+  }
+
   return new URLSearchParams(data);
 }
 

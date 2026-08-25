@@ -98,6 +98,10 @@ export function buildLineTextMessage(text: string) {
   };
 }
 
+function buildLinePostbackData(action: string, reviewId: string) {
+  return JSON.stringify({ action, reviewId });
+}
+
 export function buildLineCustomReplyConfirmationMessage({
   reviewId,
   userCustomText,
@@ -152,7 +156,7 @@ export function buildLineCustomReplyConfirmationMessage({
             action: {
               type: "postback",
               label: "この内容で確定して投稿",
-              data: `action=confirm_custom_reply&reviewId=${encodeURIComponent(reviewId)}`,
+              data: buildLinePostbackData("confirm_custom_reply", reviewId),
             },
           },
           {
@@ -161,7 +165,7 @@ export function buildLineCustomReplyConfirmationMessage({
             action: {
               type: "postback",
               label: "もう一度修正する",
-              data: `action=request_edit_text&reviewId=${encodeURIComponent(reviewId)}`,
+              data: buildLinePostbackData("request_edit_text", reviewId),
             },
           },
         ],
@@ -216,7 +220,7 @@ export function buildLineReviewMessage(
             action: {
               type: "postback",
               label: "この内容でGBPに投稿",
-              data: `action=approve_reply&reviewId=${encodeURIComponent(notification.reviewId)}`,
+              data: buildLinePostbackData("approve_reply", notification.reviewId),
               displayText: "この内容で返信",
             },
           },
@@ -226,8 +230,11 @@ export function buildLineReviewMessage(
             action: {
               type: "postback",
               label: "✏️ 返信文を編集",
-              data: `action=request_edit_text&reviewId=${encodeURIComponent(notification.reviewId)}`,
-              displayText: "返信文を編集",
+              data: buildLinePostbackData(
+                "request_edit_text",
+                notification.reviewId || "mock",
+              ),
+              displayText: "返信文を編集します",
             },
           },
           ...(notification.googleReviewUrl

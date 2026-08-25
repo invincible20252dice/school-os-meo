@@ -19,6 +19,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function getFooterActions(message: ReturnType<typeof buildLineReviewMessage>) {
+  const footer = message.contents.footer as {
+    contents: Array<{ action: Record<string, string> }>;
+  };
+  return footer.contents.map((content) => content.action);
+}
+
+function parsePostbackAction(action: Record<string, string>) {
+  return JSON.parse(action.data) as { action: string; reviewId: string };
+}
+
 describe("line", () => {
   it("formats numeric ratings as stars", () => {
     expect(buildStarRating(5)).toBe("★★★★★");
@@ -62,12 +73,28 @@ describe("line", () => {
     expect(JSON.stringify(message)).toContain("青葉ゼミナール");
     expect(JSON.stringify(message)).toContain("★★★★☆");
     expect(JSON.stringify(message)).toContain("この内容でGBPに投稿");
-    expect(JSON.stringify(message)).toContain("action=approve_reply");
-    expect(JSON.stringify(message)).toContain("reviewId=review_123");
     expect(JSON.stringify(message)).toContain("✏️ 返信文を編集");
-    expect(JSON.stringify(message)).toContain("action=request_edit_text");
     expect(JSON.stringify(message)).toContain("修正したい返信文をそのまま返信");
     expect(JSON.stringify(message)).not.toContain("管理画面で確認");
+    const actions = getFooterActions(message);
+    expect(actions[0]).toMatchObject({
+      type: "postback",
+      label: "この内容でGBPに投稿",
+    });
+    expect(parsePostbackAction(actions[0])).toEqual({
+      action: "approve_reply",
+      reviewId: "review_123",
+    });
+    expect(actions[1]).toMatchObject({
+      type: "postback",
+      label: "✏️ 返信文を編集",
+      displayText: "返信文を編集します",
+    });
+    expect(actions[1].type).not.toBe("message");
+    expect(parsePostbackAction(actions[1])).toEqual({
+      action: "request_edit_text",
+      reviewId: "review_123",
+    });
   });
 
   it("builds message links from Vercel URL and includes Google review action", () => {
@@ -84,9 +111,11 @@ describe("line", () => {
     });
     const serialized = JSON.stringify(message);
 
-    expect(serialized).toContain(
-      "action=request_edit_text&reviewId=review%20with%20spaces",
-    );
+    const actions = getFooterActions(message);
+    expect(parsePostbackAction(actions[1])).toEqual({
+      action: "request_edit_text",
+      reviewId: "review with spaces",
+    });
     expect(serialized).toContain("Google口コミを開く");
     expect(serialized).toContain("https://google.example.com/review");
   });
@@ -101,12 +130,17 @@ describe("line", () => {
     expect(message.altText).toBe("返信文の投稿確認");
     expect(serialized).toContain("こちらの文章で投稿してよろしいですか？");
     expect(serialized).toContain("確認してから投稿したい返信文です。");
-    expect(serialized).toContain(
-      "action=confirm_custom_reply&reviewId=review%20with%20spaces",
-    );
-    expect(serialized).toContain(
-      "action=request_edit_text&reviewId=review%20with%20spaces",
-    );
+    const footer = message.contents.footer as {
+      contents: Array<{ action: Record<string, string> }>;
+    };
+    expect(parsePostbackAction(footer.contents[0].action)).toEqual({
+      action: "confirm_custom_reply",
+      reviewId: "review with spaces",
+    });
+    expect(parsePostbackAction(footer.contents[1].action)).toEqual({
+      action: "request_edit_text",
+      reviewId: "review with spaces",
+    });
   });
 
   it("pushes the notification to LINE Messaging API", async () => {
