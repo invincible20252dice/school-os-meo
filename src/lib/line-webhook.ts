@@ -6,6 +6,7 @@ import {
   buildLineCustomReplyConfirmationMessage,
   replyLineFlexMessage,
   replyLineMessage,
+  replyLineTextMessages,
 } from "./line";
 
 type FetchLike = typeof fetch;
@@ -365,12 +366,21 @@ async function requestEditText({
     return "already_replied";
   }
 
-  await replyToLine({
-    event,
-    review,
-    text: "修正したい返信文を、このLINEにそのまま送信してください。",
-    fetchImpl,
-  });
+  const replyToken = normalizeString(event.replyToken);
+
+  if (replyToken) {
+    const draftText = normalizeString(review.aiReplyDraft || review.aiReplyText);
+    await replyLineTextMessages({
+      replyToken,
+      channelAccessToken: getLineAccessToken(review),
+      texts: [
+        "以下の文章をコピーして編集し、このLINEにそのまま送信してください。",
+        draftText ||
+          "AI返信ドラフトが見つかりませんでした。返信文を入力して送信してください。",
+      ],
+      fetchImpl,
+    });
+  }
 
   return "request_edit_text";
 }

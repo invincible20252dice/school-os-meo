@@ -81,22 +81,6 @@ export function buildStarRating(rating: number) {
   return `${"★".repeat(normalized)}${"☆".repeat(5 - normalized)}`;
 }
 
-function getAppBaseUrl() {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  }
-
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`.replace(/\/$/, "");
-  }
-
-  return "http://127.0.0.1:3000";
-}
-
-function buildReplyUrl(reviewId: string) {
-  return `${getAppBaseUrl()}/dashboard/reviews?reviewId=${encodeURIComponent(reviewId)}`;
-}
-
 function buildTextBox(text: string, size = "sm") {
   return {
     type: "text",
@@ -240,9 +224,10 @@ export function buildLineReviewMessage(
             type: "button",
             style: "secondary",
             action: {
-              type: "uri",
-              label: "管理画面で確認",
-              uri: buildReplyUrl(notification.reviewId),
+              type: "postback",
+              label: "✏️ 返信文を編集",
+              data: `action=request_edit_text&reviewId=${encodeURIComponent(notification.reviewId)}`,
+              displayText: "返信文を編集",
             },
           },
           ...(notification.googleReviewUrl
@@ -324,6 +309,25 @@ export async function replyLineMessage({
   text: string;
   fetchImpl?: FetchLike;
 }) {
+  return replyLineTextMessages({
+    replyToken,
+    channelAccessToken,
+    texts: [text],
+    fetchImpl,
+  });
+}
+
+export async function replyLineTextMessages({
+  replyToken,
+  channelAccessToken,
+  texts,
+  fetchImpl = fetch,
+}: {
+  replyToken: string;
+  channelAccessToken?: string;
+  texts: string[];
+  fetchImpl?: FetchLike;
+}) {
   const token = channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
   if (!token) {
@@ -338,7 +342,7 @@ export async function replyLineMessage({
     },
     body: JSON.stringify({
       replyToken,
-      messages: [buildLineTextMessage(text)],
+      messages: texts.map(buildLineTextMessage),
     }),
   });
 

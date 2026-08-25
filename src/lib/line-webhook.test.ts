@@ -418,14 +418,96 @@ describe("line-webhook", () => {
 
     expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
     expect(prisma.review.update).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages).toEqual([
+      {
+        type: "text",
+        text: "以下の文章をコピーして編集し、このLINEにそのまま送信してください。",
+      },
+      { type: "text", text: "温かい口コミをありがとうございます。" },
+    ]);
+  });
+
+  it("handles edit requests for missing or already replied reviews", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const alreadyRepliedReview = buildReview({ status: "REPLIED" });
+    const prisma = {
+      review: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(alreadyRepliedReview),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "missing-review-token",
+          postback: { data: "action=request_edit_text&reviewId=missing-review" },
+        },
+        {
+          type: "postback",
+          replyToken: "already-replied-token",
+          postback: { data: "action=request_edit_text&reviewId=review-1" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 2,
+      results: ["not_found", "already_replied"],
+    });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
       "https://api.line.me/v2/bot/message/reply",
       expect.objectContaining({
-        body: expect.stringContaining(
-          "修正したい返信文を、このLINEにそのまま送信してください",
-        ),
+        body: expect.stringContaining("対象の口コミが見つかりません"),
       }),
     );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("既に返信済み"),
+      }),
+    );
+  });
+
+  it("returns the edit prompt result without consuming LINE reply when reply token is absent", async () => {
+    const review = buildReview();
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          postback: { data: "action=request_edit_text&reviewId=review-1" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("ignores unsupported LINE events and malformed postbacks", async () => {

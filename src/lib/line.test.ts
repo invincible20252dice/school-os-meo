@@ -8,6 +8,7 @@ import {
   maskLineDestination,
   replyLineFlexMessage,
   replyLineMessage,
+  replyLineTextMessages,
   sendLineReviewNotification,
 } from "./line";
 
@@ -46,7 +47,7 @@ describe("line", () => {
   });
 
 
-  it("builds a review notification message with approval and dashboard action buttons", () => {
+  it("builds a review notification message with approval and edit action buttons", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const message = buildLineReviewMessage({
@@ -63,10 +64,10 @@ describe("line", () => {
     expect(JSON.stringify(message)).toContain("この内容でGBPに投稿");
     expect(JSON.stringify(message)).toContain("action=approve_reply");
     expect(JSON.stringify(message)).toContain("reviewId=review_123");
+    expect(JSON.stringify(message)).toContain("✏️ 返信文を編集");
+    expect(JSON.stringify(message)).toContain("action=request_edit_text");
     expect(JSON.stringify(message)).toContain("修正したい返信文をそのまま返信");
-    expect(JSON.stringify(message)).toContain(
-      "https://app.example.com/dashboard/reviews?reviewId=review_123",
-    );
+    expect(JSON.stringify(message)).not.toContain("管理画面で確認");
   });
 
   it("builds message links from Vercel URL and includes Google review action", () => {
@@ -84,7 +85,7 @@ describe("line", () => {
     const serialized = JSON.stringify(message);
 
     expect(serialized).toContain(
-      "https://school-os-meo.vercel.app/dashboard/reviews?reviewId=review%20with%20spaces",
+      "action=request_edit_text&reviewId=review%20with%20spaces",
     );
     expect(serialized).toContain("Google口コミを開く");
     expect(serialized).toContain("https://google.example.com/review");
@@ -211,6 +212,33 @@ describe("line", () => {
       replyToken: "line-reply-token",
       messages: [{ type: "text", text: "返信文を受け付けました。" }],
     });
+  });
+
+  it("replies with multiple plain text messages through LINE Messaging API", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "x-line-request-id": "multi-text-reply-request-1" },
+        }),
+    );
+
+    const result = await replyLineTextMessages({
+      replyToken: "line-reply-token",
+      texts: ["以下の文章をコピーして編集してください。", "AI返信ドラフトです。"],
+      fetchImpl: fetchMock,
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      requestId: "multi-text-reply-request-1",
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.messages).toEqual([
+      { type: "text", text: "以下の文章をコピーして編集してください。" },
+      { type: "text", text: "AI返信ドラフトです。" },
+    ]);
   });
 
   it("fails fast when LINE token is missing", async () => {
