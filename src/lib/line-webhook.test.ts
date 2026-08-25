@@ -425,9 +425,52 @@ describe("line-webhook", () => {
     expect(body.messages).toEqual([
       {
         type: "text",
-        text: "以下の文章をコピーして編集し、このLINEにそのまま送信してください。",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
       },
       { type: "text", text: "温かい口コミをありがとうございます。" },
+    ]);
+  });
+
+  it("replies with a fallback edit draft for local test review IDs without a DB record", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: "action=request_edit_text&reviewId=local_test_review_123",
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages).toEqual([
+      {
+        type: "text",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+      },
+      {
+        type: "text",
+        text: expect.stringContaining("青葉ゼミナール 本校への温かい口コミ"),
+      },
     ]);
   });
 

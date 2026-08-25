@@ -73,9 +73,15 @@ const repliedStatuses = new Set([
   "POSTED",
 ]);
 const excludedRevisionStatuses = [...repliedStatuses, "ARCHIVED"];
+const fallbackEditDraft =
+  "青葉ゼミナール 本校への温かい口コミをありがとうございます。お子さまが前向きに通ってくださっていることを大変うれしく思います。今後も一人ひとりに寄り添い、安心して学べる環境づくりに努めてまいります。";
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isTestReviewId(reviewId: string) {
+  return /^(mock_|test_|local_test_|manual_test_)/.test(reviewId);
 }
 
 function getLineSourceIds(event: LineWebhookEvent) {
@@ -345,15 +351,34 @@ async function requestEditText({
   prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
-  const review = await findReviewById({ reviewId, prisma });
+  const review = isTestReviewId(reviewId)
+    ? null
+    : await findReviewById({ reviewId, prisma });
 
   if (!review) {
-    await replyToLine({
-      event,
-      text: "対象の口コミが見つかりませんでした。",
-      fetchImpl,
-    });
-    return "not_found";
+    if (!isTestReviewId(reviewId)) {
+      await replyToLine({
+        event,
+        text: "対象の口コミが見つかりませんでした。",
+        fetchImpl,
+      });
+      return "not_found";
+    }
+
+    const replyToken = normalizeString(event.replyToken);
+
+    if (replyToken) {
+      await replyLineTextMessages({
+        replyToken,
+        texts: [
+          "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+          fallbackEditDraft,
+        ],
+        fetchImpl,
+      });
+    }
+
+    return "request_edit_text";
   }
 
   if (repliedStatuses.has(review.status)) {
@@ -374,7 +399,7 @@ async function requestEditText({
       replyToken,
       channelAccessToken: getLineAccessToken(review),
       texts: [
-        "以下の文章をコピーして編集し、このLINEにそのまま送信してください。",
+        "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
         draftText ||
           "AI返信ドラフトが見つかりませんでした。返信文を入力して送信してください。",
       ],
