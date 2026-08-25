@@ -17,6 +17,7 @@ function buildReview(overrides: Record<string, unknown> = {}) {
     gbpReviewId: "google-review-1",
     aiReplyText: "温かい口コミをありがとうございます。",
     aiReplyDraft: "温かい口コミをありがとうございます。",
+    pendingCustomReply: null,
     replyText: null,
     school: {
       gbpAccountId: "accounts/1",
@@ -52,9 +53,7 @@ describe("line-webhook", () => {
           type: "postback",
           replyToken: "line-reply-token",
           source: { userId: "U-review-admin" },
-          postback: {
-            data: "action=approve_reply&reviewId=review-1",
-          },
+          postback: { data: "action=approve_reply&reviewId=review-1" },
         },
       ],
     });
@@ -64,9 +63,7 @@ describe("line-webhook", () => {
       "https://mybusiness.googleapis.com/v4/accounts/1/locations/100/reviews/google-review-1/reply",
       expect.objectContaining({
         method: "PUT",
-        headers: expect.objectContaining({
-          Authorization: "Bearer gbp-token",
-        }),
+        headers: expect.objectContaining({ Authorization: "Bearer gbp-token" }),
         body: JSON.stringify({ comment: "温かい口コミをありがとうございます。" }),
       }),
     );
@@ -91,7 +88,7 @@ describe("line-webhook", () => {
     );
   });
 
-  it("posts a revised LINE text message to the latest pending review", async () => {
+  it("stores a revised LINE text message and replies with a confirmation Flex Message", async () => {
     process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
     const review = buildReview({ lineUserId: "C-review-group" });
     const prisma = {
@@ -111,21 +108,19 @@ describe("line-webhook", () => {
           type: "message",
           replyToken: "line-reply-token",
           source: { userId: "U-review-admin", groupId: "C-review-group" },
-          message: {
-            type: "text",
-            text: "修正した返信文です。",
-          },
+          message: { type: "text", text: "修正した返信文です。" },
         },
       ],
     });
 
-    expect(result).toEqual({ processed: 1, results: ["revised"] });
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent"],
+    });
     expect(prisma.review.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          lineUserId: {
-            in: ["C-review-group", "U-review-admin"],
-          },
+          lineUserId: { in: ["C-review-group", "U-review-admin"] },
           status: {
             notIn: [
               "APPROVED",
@@ -143,17 +138,88 @@ describe("line-webhook", () => {
     expect(prisma.review.update).toHaveBeenCalledWith({
       where: { id: "review-1" },
       data: expect.objectContaining({
-        replyText: "修正した返信文です。",
-        aiReplyText: "修正した返信文です。",
-        aiReplyDraft: "修正した返信文です。",
+        pendingCustomReply: "修正した返信文です。",
+        status: "PENDING_CUSTOM_REPLY",
+      }),
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("mybusiness.googleapis.com"),
+      expect.anything(),
+    );
+
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages[0]).toMatchObject({
+      type: "flex",
+      altText: "返信文の投稿確認",
+      contents: {
+        footer: {
+          contents: [
+            { action: { data: "action=confirm_custom_reply&reviewId=review-1" } },
+            { action: { data: "action=request_edit_text&reviewId=review-1" } },
+          ],
+        },
+      },
+    });
+  });
+
+  it("posts the pending custom reply to GBP after LINE confirmation", async () => {
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const review = buildReview({
+      status: "PENDING_CUSTOM_REPLY",
+      pendingCustomReply: "確認済みの修正返信文です。",
+    });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(async ({ data }) => ({ ...review, ...data })),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          source: { groupId: "C-review-group" },
+          postback: { data: "action=confirm_custom_reply&reviewId=review-1" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmed"],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://mybusiness.googleapis.com/v4/accounts/1/locations/100/reviews/google-review-1/reply",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ comment: "確認済みの修正返信文です。" }),
+      }),
+    );
+    expect(prisma.review.update).toHaveBeenCalledWith({
+      where: { id: "review-1" },
+      data: expect.objectContaining({
+        pendingCustomReply: null,
+        replyText: "確認済みの修正返信文です。",
+        aiReplyText: "確認済みの修正返信文です。",
+        aiReplyDraft: "確認済みの修正返信文です。",
         status: "REVISED_AND_REPLIED",
+        repliedAt: expect.any(Date),
       }),
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/reply",
       expect.objectContaining({
         body: expect.stringContaining(
-          "【投稿された返信文】\\n修正した返信文です。",
+          "【投稿された返信文】\\n確認済みの修正返信文です。",
         ),
       }),
     );
@@ -177,9 +243,7 @@ describe("line-webhook", () => {
         {
           type: "postback",
           replyToken: "line-reply-token",
-          postback: {
-            data: "action=approve_reply&reviewId=review-1",
-          },
+          postback: { data: "action=approve_reply&reviewId=review-1" },
         },
       ],
     });
@@ -189,9 +253,7 @@ describe("line-webhook", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/reply",
-      expect.objectContaining({
-        body: expect.stringContaining("既に返信済み"),
-      }),
+      expect.objectContaining({ body: expect.stringContaining("既に返信済み") }),
     );
   });
 
@@ -214,10 +276,7 @@ describe("line-webhook", () => {
           type: "message",
           replyToken: "line-reply-token",
           source: { userId: "U-no-review" },
-          message: {
-            type: "text",
-            text: "修正文です。",
-          },
+          message: { type: "text", text: "修正文です。" },
         },
       ],
     });
@@ -231,18 +290,16 @@ describe("line-webhook", () => {
     );
   });
 
-  it("reports missing reviews and missing AI drafts without posting to GBP", async () => {
+  it("reports missing reviews and missing drafts without posting to GBP", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
-    const reviewWithoutDraft = buildReview({
-      aiReplyText: "",
-      aiReplyDraft: null,
-    });
+    const reviewWithoutDraft = buildReview({ aiReplyText: "", aiReplyDraft: null });
     const prisma = {
       review: {
         findUnique: vi
           .fn()
           .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(reviewWithoutDraft),
+          .mockResolvedValueOnce(reviewWithoutDraft)
+          .mockResolvedValueOnce(null),
         findFirst: vi.fn(),
         update: vi.fn(),
       },
@@ -256,26 +313,29 @@ describe("line-webhook", () => {
         {
           type: "postback",
           replyToken: "missing-review-token",
-          postback: {
-            data: "action=approve_reply&reviewId=missing-review",
-          },
+          postback: { data: "action=approve_reply&reviewId=missing-review" },
         },
         {
           type: "postback",
           replyToken: "missing-draft-token",
+          postback: { data: "action=approve_reply&reviewId=review-without-draft" },
+        },
+        {
+          type: "postback",
+          replyToken: "missing-custom-token",
           postback: {
-            data: "action=approve_reply&reviewId=review-without-draft",
+            data: "action=confirm_custom_reply&reviewId=missing-review",
           },
         },
       ],
     });
 
     expect(result).toEqual({
-      processed: 2,
-      results: ["not_found", "missing_draft"],
+      processed: 3,
+      results: ["not_found", "missing_draft", "not_found"],
     });
     expect(prisma.review.update).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "https://api.line.me/v2/bot/message/reply",
@@ -292,7 +352,83 @@ describe("line-webhook", () => {
     );
   });
 
-  it("ignores unsupported LINE events and malformed approval postbacks", async () => {
+  it("asks for another revision when a confirmation has no pending custom reply", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const review = buildReview({
+      status: "PENDING_CUSTOM_REPLY",
+      pendingCustomReply: "   ",
+    });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: { data: "action=confirm_custom_reply&reviewId=review-1" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["missing_pending_custom_reply"],
+    });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("もう一度、返信文を送信してください"),
+      }),
+    );
+  });
+
+  it("prompts the LINE user to send another custom reply text", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const review = buildReview({ status: "PENDING_CUSTOM_REPLY" });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: { data: "action=request_edit_text&reviewId=review-1" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining(
+          "修正したい返信文を、このLINEにそのまま送信してください",
+        ),
+      }),
+    );
+  });
+
+  it("ignores unsupported LINE events and malformed postbacks", async () => {
     const prisma = {
       review: {
         findUnique: vi.fn(),
@@ -307,24 +443,27 @@ describe("line-webhook", () => {
       fetchImpl: fetchMock,
       events: [
         { type: "follow" },
-        {
-          type: "postback",
-          postback: { data: "action=approve_reply" },
-        },
+        { type: "postback", postback: { data: "action=approve_reply" } },
+        { type: "postback", postback: { data: "action=confirm_custom_reply" } },
+        { type: "postback", postback: { data: "action=request_edit_text" } },
         {
           type: "postback",
           postback: { data: "action=unknown&reviewId=review-1" },
         },
-        {
-          type: "message",
-          message: { type: "image" },
-        },
+        { type: "message", message: { type: "image" } },
       ],
     });
 
     expect(result).toEqual({
-      processed: 4,
-      results: ["ignored", "missing_review_id", "ignored", "ignored"],
+      processed: 6,
+      results: [
+        "ignored",
+        "missing_review_id",
+        "missing_review_id",
+        "missing_review_id",
+        "ignored",
+        "ignored",
+      ],
     });
     expect(prisma.review.findUnique).not.toHaveBeenCalled();
     expect(prisma.review.findFirst).not.toHaveBeenCalled();
@@ -391,9 +530,7 @@ describe("line-webhook", () => {
       events: [
         {
           type: "postback",
-          postback: {
-            data: "action=approve_reply&reviewId=review-1",
-          },
+          postback: { data: "action=approve_reply&reviewId=review-1" },
         },
       ],
     });

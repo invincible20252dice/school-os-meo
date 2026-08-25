@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildLineCustomReplyConfirmationMessage,
   buildLineReviewMessage,
   buildStarRating,
   classifyLineDestination,
   LineApiError,
   maskLineDestination,
+  replyLineFlexMessage,
+  replyLineMessage,
   sendLineReviewNotification,
 } from "./line";
 
@@ -87,6 +90,24 @@ describe("line", () => {
     expect(serialized).toContain("https://google.example.com/review");
   });
 
+  it("builds a custom reply confirmation Flex Message", () => {
+    const message = buildLineCustomReplyConfirmationMessage({
+      reviewId: "review with spaces",
+      userCustomText: "確認してから投稿したい返信文です。",
+    });
+    const serialized = JSON.stringify(message);
+
+    expect(message.altText).toBe("返信文の投稿確認");
+    expect(serialized).toContain("こちらの文章で投稿してよろしいですか？");
+    expect(serialized).toContain("確認してから投稿したい返信文です。");
+    expect(serialized).toContain(
+      "action=confirm_custom_reply&reviewId=review%20with%20spaces",
+    );
+    expect(serialized).toContain(
+      "action=request_edit_text&reviewId=review%20with%20spaces",
+    );
+  });
+
   it("pushes the notification to LINE Messaging API", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
@@ -130,6 +151,68 @@ describe("line", () => {
     expect(body.messages).toHaveLength(1);
   });
 
+  it("replies with a Flex Message through LINE Messaging API", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const message = buildLineCustomReplyConfirmationMessage({
+      reviewId: "review-1",
+      userCustomText: "修正後の返信文です。",
+    });
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "x-line-request-id": "reply-request-1" },
+        }),
+    );
+
+    const result = await replyLineFlexMessage({
+      replyToken: "line-reply-token",
+      message,
+      fetchImpl: fetchMock,
+    });
+
+    expect(result).toEqual({ status: 200, requestId: "reply-request-1" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer line-token",
+        }),
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.replyToken).toBe("line-reply-token");
+    expect(body.messages[0]).toEqual(message);
+  });
+
+  it("replies with a plain text message through LINE Messaging API", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "x-line-request-id": "text-reply-request-1" },
+        }),
+    );
+
+    const result = await replyLineMessage({
+      replyToken: "line-reply-token",
+      text: "返信文を受け付けました。",
+      fetchImpl: fetchMock,
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      requestId: "text-reply-request-1",
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({
+      replyToken: "line-reply-token",
+      messages: [{ type: "text", text: "返信文を受け付けました。" }],
+    });
+  });
+
   it("fails fast when LINE token is missing", async () => {
     delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
@@ -145,6 +228,33 @@ describe("line", () => {
         },
         vi.fn(),
       ),
+    ).rejects.toThrow("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  });
+
+  it("fails fast when replying with a Flex Message and LINE token is missing", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+    await expect(
+      replyLineFlexMessage({
+        replyToken: "line-reply-token",
+        message: buildLineCustomReplyConfirmationMessage({
+          reviewId: "review-1",
+          userCustomText: "修正文です。",
+        }),
+        fetchImpl: vi.fn(),
+      }),
+    ).rejects.toThrow("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  });
+
+  it("fails fast when replying with text and LINE token is missing", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+    await expect(
+      replyLineMessage({
+        replyToken: "line-reply-token",
+        text: "返信文です。",
+        fetchImpl: vi.fn(),
+      }),
     ).rejects.toThrow("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
   });
 
@@ -212,6 +322,69 @@ describe("line", () => {
       status: 429,
       details: { message: "plain error" },
     });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("wraps LINE API errors when replying with a Flex Message", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "invalid-line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "Invalid reply token" }), {
+          status: 400,
+        }),
+    );
+
+    await expect(
+      replyLineFlexMessage({
+        replyToken: "line-reply-token",
+        message: buildLineCustomReplyConfirmationMessage({
+          reviewId: "review-1",
+          userCustomText: "修正文です。",
+        }),
+        fetchImpl: fetchMock,
+      }),
+    ).rejects.toMatchObject({
+      name: "LineApiError",
+      status: 400,
+      details: { message: "Invalid reply token" },
+    } satisfies Partial<LineApiError>);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "LINE API Error Details:",
+      expect.stringContaining("Invalid reply token"),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("wraps LINE API errors when replying with text", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "invalid-line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "Expired reply token" }), {
+          status: 400,
+        }),
+    );
+
+    await expect(
+      replyLineMessage({
+        replyToken: "line-reply-token",
+        text: "返信文です。",
+        fetchImpl: fetchMock,
+      }),
+    ).rejects.toMatchObject({
+      name: "LineApiError",
+      status: 400,
+      details: { message: "Expired reply token" },
+    } satisfies Partial<LineApiError>);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "LINE API Error Details:",
+      expect.stringContaining("Expired reply token"),
+    );
     consoleErrorSpy.mockRestore();
   });
 

@@ -114,6 +114,78 @@ export function buildLineTextMessage(text: string) {
   };
 }
 
+export function buildLineCustomReplyConfirmationMessage({
+  reviewId,
+  userCustomText,
+}: {
+  reviewId: string;
+  userCustomText: string;
+}): LineFlexMessage {
+  return {
+    type: "flex",
+    altText: "返信文の投稿確認",
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: "こちらの文章で投稿してよろしいですか？",
+            weight: "bold",
+            size: "md",
+            color: "#111827",
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            margin: "md",
+            paddingAll: "12px",
+            backgroundColor: "#F3F4F6",
+            cornerRadius: "8px",
+            contents: [
+              {
+                type: "text",
+                text: userCustomText,
+                wrap: true,
+                size: "sm",
+                color: "#374151",
+              },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            color: "#059669",
+            action: {
+              type: "postback",
+              label: "この内容で確定して投稿",
+              data: `action=confirm_custom_reply&reviewId=${encodeURIComponent(reviewId)}`,
+            },
+          },
+          {
+            type: "button",
+            style: "secondary",
+            action: {
+              type: "postback",
+              label: "もう一度修正する",
+              data: `action=request_edit_text&reviewId=${encodeURIComponent(reviewId)}`,
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
 export function buildLineReviewMessage(
   notification: Omit<LineReviewNotification, "to">,
 ): LineFlexMessage {
@@ -267,6 +339,47 @@ export async function replyLineMessage({
     body: JSON.stringify({
       replyToken,
       messages: [buildLineTextMessage(text)],
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await parseLineErrorResponse(response);
+    console.error("LINE API Error Details:", JSON.stringify(details, null, 2));
+    throw new LineApiError(response.status, details);
+  }
+
+  return {
+    status: response.status,
+    requestId: response.headers.get("x-line-request-id"),
+  };
+}
+
+export async function replyLineFlexMessage({
+  replyToken,
+  channelAccessToken,
+  message,
+  fetchImpl = fetch,
+}: {
+  replyToken: string;
+  channelAccessToken?: string;
+  message: LineFlexMessage;
+  fetchImpl?: FetchLike;
+}) {
+  const token = channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+  if (!token) {
+    throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  }
+
+  const response = await fetchImpl("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      replyToken,
+      messages: [message],
     }),
   });
 

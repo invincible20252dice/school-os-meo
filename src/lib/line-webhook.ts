@@ -2,7 +2,11 @@ import {
   postGbpReviewReply,
   resolveGbpAccessToken,
 } from "./gbp-reply";
-import { replyLineMessage } from "./line";
+import {
+  buildLineCustomReplyConfirmationMessage,
+  replyLineFlexMessage,
+  replyLineMessage,
+} from "./line";
 
 type FetchLike = typeof fetch;
 
@@ -33,6 +37,7 @@ type ReviewWithSchool = {
   gbpReviewId?: string | null;
   aiReplyText?: string | null;
   aiReplyDraft?: string | null;
+  pendingCustomReply?: string | null;
   replyText?: string | null;
   school: {
     gbpAccountId?: string | null;
@@ -125,6 +130,31 @@ async function replyToLine({
     replyToken,
     channelAccessToken: getLineAccessToken(review),
     text,
+    fetchImpl,
+  });
+}
+
+async function replyFlexToLine({
+  event,
+  message,
+  review,
+  fetchImpl,
+}: {
+  event: LineWebhookEvent;
+  message: ReturnType<typeof buildLineCustomReplyConfirmationMessage>;
+  review?: ReviewWithSchool | null;
+  fetchImpl: FetchLike;
+}) {
+  const replyToken = normalizeString(event.replyToken);
+
+  if (!replyToken) {
+    return;
+  }
+
+  await replyLineFlexMessage({
+    replyToken,
+    channelAccessToken: getLineAccessToken(review),
+    message,
     fetchImpl,
   });
 }
@@ -224,6 +254,127 @@ async function approveReply({
   return "approved";
 }
 
+async function findReviewById({
+  reviewId,
+  prisma,
+}: {
+  reviewId: string;
+  prisma: PrismaLike;
+}) {
+  return (await prisma.review.findUnique({
+    where: { id: reviewId },
+    include: buildReviewInclude(),
+  })) as ReviewWithSchool | null;
+}
+
+async function confirmCustomReply({
+  event,
+  reviewId,
+  prisma,
+  fetchImpl,
+}: {
+  event: LineWebhookEvent;
+  reviewId: string;
+  prisma: PrismaLike;
+  fetchImpl: FetchLike;
+}) {
+  const review = await findReviewById({ reviewId, prisma });
+
+  if (!review) {
+    await replyToLine({
+      event,
+      text: "対象の口コミが見つかりませんでした。",
+      fetchImpl,
+    });
+    return "not_found";
+  }
+
+  if (repliedStatuses.has(review.status)) {
+    await replyToLine({
+      event,
+      review,
+      text: "この口コミは既に返信済みです。",
+      fetchImpl,
+    });
+    return "already_replied";
+  }
+
+  const replyText = normalizeString(review.pendingCustomReply);
+
+  if (!replyText) {
+    await replyToLine({
+      event,
+      review,
+      text: "確認待ちの修正返信文が見つかりませんでした。もう一度、返信文を送信してください。",
+      fetchImpl,
+    });
+    return "missing_pending_custom_reply";
+  }
+
+  await postReplyToGbp({ review, replyText, fetchImpl });
+  await prisma.review.update({
+    where: { id: review.id },
+    data: {
+      pendingCustomReply: null,
+      replyText,
+      aiReplyText: replyText,
+      aiReplyDraft: replyText,
+      status: "REVISED_AND_REPLIED",
+      repliedAt: new Date(),
+    },
+  });
+  await replyToLine({
+    event,
+    review,
+    text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました！\n\n【投稿された返信文】\n${replyText}`,
+    fetchImpl,
+  });
+
+  return "custom_reply_confirmed";
+}
+
+async function requestEditText({
+  event,
+  reviewId,
+  prisma,
+  fetchImpl,
+}: {
+  event: LineWebhookEvent;
+  reviewId: string;
+  prisma: PrismaLike;
+  fetchImpl: FetchLike;
+}) {
+  const review = await findReviewById({ reviewId, prisma });
+
+  if (!review) {
+    await replyToLine({
+      event,
+      text: "対象の口コミが見つかりませんでした。",
+      fetchImpl,
+    });
+    return "not_found";
+  }
+
+  if (repliedStatuses.has(review.status)) {
+    await replyToLine({
+      event,
+      review,
+      text: "この口コミは既に返信済みです。",
+      fetchImpl,
+    });
+    return "already_replied";
+  }
+
+  await replyToLine({
+    event,
+    review,
+    text: "修正したい返信文を、このLINEにそのまま送信してください。",
+    fetchImpl,
+  });
+
+  return "request_edit_text";
+}
+
 async function reviseReply({
   event,
   prisma,
@@ -262,25 +413,24 @@ async function reviseReply({
     return "pending_not_found";
   }
 
-  await postReplyToGbp({ review, replyText, fetchImpl });
   await prisma.review.update({
     where: { id: review.id },
     data: {
-      replyText,
-      aiReplyText: replyText,
-      aiReplyDraft: replyText,
-      status: "REVISED_AND_REPLIED",
-      repliedAt: new Date(),
+      pendingCustomReply: replyText,
+      status: "PENDING_CUSTOM_REPLY",
     },
   });
-  await replyToLine({
+  await replyFlexToLine({
     event,
     review,
-    text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました！\n\n【投稿された返信文】\n${replyText}`,
+    message: buildLineCustomReplyConfirmationMessage({
+      reviewId: review.id,
+      userCustomText: replyText,
+    }),
     fetchImpl,
   });
 
-  return "revised";
+  return "custom_reply_confirmation_sent";
 }
 
 export async function handleLineWebhookEvents({
@@ -299,6 +449,26 @@ export async function handleLineWebhookEvents({
         results.push(
           reviewId
             ? await approveReply({ event, reviewId, prisma, fetchImpl })
+            : "missing_review_id",
+        );
+        continue;
+      }
+
+      if (params.get("action") === "confirm_custom_reply") {
+        const reviewId = normalizeString(params.get("reviewId"));
+        results.push(
+          reviewId
+            ? await confirmCustomReply({ event, reviewId, prisma, fetchImpl })
+            : "missing_review_id",
+        );
+        continue;
+      }
+
+      if (params.get("action") === "request_edit_text") {
+        const reviewId = normalizeString(params.get("reviewId"));
+        results.push(
+          reviewId
+            ? await requestEditText({ event, reviewId, prisma, fetchImpl })
             : "missing_review_id",
         );
         continue;
