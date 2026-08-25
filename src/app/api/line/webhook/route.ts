@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import {
   handleLineWebhookEvents,
   type LineWebhookEvent,
@@ -9,8 +10,41 @@ type LineWebhookBody = {
   events?: LineWebhookEvent[];
 };
 
-function isAuthorized(request: Request) {
+function verifyLineSignature({
+  body,
+  channelSecret,
+  signature,
+}: {
+  body: string;
+  channelSecret: string;
+  signature: string;
+}) {
+  const expected = createHmac("sha256", channelSecret)
+    .update(body)
+    .digest("base64");
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    signatureBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(signatureBuffer, expectedBuffer)
+  );
+}
+
+function isAuthorized(request: Request, body: string) {
   const secret = process.env.LINE_WEBHOOK_SECRET?.trim();
+  const channelSecret = process.env.LINE_CHANNEL_SECRET?.trim();
+  const lineSignature = request.headers.get("x-line-signature")?.trim();
+
+  if (channelSecret) {
+    return lineSignature
+      ? verifyLineSignature({
+          body,
+          channelSecret,
+          signature: lineSignature,
+        })
+      : false;
+  }
 
   if (!secret) {
     return true;
@@ -20,21 +54,22 @@ function isAuthorized(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const body = (await request.json().catch(() => ({}))) as LineWebhookBody;
+    const rawBody = await request.text();
+
+    if (!isAuthorized(request, rawBody)) {
+      console.error("[LINE Webhook] Unauthorized request.");
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = (rawBody ? JSON.parse(rawBody) : {}) as LineWebhookBody;
     const events = Array.isArray(body.events) ? body.events : [];
+    console.info("[LINE Webhook] Received events:", events.length);
     const summary = await handleLineWebhookEvents({ events, prisma });
 
     return NextResponse.json(summary);
   } catch (error) {
-    console.error("LINE webhook handling failed.", error);
-    return NextResponse.json(
-      { message: "LINE Webhookの処理に失敗しました。" },
-      { status: 500 },
-    );
+    console.error("[LINE Webhook Handler Error]:", error);
+    return NextResponse.json({ success: true, handled: false }, { status: 200 });
   }
 }

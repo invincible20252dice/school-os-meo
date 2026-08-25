@@ -335,7 +335,7 @@ export async function replyLineTextMessages({
   texts: string[];
   fetchImpl?: FetchLike;
 }) {
-  const token = channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const token = (channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN)?.trim();
 
   if (!token) {
     throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
@@ -359,10 +359,14 @@ export async function replyLineTextMessages({
     throw new LineApiError(response.status, details);
   }
 
-  return {
+  const result = {
     status: response.status,
     requestId: response.headers.get("x-line-request-id"),
   };
+
+  console.info("[LINE Reply Result]:", JSON.stringify(result, null, 2));
+
+  return result;
 }
 
 export async function replyLineFlexMessage({
@@ -376,7 +380,7 @@ export async function replyLineFlexMessage({
   message: LineFlexMessage;
   fetchImpl?: FetchLike;
 }) {
-  const token = channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const token = (channelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN)?.trim();
 
   if (!token) {
     throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
@@ -400,8 +404,12 @@ export async function replyLineFlexMessage({
     throw new LineApiError(response.status, details);
   }
 
-  return {
+  const result = {
     status: response.status,
     requestId: response.headers.get("x-line-request-id"),
   };
+
+  console.info("[LINE Reply Result]:", JSON.stringify(result, null, 2));
+
+  return result;
 }

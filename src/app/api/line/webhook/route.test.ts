@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHmac } from "crypto";
 
 const originalEnv = process.env;
 
@@ -79,6 +80,66 @@ describe("POST /api/line/webhook", () => {
     expect(body).toEqual({ processed: 0, results: ["approved"] });
   });
 
+  it("accepts requests with a valid LINE signature", async () => {
+    process.env.LINE_CHANNEL_SECRET = "line-channel-secret";
+    const rawBody = JSON.stringify({ events: [] });
+    const signature = createHmac("sha256", "line-channel-secret")
+      .update(rawBody)
+      .digest("base64");
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("https://app.example.com/api/line/webhook", {
+        method: "POST",
+        headers: { "x-line-signature": signature },
+        body: rawBody,
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ processed: 0, results: ["approved"] });
+  });
+
+  it("rejects requests with an invalid LINE signature", async () => {
+    process.env.LINE_CHANNEL_SECRET = "line-channel-secret";
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("https://app.example.com/api/line/webhook", {
+        method: "POST",
+        headers: { "x-line-signature": "invalid-signature" },
+        body: JSON.stringify({ events: [] }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects requests when LINE channel secret is configured but no signature or custom secret matches", async () => {
+    process.env.LINE_CHANNEL_SECRET = "line-channel-secret";
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("https://app.example.com/api/line/webhook", {
+        method: "POST",
+        body: JSON.stringify({ events: [] }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("accepts an empty webhook body as an empty event list", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("https://app.example.com/api/line/webhook", {
+        method: "POST",
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ processed: 0, results: ["approved"] });
+  });
+
   it("treats invalid JSON and non-array events as an empty LINE event list", async () => {
     const lineWebhook = await import("@/lib/line-webhook");
     const { POST } = await import("./route");
@@ -91,13 +152,11 @@ describe("POST /api/line/webhook", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ processed: 0, results: ["approved"] });
-    expect(lineWebhook.handleLineWebhookEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ events: [] }),
-    );
+    expect(body).toEqual({ success: true, handled: false });
+    expect(lineWebhook.handleLineWebhookEvents).not.toHaveBeenCalled();
   });
 
-  it("returns a Japanese error when webhook handling fails", async () => {
+  it("keeps LINE webhook responses successful when handling fails", async () => {
     const lineWebhook = await import("@/lib/line-webhook");
     vi.mocked(lineWebhook.handleLineWebhookEvents).mockRejectedValueOnce(
       new Error("LINE down"),
@@ -111,7 +170,7 @@ describe("POST /api/line/webhook", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body).toEqual({ message: "LINE Webhookの処理に失敗しました。" });
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ success: true, handled: false });
   });
 });

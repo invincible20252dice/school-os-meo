@@ -424,7 +424,7 @@ describe("line-webhook", () => {
     expect(body.messages).toEqual([
       {
         type: "text",
-        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
       },
       { type: "text", text: "温かい口コミをありがとうございます。" },
     ]);
@@ -464,13 +464,239 @@ describe("line-webhook", () => {
     expect(body.messages).toEqual([
       {
         type: "text",
-        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
       },
       {
         type: "text",
         text: expect.stringContaining("青葉ゼミナール 本校への温かい口コミ"),
       },
     ]);
+  });
+
+  it("uses the latest DB LINE token when env token is missing for test edit postbacks", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({
+          lineChannelAccessToken: "db-line-token",
+        })),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "local_test_review_123",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(prisma.schoolSetting.findFirst).toHaveBeenCalledWith({
+      where: { lineChannelAccessToken: { not: null } },
+      orderBy: { updatedAt: "desc" },
+      select: { lineChannelAccessToken: true },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer db-line-token",
+        }),
+      }),
+    );
+  });
+
+  it("skips LINE verification dummy reply tokens", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "00000000000000000000000000000000",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "local_test_review_123",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not call LINE Reply API when no token can be resolved", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      schoolSetting: {
+        findFirst: vi.fn(async () => null),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "local_test_review_123",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not call LINE Reply API for real reviews when no token source exists", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const review = buildReview({
+      school: {
+        gbpAccountId: "accounts/1",
+        gbpLocationId: "locations/100",
+        schoolSetting: {
+          googleRefreshToken: null,
+          selectedGbpLocationId: "locations/100",
+          lineChannelAccessToken: "",
+        },
+      },
+    });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "review-1",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a generic edit prompt when a real review has no draft", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const review = buildReview({ aiReplyText: "", aiReplyDraft: "" });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "request_edit_text",
+              reviewId: "review-1",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages[1]).toEqual({
+      type: "text",
+      text: "AI返信ドラフトが見つかりませんでした。返信文を入力して送信してください。",
+    });
+  });
+
+  it("ignores malformed JSON postback data", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: { data: "{" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["ignored"] });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("replies to JSON postback data for edit requests", async () => {
@@ -513,7 +739,7 @@ describe("line-webhook", () => {
     expect(body.messages).toEqual([
       {
         type: "text",
-        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+        text: "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
       },
       { type: "text", text: "温かい口コミをありがとうございます。" },
     ]);

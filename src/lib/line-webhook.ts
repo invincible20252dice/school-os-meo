@@ -57,6 +57,9 @@ type PrismaLike = {
     findFirst(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
   };
+  schoolSetting?: {
+    findFirst(args: unknown): Promise<unknown>;
+  };
 };
 
 type HandleLineWebhookEventsInput = {
@@ -75,6 +78,10 @@ const repliedStatuses = new Set([
 const excludedRevisionStatuses = [...repliedStatuses, "ARCHIVED"];
 const fallbackEditDraft =
   "青葉ゼミナール 本校への温かい口コミをありがとうございます。お子さまが前向きに通ってくださっていることを大変うれしく思います。今後も一人ひとりに寄り添い、安心して学べる環境づくりに努めてまいります。";
+const dummyReplyTokens = new Set([
+  "00000000000000000000000000000000",
+  "ffffffffffffffffffffffffffffffff",
+]);
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -140,26 +147,83 @@ function getLineAccessToken(review?: ReviewWithSchool | null) {
   return review?.school.schoolSetting?.lineChannelAccessToken || undefined;
 }
 
+function isUsableReplyToken(replyToken: string) {
+  return Boolean(replyToken) && !dummyReplyTokens.has(replyToken);
+}
+
+async function resolveLineAccessToken({
+  prisma,
+  review,
+}: {
+  prisma: PrismaLike;
+  review?: ReviewWithSchool | null;
+}) {
+  const reviewToken = normalizeString(getLineAccessToken(review));
+  const envToken = normalizeString(process.env.LINE_CHANNEL_ACCESS_TOKEN);
+
+  if (reviewToken) {
+    return reviewToken;
+  }
+
+  if (envToken) {
+    return envToken;
+  }
+
+  if (!prisma.schoolSetting?.findFirst) {
+    return undefined;
+  }
+
+  try {
+    const setting = (await prisma.schoolSetting.findFirst({
+      where: {
+        lineChannelAccessToken: {
+          not: null,
+        },
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: {
+        lineChannelAccessToken: true,
+      },
+    })) as { lineChannelAccessToken?: string | null } | null;
+
+    return normalizeString(setting?.lineChannelAccessToken) || undefined;
+  } catch (error) {
+    console.error("[LINE Webhook] Failed to resolve LINE token from DB.", error);
+    return undefined;
+  }
+}
+
 async function replyToLine({
   event,
   text,
   review,
+  prisma,
   fetchImpl,
 }: {
   event: LineWebhookEvent;
   text: string;
   review?: ReviewWithSchool | null;
+  prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
   const replyToken = normalizeString(event.replyToken);
 
-  if (!replyToken) {
+  if (!isUsableReplyToken(replyToken)) {
+    return;
+  }
+
+  const channelAccessToken = await resolveLineAccessToken({ prisma, review });
+
+  if (!channelAccessToken) {
+    console.error("[LINE Webhook] Channel Access Token not found.");
     return;
   }
 
   await replyLineMessage({
     replyToken,
-    channelAccessToken: getLineAccessToken(review),
+    channelAccessToken,
     text,
     fetchImpl,
   });
@@ -169,22 +233,31 @@ async function replyFlexToLine({
   event,
   message,
   review,
+  prisma,
   fetchImpl,
 }: {
   event: LineWebhookEvent;
   message: ReturnType<typeof buildLineCustomReplyConfirmationMessage>;
   review?: ReviewWithSchool | null;
+  prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
   const replyToken = normalizeString(event.replyToken);
 
-  if (!replyToken) {
+  if (!isUsableReplyToken(replyToken)) {
+    return;
+  }
+
+  const channelAccessToken = await resolveLineAccessToken({ prisma, review });
+
+  if (!channelAccessToken) {
+    console.error("[LINE Webhook] Channel Access Token not found.");
     return;
   }
 
   await replyLineFlexMessage({
     replyToken,
-    channelAccessToken: getLineAccessToken(review),
+    channelAccessToken,
     message,
     fetchImpl,
   });
@@ -237,6 +310,7 @@ async function approveReply({
     await replyToLine({
       event,
       text: "対象の口コミが見つかりませんでした。",
+      prisma,
       fetchImpl,
     });
     return "not_found";
@@ -247,6 +321,7 @@ async function approveReply({
       event,
       review,
       text: "この口コミは既に返信済みです。",
+      prisma,
       fetchImpl,
     });
     return "already_replied";
@@ -259,6 +334,7 @@ async function approveReply({
       event,
       review,
       text: "AI返信ドラフトが見つかりませんでした。管理画面で返信文を確認してください。",
+      prisma,
       fetchImpl,
     });
     return "missing_draft";
@@ -279,6 +355,7 @@ async function approveReply({
     event,
     review,
     text: "✅ AI返信ドラフトの内容でGoogleマップに返信を投稿しました！",
+    prisma,
     fetchImpl,
   });
 
@@ -315,6 +392,7 @@ async function confirmCustomReply({
     await replyToLine({
       event,
       text: "対象の口コミが見つかりませんでした。",
+      prisma,
       fetchImpl,
     });
     return "not_found";
@@ -325,6 +403,7 @@ async function confirmCustomReply({
       event,
       review,
       text: "この口コミは既に返信済みです。",
+      prisma,
       fetchImpl,
     });
     return "already_replied";
@@ -337,6 +416,7 @@ async function confirmCustomReply({
       event,
       review,
       text: "確認待ちの修正返信文が見つかりませんでした。もう一度、返信文を送信してください。",
+      prisma,
       fetchImpl,
     });
     return "missing_pending_custom_reply";
@@ -358,6 +438,7 @@ async function confirmCustomReply({
     event,
     review,
     text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました！\n\n【投稿された返信文】\n${replyText}`,
+    prisma,
     fetchImpl,
   });
 
@@ -384,6 +465,7 @@ async function requestEditText({
       await replyToLine({
         event,
         text: "対象の口コミが見つかりませんでした。",
+        prisma,
         fetchImpl,
       });
       return "not_found";
@@ -391,11 +473,19 @@ async function requestEditText({
 
     const replyToken = normalizeString(event.replyToken);
 
-    if (replyToken) {
+    if (isUsableReplyToken(replyToken)) {
+      const channelAccessToken = await resolveLineAccessToken({ prisma });
+
+      if (!channelAccessToken) {
+        console.error("[LINE Webhook] Channel Access Token not found.");
+        return "request_edit_text";
+      }
+
       await replyLineTextMessages({
         replyToken,
+        channelAccessToken,
         texts: [
-          "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+          "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
           fallbackEditDraft,
         ],
         fetchImpl,
@@ -410,6 +500,7 @@ async function requestEditText({
       event,
       review,
       text: "この口コミは既に返信済みです。",
+      prisma,
       fetchImpl,
     });
     return "already_replied";
@@ -417,13 +508,20 @@ async function requestEditText({
 
   const replyToken = normalizeString(event.replyToken);
 
-  if (replyToken) {
+  if (isUsableReplyToken(replyToken)) {
     const draftText = normalizeString(review.aiReplyDraft || review.aiReplyText);
+    const channelAccessToken = await resolveLineAccessToken({ prisma, review });
+
+    if (!channelAccessToken) {
+      console.error("[LINE Webhook] Channel Access Token not found.");
+      return "request_edit_text";
+    }
+
     await replyLineTextMessages({
       replyToken,
-      channelAccessToken: getLineAccessToken(review),
+      channelAccessToken,
       texts: [
-        "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。",
+        "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
         draftText ||
           "AI返信ドラフトが見つかりませんでした。返信文を入力して送信してください。",
       ],
@@ -467,6 +565,7 @@ async function reviseReply({
     await replyToLine({
       event,
       text: "修正対象の未返信口コミが見つかりませんでした。",
+      prisma,
       fetchImpl,
     });
     return "pending_not_found";
@@ -486,6 +585,7 @@ async function reviseReply({
       reviewId: review.id,
       userCustomText: replyText,
     }),
+    prisma,
     fetchImpl,
   });
 
