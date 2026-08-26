@@ -38,9 +38,14 @@ async function assertCanAccessReview(request: Request, reviewId: string) {
 
   const review = await prisma.review.findUnique({
     where: { id: reviewId },
-    include: {
+    select: {
+      id: true,
+      schoolId: true,
+      googleReviewId: true,
       school: {
-        include: {
+        select: {
+          gbpAccountId: true,
+          gbpLocationId: true,
           schoolSetting: {
             select: {
               googleRefreshToken: true,
@@ -148,10 +153,15 @@ export async function POST(request: Request) {
       where: { id: review.id },
       data: {
         aiReplyText: replyText,
-        aiReplyDraft: replyText,
         replyText,
         status: "REPLIED",
         repliedAt: new Date(),
+      },
+      select: {
+        id: true,
+        status: true,
+        aiReplyText: true,
+        repliedAt: true,
       },
     });
 

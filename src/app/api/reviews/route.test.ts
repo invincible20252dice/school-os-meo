@@ -70,6 +70,11 @@ describe("/api/reviews", () => {
     expect(prisma.review.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { schoolId: "school-1" },
+        select: expect.not.objectContaining({
+          comment: expect.anything(),
+          gbpReviewId: expect.anything(),
+          aiReplyDraft: expect.anything(),
+        }),
       }),
     );
   });
@@ -128,6 +133,28 @@ describe("/api/reviews", () => {
     expect(prisma.review.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {},
+      }),
+    );
+  });
+
+  it("exposes the same safe review list through the dashboard API path", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const dashboardReviews = await import("../dashboard/reviews/route");
+
+    const response = await dashboardReviews.GET(
+      new Request("https://app.example.com/api/dashboard/reviews?schoolId=school-1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.reviews[0].id).toBe("review-1");
+    expect(prisma.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.not.objectContaining({
+          comment: expect.anything(),
+          gbpReviewId: expect.anything(),
+          aiReplyDraft: expect.anything(),
+        }),
       }),
     );
   });

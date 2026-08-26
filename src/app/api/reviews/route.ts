@@ -60,7 +60,19 @@ export async function GET(request: Request) {
       : {};
     const reviews = await prisma.review.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        schoolId: true,
+        source: true,
+        status: true,
+        parentName: true,
+        rating: true,
+        originalText: true,
+        googleReviewId: true,
+        aiReplyText: true,
+        aiReplyGeneratedAt: true,
+        repliedAt: true,
+        createdAt: true,
         school: {
           select: {
             name: true,

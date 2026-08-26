@@ -117,12 +117,25 @@ describe("/api/gbp/reply", () => {
       replyText: "ありがとうございます。",
       accessToken: "access-token",
     });
+    expect(prisma.review.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.not.objectContaining({
+          comment: expect.anything(),
+          gbpReviewId: expect.anything(),
+          aiReplyDraft: expect.anything(),
+        }),
+      }),
+    );
     expect(prisma.review.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "review-1" },
-        data: expect.objectContaining({
-          aiReplyText: "ありがとうございます。",
-          status: "REPLIED",
+        data: expect.not.objectContaining({
+          aiReplyDraft: expect.anything(),
+        }),
+        select: expect.objectContaining({
+          id: true,
+          status: true,
+          aiReplyText: true,
         }),
       }),
     );
