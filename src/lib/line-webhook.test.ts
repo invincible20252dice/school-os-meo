@@ -135,6 +135,11 @@ describe("line-webhook", () => {
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
     );
+    expect(prisma.review.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.not.objectContaining({ comment: expect.anything() }),
+      }),
+    );
     expect(prisma.review.update).toHaveBeenCalledWith({
       where: { id: "review-1" },
       data: expect.objectContaining({
@@ -1033,7 +1038,10 @@ describe("line-webhook", () => {
 
     expect(result).toEqual({ processed: 1, results: ["request_edit_text"] });
     expect(prisma.review.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "review-1" } }),
+      expect.objectContaining({
+        where: { id: "review-1" },
+        select: expect.not.objectContaining({ comment: expect.anything() }),
+      }),
     );
     const lineReplyCall = fetchMock.mock.calls.find(
       ([url]) => url === "https://api.line.me/v2/bot/message/reply",

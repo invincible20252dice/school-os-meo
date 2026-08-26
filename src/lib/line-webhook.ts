@@ -150,10 +150,20 @@ function stringifyLineErrorDetails(details: unknown) {
   }
 }
 
-function buildReviewInclude() {
+function buildReviewSelect() {
   return {
+    id: true,
+    schoolId: true,
+    status: true,
+    googleReviewId: true,
+    gbpReviewId: true,
+    aiReplyText: true,
+    aiReplyDraft: true,
+    pendingCustomReply: true,
     school: {
-      include: {
+      select: {
+        gbpAccountId: true,
+        gbpLocationId: true,
         schoolSetting: {
           select: {
             googleRefreshToken: true,
@@ -354,7 +364,7 @@ async function approveReply({
 }) {
   const review = (await prisma.review.findUnique({
     where: { id: reviewId },
-    include: buildReviewInclude(),
+    select: buildReviewSelect(),
   })) as ReviewWithSchool | null;
 
   if (!review) {
@@ -422,7 +432,7 @@ async function findReviewById({
 }) {
   return (await prisma.review.findUnique({
     where: { id: reviewId },
-    include: buildReviewInclude(),
+    select: buildReviewSelect(),
   })) as ReviewWithSchool | null;
 }
 
@@ -666,7 +676,7 @@ async function reviseReply({
       },
     },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    include: buildReviewInclude(),
+    select: buildReviewSelect(),
   })) as ReviewWithSchool | null;
   console.info("[LINE Webhook Text] Pending review lookup result:", {
     found: Boolean(review),
