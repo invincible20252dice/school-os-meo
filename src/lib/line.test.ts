@@ -131,7 +131,7 @@ describe("line", () => {
     });
     const serialized = JSON.stringify(message);
 
-    expect(message.altText).toBe("返信文の投稿確認");
+    expect(message.altText).toBe("投稿内容の確認");
     expect(serialized).toContain("こちらの文章で投稿してよろしいですか？");
     expect(serialized).toContain("確認してから投稿したい返信文です。");
     const footer = message.contents.footer as {

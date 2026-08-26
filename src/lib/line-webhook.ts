@@ -576,8 +576,22 @@ async function reviseReply({
   const sourceIds = getLineSourceIds(event);
   const replyText = normalizeString(event.message?.text);
 
-  if (!sourceIds.length || !replyText) {
+  if (!replyText) {
     return "ignored";
+  }
+
+  if (!sourceIds.length) {
+    await replyFlexToLine({
+      event,
+      prisma,
+      message: buildLineCustomReplyConfirmationMessage({
+        reviewId: "mock",
+        userCustomText: replyText,
+        includeTextInPostback: true,
+      }),
+      fetchImpl,
+    });
+    return "custom_reply_confirmation_sent_mock";
   }
 
   const review = (await prisma.review.findFirst({
@@ -650,8 +664,8 @@ export async function handleLineWebhookEvents({
       }
 
       if (params.get("action") === "confirm_custom_reply") {
-        const reviewId = normalizeString(params.get("reviewId"));
         const postbackText = normalizeString(params.get("text"));
+        const reviewId = normalizeString(params.get("reviewId")) || (postbackText ? "mock" : "");
         results.push(
           reviewId
             ? await confirmCustomReply({
@@ -667,7 +681,7 @@ export async function handleLineWebhookEvents({
       }
 
       if (params.get("action") === "request_edit_text") {
-        const reviewId = normalizeString(params.get("reviewId"));
+        const reviewId = normalizeString(params.get("reviewId")) || "mock";
         results.push(
           reviewId
             ? await requestEditText({ event, reviewId, prisma, fetchImpl })

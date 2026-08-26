@@ -153,7 +153,7 @@ describe("line-webhook", () => {
     const body = JSON.parse(String(lineReplyCall?.[1]?.body));
     expect(body.messages[0]).toMatchObject({
       type: "flex",
-      altText: "返信文の投稿確認",
+      altText: "投稿内容の確認",
     });
     const footerActions = body.messages[0].contents.footer.contents.map(
       (content: { action: { data: string } }) => JSON.parse(content.action.data),
@@ -352,6 +352,47 @@ describe("line-webhook", () => {
       reviewId: "mock",
       text: "修正文です。",
     });
+  });
+
+  it("replies with a mock confirmation Flex Message even when text source IDs are absent", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          message: { type: "text", text: " sourceなしでも確認したい返信文 " },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent_mock"],
+    });
+    expect(prisma.review.findFirst).not.toHaveBeenCalled();
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    expect(body.messages[0]).toMatchObject({
+      type: "flex",
+      altText: "投稿内容の確認",
+    });
+    expect(JSON.stringify(body.messages[0])).toContain(
+      "sourceなしでも確認したい返信文",
+    );
   });
 
   it("reports missing reviews and missing drafts without posting to GBP", async () => {
@@ -921,7 +962,7 @@ describe("line-webhook", () => {
         "ignored",
         "missing_review_id",
         "missing_review_id",
-        "missing_review_id",
+        "request_edit_text",
         "ignored",
         "ignored",
       ],
@@ -931,7 +972,7 @@ describe("line-webhook", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("ignores text revisions when the LINE source or message text is missing", async () => {
+  it("starts mock confirmation for source-less text and ignores blank revision text", async () => {
     const prisma = {
       review: {
         findUnique: vi.fn(),
@@ -958,7 +999,10 @@ describe("line-webhook", () => {
       ],
     });
 
-    expect(result).toEqual({ processed: 2, results: ["ignored", "ignored"] });
+    expect(result).toEqual({
+      processed: 2,
+      results: ["custom_reply_confirmation_sent_mock", "ignored"],
+    });
     expect(prisma.review.findFirst).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });

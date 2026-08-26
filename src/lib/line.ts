@@ -113,7 +113,7 @@ export function buildLineCustomReplyConfirmationMessage({
 }): LineFlexMessage {
   return {
     type: "flex",
-    altText: "返信文の投稿確認",
+    altText: "投稿内容の確認",
     contents: {
       type: "bubble",
       body: {
@@ -125,6 +125,7 @@ export function buildLineCustomReplyConfirmationMessage({
             text: "こちらの文章で投稿してよろしいですか？",
             weight: "bold",
             size: "md",
+            wrap: true,
             color: "#111827",
           },
           {
