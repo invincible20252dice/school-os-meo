@@ -22,7 +22,7 @@ describe("manual-review-test", () => {
     expect(result.savedReview.aiReplyText).toContain("青葉ゼミナール 本校");
     expect(result.lineNotification.altText).toContain("新着口コミ");
     expect(JSON.stringify(result.lineNotification)).toContain("この内容でGBPに投稿");
-    expect(JSON.stringify(result.lineNotification)).toContain("✏️ 返信文を編集");
+    expect(JSON.stringify(result.lineNotification)).toContain("✏️ 編集して返信を投稿");
     expect(JSON.stringify(result.lineNotification)).not.toContain("管理画面で確認");
   });
 

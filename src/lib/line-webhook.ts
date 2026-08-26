@@ -2,13 +2,7 @@ import {
   postGbpReviewReply,
   resolveGbpAccessToken,
 } from "./gbp-reply";
-import {
-  buildLineCustomReplyConfirmationMessage,
-  LineApiError,
-  replyLineFlexMessage,
-  replyLineMessage,
-  replyLineTextMessages,
-} from "./line";
+import { replyLineMessage } from "./line";
 
 type FetchLike = typeof fetch;
 
@@ -31,15 +25,11 @@ export type LineWebhookEvent = {
   };
 };
 
-type ReviewWithSchool = {
+type ReviewForApproval = {
   id: string;
-  schoolId: string;
   status: string;
   googleReviewId?: string | null;
   aiReplyText?: string | null;
-  aiReplyDraft?: string | null;
-  pendingCustomReply?: string | null;
-  replyText?: string | null;
   school: {
     gbpAccountId?: string | null;
     gbpLocationId?: string | null;
@@ -54,7 +44,6 @@ type ReviewWithSchool = {
 type PrismaLike = {
   review: {
     findUnique(args: unknown): Promise<unknown>;
-    findFirst(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
   };
   schoolSetting?: {
@@ -75,9 +64,6 @@ const repliedStatuses = new Set([
   "REPLIED",
   "POSTED",
 ]);
-const excludedRevisionStatuses = [...repliedStatuses, "ARCHIVED"];
-const fallbackEditDraft =
-  "青葉ゼミナール 本校への温かい口コミをありがとうございます。お子さまが前向きに通ってくださっていることを大変うれしく思います。今後も一人ひとりに寄り添い、安心して学べる環境づくりに努めてまいります。";
 const dummyReplyTokens = new Set([
   "00000000000000000000000000000000",
   "ffffffffffffffffffffffffffffffff",
@@ -87,30 +73,16 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isTestReviewId(reviewId: string) {
-  return reviewId === "mock" || /^(mock_|test_|local_test_|manual_test_)/.test(reviewId);
-}
-
-function getLineSourceIds(event: LineWebhookEvent) {
-  return [
-    normalizeString(event.source?.groupId),
-    normalizeString(event.source?.userId),
-    normalizeString(event.source?.roomId),
-  ].filter(Boolean);
-}
-
 function parsePostbackData(data: string) {
   if (data.startsWith("{")) {
     try {
       const parsed = JSON.parse(data) as {
         action?: unknown;
         reviewId?: unknown;
-        text?: unknown;
       };
       const params = new URLSearchParams();
       const action = normalizeString(parsed.action);
       const reviewId = normalizeString(parsed.reviewId);
-      const text = normalizeString(parsed.text);
 
       if (action) {
         params.set("action", action);
@@ -118,10 +90,6 @@ function parsePostbackData(data: string) {
 
       if (reviewId) {
         params.set("reviewId", reviewId);
-      }
-
-      if (text) {
-        params.set("text", text);
       }
 
       return params;
@@ -133,31 +101,12 @@ function parsePostbackData(data: string) {
   return new URLSearchParams(data);
 }
 
-function stringifyLineErrorDetails(details: unknown) {
-  if (!details) {
-    return "詳細なし";
-  }
-
-  if (typeof details === "string") {
-    return details;
-  }
-
-  try {
-    return JSON.stringify(details);
-  } catch {
-    return String(details);
-  }
-}
-
-function buildReviewSelect() {
+function buildReviewApprovalSelect() {
   return {
     id: true,
-    schoolId: true,
     status: true,
     googleReviewId: true,
     aiReplyText: true,
-    aiReplyDraft: true,
-    pendingCustomReply: true,
     school: {
       select: {
         gbpAccountId: true,
@@ -174,10 +123,6 @@ function buildReviewSelect() {
   };
 }
 
-function getLineAccessToken(review?: ReviewWithSchool | null) {
-  return review?.school.schoolSetting?.lineChannelAccessToken || undefined;
-}
-
 function isUsableReplyToken(replyToken: string) {
   return Boolean(replyToken) && !dummyReplyTokens.has(replyToken);
 }
@@ -187,9 +132,11 @@ async function resolveLineAccessToken({
   review,
 }: {
   prisma: PrismaLike;
-  review?: ReviewWithSchool | null;
+  review?: ReviewForApproval | null;
 }) {
-  const reviewToken = normalizeString(getLineAccessToken(review));
+  const reviewToken = normalizeString(
+    review?.school.schoolSetting?.lineChannelAccessToken,
+  );
   const envToken = normalizeString(process.env.LINE_CHANNEL_ACCESS_TOKEN);
 
   if (reviewToken) {
@@ -235,7 +182,7 @@ async function replyToLine({
 }: {
   event: LineWebhookEvent;
   text: string;
-  review?: ReviewWithSchool | null;
+  review?: ReviewForApproval | null;
   prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
@@ -260,95 +207,6 @@ async function replyToLine({
   });
 }
 
-async function replyFlexToLine({
-  event,
-  message,
-  review,
-  prisma,
-  fetchImpl,
-}: {
-  event: LineWebhookEvent;
-  message: ReturnType<typeof buildLineCustomReplyConfirmationMessage>;
-  review?: ReviewWithSchool | null;
-  prisma: PrismaLike;
-  fetchImpl: FetchLike;
-}) {
-  const replyToken = normalizeString(event.replyToken);
-
-  if (!isUsableReplyToken(replyToken)) {
-    return;
-  }
-
-  const channelAccessToken = await resolveLineAccessToken({ prisma, review });
-
-  if (!channelAccessToken) {
-    console.error("[LINE Webhook] Channel Access Token not found.");
-    return;
-  }
-
-  try {
-    await replyLineFlexMessage({
-      replyToken,
-      channelAccessToken,
-      message,
-      fetchImpl,
-    });
-    return;
-  } catch (error) {
-    console.error("[LINE Webhook] Failed to reply Flex Message.", error);
-
-    const diagnosticText =
-      error instanceof LineApiError
-        ? [
-            "確認メッセージの送信に失敗しました。",
-            `HTTPステータス: ${error.status}`,
-            `LINE APIレスポンス: ${stringifyLineErrorDetails(error.details).slice(0, 800)}`,
-          ].join("\n")
-        : "確認メッセージの送信に失敗しました。Webhookログを確認してください。";
-
-    try {
-      await replyLineMessage({
-        replyToken,
-        channelAccessToken,
-        text: diagnosticText,
-        fetchImpl,
-      });
-    } catch (fallbackError) {
-      console.error(
-        "[LINE Webhook] Failed to reply diagnostic text message.",
-        fallbackError,
-      );
-    }
-  }
-}
-
-async function postReplyToGbp({
-  review,
-  replyText,
-  fetchImpl,
-}: {
-  review: ReviewWithSchool;
-  replyText: string;
-  fetchImpl: FetchLike;
-}) {
-  const googleReviewId = review.googleReviewId || "";
-  const accessToken = await resolveGbpAccessToken({
-    googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
-    fetchImpl,
-  });
-
-  await postGbpReviewReply({
-    gbpAccountId: review.school.gbpAccountId,
-    gbpLocationId:
-      review.school.gbpLocationId ||
-      review.school.schoolSetting?.selectedGbpLocationId,
-    googleReviewId,
-    replyText,
-    accessToken,
-    fetchImpl,
-  });
-}
-
 async function approveReply({
   event,
   reviewId,
@@ -362,8 +220,8 @@ async function approveReply({
 }) {
   const review = (await prisma.review.findUnique({
     where: { id: reviewId },
-    select: buildReviewSelect(),
-  })) as ReviewWithSchool | null;
+    select: buildReviewApprovalSelect(),
+  })) as ReviewForApproval | null;
 
   if (!review) {
     await replyToLine({
@@ -386,7 +244,7 @@ async function approveReply({
     return "already_replied";
   }
 
-  const replyText = normalizeString(review.aiReplyDraft || review.aiReplyText);
+  const replyText = normalizeString(review.aiReplyText);
 
   if (!replyText) {
     await replyToLine({
@@ -399,13 +257,26 @@ async function approveReply({
     return "missing_draft";
   }
 
-  await postReplyToGbp({ review, replyText, fetchImpl });
+  const accessToken = await resolveGbpAccessToken({
+    googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
+    fetchImpl,
+  });
+
+  await postGbpReviewReply({
+    gbpAccountId: review.school.gbpAccountId,
+    gbpLocationId:
+      review.school.gbpLocationId ||
+      review.school.schoolSetting?.selectedGbpLocationId,
+    googleReviewId: review.googleReviewId || "",
+    replyText,
+    accessToken,
+    fetchImpl,
+  });
   await prisma.review.update({
     where: { id: review.id },
     data: {
       replyText,
       aiReplyText: replyText,
-      aiReplyDraft: replyText,
       status: "APPROVED",
       repliedAt: new Date(),
     },
@@ -419,302 +290,6 @@ async function approveReply({
   });
 
   return "approved";
-}
-
-async function findReviewById({
-  reviewId,
-  prisma,
-}: {
-  reviewId: string;
-  prisma: PrismaLike;
-}) {
-  return (await prisma.review.findUnique({
-    where: { id: reviewId },
-    select: buildReviewSelect(),
-  })) as ReviewWithSchool | null;
-}
-
-async function confirmCustomReply({
-  event,
-  reviewId,
-  postbackText,
-  prisma,
-  fetchImpl,
-}: {
-  event: LineWebhookEvent;
-  reviewId: string;
-  postbackText?: string;
-  prisma: PrismaLike;
-  fetchImpl: FetchLike;
-}) {
-  if (isTestReviewId(reviewId)) {
-    const replyText = normalizeString(postbackText);
-    await replyToLine({
-      event,
-      text: replyText
-        ? `✅ テスト用の確認フローが完了しました。\n\n【確認された返信文】\n${replyText}`
-        : "✅ テスト用の確認フローが完了しました。",
-      prisma,
-      fetchImpl,
-    });
-    return "custom_reply_confirmed_mock";
-  }
-
-  const review = await findReviewById({ reviewId, prisma });
-
-  if (!review) {
-    const replyText = normalizeString(postbackText);
-    if (replyText) {
-      await replyToLine({
-        event,
-        text: `✅ テスト用の確認フローが完了しました。\n\n【確認された返信文】\n${replyText}`,
-        prisma,
-        fetchImpl,
-      });
-      return "custom_reply_confirmed_mock";
-    }
-
-    await replyToLine({
-      event,
-      text: "対象の口コミが見つかりませんでした。",
-      prisma,
-      fetchImpl,
-    });
-    return "not_found";
-  }
-
-  if (repliedStatuses.has(review.status)) {
-    await replyToLine({
-      event,
-      review,
-      text: "この口コミは既に返信済みです。",
-      prisma,
-      fetchImpl,
-    });
-    return "already_replied";
-  }
-
-  const replyText = normalizeString(review.pendingCustomReply);
-
-  if (!replyText) {
-    await replyToLine({
-      event,
-      review,
-      text: "確認待ちの修正返信文が見つかりませんでした。もう一度、返信文を送信してください。",
-      prisma,
-      fetchImpl,
-    });
-    return "missing_pending_custom_reply";
-  }
-
-  await postReplyToGbp({ review, replyText, fetchImpl });
-  await prisma.review.update({
-    where: { id: review.id },
-    data: {
-      pendingCustomReply: null,
-      replyText,
-      aiReplyText: replyText,
-      aiReplyDraft: replyText,
-      status: "REVISED_AND_REPLIED",
-      repliedAt: new Date(),
-    },
-  });
-  await replyToLine({
-    event,
-    review,
-    text: `✅ 修正いただいた以下の内容でGoogleマップに返信を投稿しました！\n\n【投稿された返信文】\n${replyText}`,
-    prisma,
-    fetchImpl,
-  });
-
-  return "custom_reply_confirmed";
-}
-
-async function requestEditText({
-  event,
-  reviewId,
-  prisma,
-  fetchImpl,
-}: {
-  event: LineWebhookEvent;
-  reviewId: string;
-  prisma: PrismaLike;
-  fetchImpl: FetchLike;
-}) {
-  const review = isTestReviewId(reviewId)
-    ? null
-    : await findReviewById({ reviewId, prisma });
-
-  if (!review) {
-    if (!isTestReviewId(reviewId)) {
-      await replyToLine({
-        event,
-        text: "対象の口コミが見つかりませんでした。",
-        prisma,
-        fetchImpl,
-      });
-      return "not_found";
-    }
-
-    const replyToken = normalizeString(event.replyToken);
-
-    if (isUsableReplyToken(replyToken)) {
-      const channelAccessToken = await resolveLineAccessToken({ prisma });
-
-      if (!channelAccessToken) {
-        console.error("[LINE Webhook] Channel Access Token not found.");
-        return "request_edit_text";
-      }
-
-      await replyLineTextMessages({
-        replyToken,
-        channelAccessToken,
-        texts: [
-          "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
-          fallbackEditDraft,
-        ],
-        fetchImpl,
-      });
-    }
-
-    return "request_edit_text";
-  }
-
-  if (repliedStatuses.has(review.status)) {
-    await replyToLine({
-      event,
-      review,
-      text: "この口コミは既に返信済みです。",
-      prisma,
-      fetchImpl,
-    });
-    return "already_replied";
-  }
-
-  const replyToken = normalizeString(event.replyToken);
-
-  if (isUsableReplyToken(replyToken)) {
-    const draftText = normalizeString(review.aiReplyDraft || review.aiReplyText);
-    const channelAccessToken = await resolveLineAccessToken({ prisma, review });
-
-    if (!channelAccessToken) {
-      console.error("[LINE Webhook] Channel Access Token not found.");
-      return "request_edit_text";
-    }
-
-    await replyLineTextMessages({
-      replyToken,
-      channelAccessToken,
-      texts: [
-        "📝 【返信文の編集】\n以下の文章をコピーして編集し、このチャットにそのまま送信してください。\n送信された内容でGoogleマップに返信が投稿されます。",
-        draftText ||
-          "AI返信ドラフトが見つかりませんでした。返信文を入力して送信してください。",
-      ],
-      fetchImpl,
-    });
-  }
-
-  return "request_edit_text";
-}
-
-async function reviseReply({
-  event,
-  prisma,
-  fetchImpl,
-}: {
-  event: LineWebhookEvent;
-  prisma: PrismaLike;
-  fetchImpl: FetchLike;
-}) {
-  const sourceIds = getLineSourceIds(event);
-  const replyText = normalizeString(event.message?.text);
-  console.info("[LINE Webhook Text Received]:", {
-    hasReplyToken: Boolean(normalizeString(event.replyToken)),
-    sourceType: event.source
-      ? event.source.groupId
-        ? "group"
-        : event.source.roomId
-          ? "room"
-          : event.source.userId
-            ? "user"
-            : "unknown"
-      : "none",
-    sourceIdCount: sourceIds.length,
-    textLength: replyText.length,
-  });
-
-  if (!replyText) {
-    return "ignored";
-  }
-
-  if (!sourceIds.length) {
-    console.info(
-      "[LINE Webhook Text] No source ID found. Sending mock confirmation.",
-    );
-    await replyFlexToLine({
-      event,
-      prisma,
-      message: buildLineCustomReplyConfirmationMessage({
-        reviewId: "mock",
-        userCustomText: replyText,
-        includeTextInPostback: true,
-      }),
-      fetchImpl,
-    });
-    return "custom_reply_confirmation_sent_mock";
-  }
-
-  const review = (await prisma.review.findFirst({
-    where: {
-      lineUserId: {
-        in: sourceIds,
-      },
-      status: {
-        notIn: excludedRevisionStatuses,
-      },
-    },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: buildReviewSelect(),
-  })) as ReviewWithSchool | null;
-  console.info("[LINE Webhook Text] Pending review lookup result:", {
-    found: Boolean(review),
-    reviewId: review?.id || null,
-    status: review?.status || null,
-  });
-
-  if (!review) {
-    await replyFlexToLine({
-      event,
-      prisma,
-      message: buildLineCustomReplyConfirmationMessage({
-        reviewId: "mock",
-        userCustomText: replyText,
-        includeTextInPostback: true,
-      }),
-      fetchImpl,
-    });
-    return "custom_reply_confirmation_sent_mock";
-  }
-
-  await prisma.review.update({
-    where: { id: review.id },
-    data: {
-      pendingCustomReply: replyText,
-      status: "PENDING_CUSTOM_REPLY",
-    },
-  });
-  await replyFlexToLine({
-    event,
-    review,
-    message: buildLineCustomReplyConfirmationMessage({
-      reviewId: review.id,
-      userCustomText: replyText,
-    }),
-    prisma,
-    fetchImpl,
-  });
-
-  return "custom_reply_confirmation_sent";
 }
 
 export async function handleLineWebhookEvents({
@@ -738,34 +313,16 @@ export async function handleLineWebhookEvents({
         continue;
       }
 
-      if (params.get("action") === "confirm_custom_reply") {
-        const postbackText = normalizeString(params.get("text"));
-        const reviewId = normalizeString(params.get("reviewId")) || (postbackText ? "mock" : "");
-        results.push(
-          reviewId
-            ? await confirmCustomReply({
-                event,
-                reviewId,
-                postbackText,
-                prisma,
-                fetchImpl,
-              })
-            : "missing_review_id",
-        );
-        continue;
-      }
-
-      if (params.get("action") === "request_edit_text") {
-        const reviewId = normalizeString(params.get("reviewId")) || "mock";
-        results.push(
-          await requestEditText({ event, reviewId, prisma, fetchImpl }),
-        );
-        continue;
-      }
+      results.push("ignored_postback");
+      continue;
     }
 
-    if (event.type === "message" && event.message?.type === "text") {
-      results.push(await reviseReply({ event, prisma, fetchImpl }));
+    if (event.type === "message") {
+      console.info("[LINE Webhook Message Ignored]:", {
+        messageType: event.message?.type || "unknown",
+        hasReplyToken: Boolean(normalizeString(event.replyToken)),
+      });
+      results.push("ignored_message");
       continue;
     }
 

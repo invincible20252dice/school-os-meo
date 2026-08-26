@@ -62,7 +62,7 @@ describe("line", () => {
   });
 
 
-  it("builds a review notification message with approval and edit action buttons", () => {
+  it("builds a review notification message with approval and dashboard edit buttons", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const message = buildLineReviewMessage({
@@ -77,8 +77,8 @@ describe("line", () => {
     expect(JSON.stringify(message)).toContain("青葉ゼミナール");
     expect(JSON.stringify(message)).toContain("★★★★☆");
     expect(JSON.stringify(message)).toContain("この内容でGBPに投稿");
-    expect(JSON.stringify(message)).toContain("✏️ 返信文を編集");
-    expect(JSON.stringify(message)).toContain("修正したい返信文をそのまま返信");
+    expect(JSON.stringify(message)).toContain("✏️ 編集して返信を投稿");
+    expect(JSON.stringify(message)).toContain("編集画面から内容を確認して投稿");
     expect(JSON.stringify(message)).not.toContain("管理画面で確認");
     const actions = getFooterActions(message);
     expect(actions[0]).toMatchObject({
@@ -90,15 +90,11 @@ describe("line", () => {
       reviewId: "review_123",
     });
     expect(actions[1]).toMatchObject({
-      type: "postback",
-      label: "✏️ 返信文を編集",
-      displayText: "返信文を編集します",
+      type: "uri",
+      label: "✏️ 編集して返信を投稿",
+      uri: "https://app.example.com/dashboard/reviews?reviewId=review_123&action=edit",
     });
-    expect(actions[1].type).not.toBe("message");
-    expect(parsePostbackAction(actions[1])).toEqual({
-      action: "request_edit_text",
-      reviewId: "review_123",
-    });
+    expect(actions[1].type).not.toBe("postback");
   });
 
   it("builds message links from Vercel URL and includes Google review action", () => {
@@ -116,9 +112,9 @@ describe("line", () => {
     const serialized = JSON.stringify(message);
 
     const actions = getFooterActions(message);
-    expect(parsePostbackAction(actions[1])).toEqual({
-      action: "request_edit_text",
-      reviewId: "review with spaces",
+    expect(actions[1]).toMatchObject({
+      type: "uri",
+      uri: "https://school-os-meo.vercel.app/dashboard/reviews?reviewId=review+with+spaces&action=edit",
     });
     expect(serialized).toContain("Google口コミを開く");
     expect(serialized).toContain("https://google.example.com/review");

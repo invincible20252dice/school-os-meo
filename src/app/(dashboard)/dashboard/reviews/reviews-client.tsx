@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 
 type ReviewRow = {
@@ -57,14 +57,23 @@ export default function ReviewsClient() {
     "loading",
   );
   const [message, setMessage] = useState("");
+  const reviewRefs = useRef<Record<string, HTMLElement | null>>({});
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
-  const highlightedReviewId = useMemo(() => {
+  const routeAction = useMemo(() => {
     if (typeof window === "undefined") {
-      return "";
+      return { reviewId: "", action: "" };
     }
 
-    return new URLSearchParams(window.location.search).get("reviewId") || "";
+    const params = new URLSearchParams(window.location.search);
+
+    return {
+      reviewId: params.get("reviewId") || "",
+      action: params.get("action") || "",
+    };
   }, []);
+
+  const highlightedReviewId = routeAction.reviewId;
 
   async function loadReviews() {
     setStatus("loading");
@@ -125,6 +134,19 @@ export default function ReviewsClient() {
     void loadReviews();
   }, []);
 
+  useEffect(() => {
+    if (!highlightedReviewId || status === "loading") {
+      return;
+    }
+
+    const card = reviewRefs.current[highlightedReviewId];
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (routeAction.action === "edit") {
+      textareaRefs.current[highlightedReviewId]?.focus();
+    }
+  }, [highlightedReviewId, routeAction.action, reviews, status]);
+
   return (
     <section className={styles.livePanel}>
       <div className={styles.liveHeader}>
@@ -156,6 +178,9 @@ export default function ReviewsClient() {
         {reviews.map((review) => (
           <article
             key={review.id}
+            ref={(element) => {
+              reviewRefs.current[review.id] = element;
+            }}
             className={
               review.id === highlightedReviewId
                 ? `${styles.reviewCard} ${styles.highlightedCard}`
@@ -173,6 +198,9 @@ export default function ReviewsClient() {
             <label className={styles.replyEditor}>
               <span>AI返信案</span>
               <textarea
+                ref={(element) => {
+                  textareaRefs.current[review.id] = element;
+                }}
                 value={drafts[review.id] || ""}
                 onChange={(event) =>
                   setDrafts((current) => ({

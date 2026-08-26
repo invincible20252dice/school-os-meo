@@ -102,6 +102,22 @@ function buildLinePostbackData(action: string, reviewId: string, text?: string) 
   return JSON.stringify(text ? { action, reviewId, text } : { action, reviewId });
 }
 
+function resolveDashboardBaseUrl() {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+  return (configuredUrl || "https://school-os-meo.vercel.app").replace(/\/+$/, "");
+}
+
+function buildReviewEditUrl(reviewId: string) {
+  const url = new URL("/dashboard/reviews", resolveDashboardBaseUrl());
+  url.searchParams.set("reviewId", reviewId || "mock");
+  url.searchParams.set("action", "edit");
+
+  return url.toString();
+}
+
 export function buildLineCustomReplyConfirmationMessage({
   reviewId,
   userCustomText,
@@ -214,7 +230,7 @@ export function buildLineReviewMessage(
           },
           buildTextBox(`【投稿内容】${notification.reviewText}`),
           buildTextBox(`【AI返信ドラフト】${notification.aiReplyText}`),
-          buildTextBox("修正して投稿したい場合は、このメッセージに修正したい返信文をそのまま返信してください。", "xs"),
+          buildTextBox("返信文を修正する場合は、編集画面から内容を確認して投稿してください。", "xs"),
         ],
       },
       footer: {
@@ -237,13 +253,9 @@ export function buildLineReviewMessage(
             type: "button",
             style: "secondary",
             action: {
-              type: "postback",
-              label: "✏️ 返信文を編集",
-              data: buildLinePostbackData(
-                "request_edit_text",
-                notification.reviewId || "mock",
-              ),
-              displayText: "返信文を編集します",
+              type: "uri",
+              label: "✏️ 編集して返信を投稿",
+              uri: buildReviewEditUrl(notification.reviewId || "mock"),
             },
           },
           ...(notification.googleReviewUrl

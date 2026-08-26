@@ -12,7 +12,7 @@ describe("ai-review-demo", () => {
     expect(demo.savedReview.aiReplyDraft).toContain("ありがとうございます");
     expect(demo.lineNotification.altText).toContain("新着口コミ");
     expect(JSON.stringify(demo.lineNotification)).toContain("この内容でGBPに投稿");
-    expect(JSON.stringify(demo.lineNotification)).toContain("✏️ 返信文を編集");
+    expect(JSON.stringify(demo.lineNotification)).toContain("✏️ 編集して返信を投稿");
     expect(JSON.stringify(demo.lineNotification)).not.toContain("管理画面で確認");
   });
 });
