@@ -137,7 +137,10 @@ describe("line-webhook", () => {
     );
     expect(prisma.review.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        select: expect.not.objectContaining({ comment: expect.anything() }),
+        select: expect.not.objectContaining({
+          comment: expect.anything(),
+          gbpReviewId: expect.anything(),
+        }),
       }),
     );
     expect(prisma.review.update).toHaveBeenCalledWith({
@@ -1040,7 +1043,10 @@ describe("line-webhook", () => {
     expect(prisma.review.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "review-1" },
-        select: expect.not.objectContaining({ comment: expect.anything() }),
+        select: expect.not.objectContaining({
+          comment: expect.anything(),
+          gbpReviewId: expect.anything(),
+        }),
       }),
     );
     const lineReplyCall = fetchMock.mock.calls.find(

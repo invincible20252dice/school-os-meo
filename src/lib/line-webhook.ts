@@ -36,7 +36,6 @@ type ReviewWithSchool = {
   schoolId: string;
   status: string;
   googleReviewId?: string | null;
-  gbpReviewId?: string | null;
   aiReplyText?: string | null;
   aiReplyDraft?: string | null;
   pendingCustomReply?: string | null;
@@ -156,7 +155,6 @@ function buildReviewSelect() {
     schoolId: true,
     status: true,
     googleReviewId: true,
-    gbpReviewId: true,
     aiReplyText: true,
     aiReplyDraft: true,
     pendingCustomReply: true,
@@ -333,7 +331,7 @@ async function postReplyToGbp({
   replyText: string;
   fetchImpl: FetchLike;
 }) {
-  const googleReviewId = review.googleReviewId || review.gbpReviewId || "";
+  const googleReviewId = review.googleReviewId || "";
   const accessToken = await resolveGbpAccessToken({
     googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
     fetchImpl,
