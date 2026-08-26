@@ -224,6 +224,53 @@ describe("line-webhook", () => {
     );
   });
 
+  it("completes the mock custom reply confirmation without posting to GBP", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "confirm_custom_reply",
+              reviewId: "mock",
+              text: "確認した修正文です。",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmed_mock"],
+    });
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    expect(prisma.review.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({
+        body: expect.stringContaining("テスト用の確認フローが完了しました"),
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("mybusiness.googleapis.com"),
+      expect.anything(),
+    );
+  });
+
   it("does not post a duplicate reply for already replied reviews", async () => {
     const review = buildReview({ status: "APPROVED" });
     const prisma = {
@@ -256,7 +303,7 @@ describe("line-webhook", () => {
     );
   });
 
-  it("returns a LINE notice when no pending review matches a revision message", async () => {
+  it("replies with a mock confirmation Flex Message when no pending review matches a revision message", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
     const prisma = {
       review: {
@@ -280,13 +327,31 @@ describe("line-webhook", () => {
       ],
     });
 
-    expect(result).toEqual({ processed: 1, results: ["pending_not_found"] });
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent_mock"],
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.line.me/v2/bot/message/reply",
       expect.objectContaining({
-        body: expect.stringContaining("未返信口コミが見つかりません"),
+        body: expect.stringContaining("こちらの文章で投稿してよろしいですか？"),
       }),
     );
+    const lineReplyCall = fetchMock.mock.calls.find(
+      ([url]) => url === "https://api.line.me/v2/bot/message/reply",
+    );
+    const body = JSON.parse(String(lineReplyCall?.[1]?.body));
+    const confirmAction = body.messages[0].contents.footer.contents[0].action;
+    expect(confirmAction).toMatchObject({
+      type: "postback",
+      label: "この内容で確定して投稿",
+      displayText: "この内容で確定して投稿します",
+    });
+    expect(JSON.parse(confirmAction.data)).toEqual({
+      action: "confirm_custom_reply",
+      reviewId: "mock",
+      text: "修正文です。",
+    });
   });
 
   it("reports missing reviews and missing drafts without posting to GBP", async () => {

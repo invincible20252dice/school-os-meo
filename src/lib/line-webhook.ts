@@ -88,7 +88,7 @@ function normalizeString(value: unknown) {
 }
 
 function isTestReviewId(reviewId: string) {
-  return /^(mock_|test_|local_test_|manual_test_)/.test(reviewId);
+  return reviewId === "mock" || /^(mock_|test_|local_test_|manual_test_)/.test(reviewId);
 }
 
 function getLineSourceIds(event: LineWebhookEvent) {
@@ -105,10 +105,12 @@ function parsePostbackData(data: string) {
       const parsed = JSON.parse(data) as {
         action?: unknown;
         reviewId?: unknown;
+        text?: unknown;
       };
       const params = new URLSearchParams();
       const action = normalizeString(parsed.action);
       const reviewId = normalizeString(parsed.reviewId);
+      const text = normalizeString(parsed.text);
 
       if (action) {
         params.set("action", action);
@@ -116,6 +118,10 @@ function parsePostbackData(data: string) {
 
       if (reviewId) {
         params.set("reviewId", reviewId);
+      }
+
+      if (text) {
+        params.set("text", text);
       }
 
       return params;
@@ -378,17 +384,43 @@ async function findReviewById({
 async function confirmCustomReply({
   event,
   reviewId,
+  postbackText,
   prisma,
   fetchImpl,
 }: {
   event: LineWebhookEvent;
   reviewId: string;
+  postbackText?: string;
   prisma: PrismaLike;
   fetchImpl: FetchLike;
 }) {
+  if (isTestReviewId(reviewId)) {
+    const replyText = normalizeString(postbackText);
+    await replyToLine({
+      event,
+      text: replyText
+        ? `✅ テスト用の確認フローが完了しました。\n\n【確認された返信文】\n${replyText}`
+        : "✅ テスト用の確認フローが完了しました。",
+      prisma,
+      fetchImpl,
+    });
+    return "custom_reply_confirmed_mock";
+  }
+
   const review = await findReviewById({ reviewId, prisma });
 
   if (!review) {
+    const replyText = normalizeString(postbackText);
+    if (replyText) {
+      await replyToLine({
+        event,
+        text: `✅ テスト用の確認フローが完了しました。\n\n【確認された返信文】\n${replyText}`,
+        prisma,
+        fetchImpl,
+      });
+      return "custom_reply_confirmed_mock";
+    }
+
     await replyToLine({
       event,
       text: "対象の口コミが見つかりませんでした。",
@@ -562,13 +594,17 @@ async function reviseReply({
   })) as ReviewWithSchool | null;
 
   if (!review) {
-    await replyToLine({
+    await replyFlexToLine({
       event,
-      text: "修正対象の未返信口コミが見つかりませんでした。",
       prisma,
+      message: buildLineCustomReplyConfirmationMessage({
+        reviewId: "mock",
+        userCustomText: replyText,
+        includeTextInPostback: true,
+      }),
       fetchImpl,
     });
-    return "pending_not_found";
+    return "custom_reply_confirmation_sent_mock";
   }
 
   await prisma.review.update({
@@ -615,9 +651,16 @@ export async function handleLineWebhookEvents({
 
       if (params.get("action") === "confirm_custom_reply") {
         const reviewId = normalizeString(params.get("reviewId"));
+        const postbackText = normalizeString(params.get("text"));
         results.push(
           reviewId
-            ? await confirmCustomReply({ event, reviewId, prisma, fetchImpl })
+            ? await confirmCustomReply({
+                event,
+                reviewId,
+                postbackText,
+                prisma,
+                fetchImpl,
+              })
             : "missing_review_id",
         );
         continue;

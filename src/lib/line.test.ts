@@ -27,7 +27,11 @@ function getFooterActions(message: ReturnType<typeof buildLineReviewMessage>) {
 }
 
 function parsePostbackAction(action: Record<string, string>) {
-  return JSON.parse(action.data) as { action: string; reviewId: string };
+  return JSON.parse(action.data) as {
+    action: string;
+    reviewId: string;
+    text?: string;
+  };
 }
 
 describe("line", () => {
@@ -137,9 +141,30 @@ describe("line", () => {
       action: "confirm_custom_reply",
       reviewId: "review with spaces",
     });
+    expect(footer.contents[0].action.displayText).toBe(
+      "この内容で確定して投稿します",
+    );
     expect(parsePostbackAction(footer.contents[1].action)).toEqual({
       action: "request_edit_text",
       reviewId: "review with spaces",
+    });
+    expect(footer.contents[1].action.displayText).toBe("もう一度修正します");
+  });
+
+  it("can include a mock custom reply text in confirmation postback data", () => {
+    const message = buildLineCustomReplyConfirmationMessage({
+      reviewId: "mock",
+      userCustomText: "この文章で確認したいです。",
+      includeTextInPostback: true,
+    });
+    const footer = message.contents.footer as {
+      contents: Array<{ action: Record<string, string> }>;
+    };
+
+    expect(parsePostbackAction(footer.contents[0].action)).toEqual({
+      action: "confirm_custom_reply",
+      reviewId: "mock",
+      text: "この文章で確認したいです。",
     });
   });
 

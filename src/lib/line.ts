@@ -98,16 +98,18 @@ export function buildLineTextMessage(text: string) {
   };
 }
 
-function buildLinePostbackData(action: string, reviewId: string) {
-  return JSON.stringify({ action, reviewId });
+function buildLinePostbackData(action: string, reviewId: string, text?: string) {
+  return JSON.stringify(text ? { action, reviewId, text } : { action, reviewId });
 }
 
 export function buildLineCustomReplyConfirmationMessage({
   reviewId,
   userCustomText,
+  includeTextInPostback = false,
 }: {
   reviewId: string;
   userCustomText: string;
+  includeTextInPostback?: boolean;
 }): LineFlexMessage {
   return {
     type: "flex",
@@ -156,7 +158,12 @@ export function buildLineCustomReplyConfirmationMessage({
             action: {
               type: "postback",
               label: "この内容で確定して投稿",
-              data: buildLinePostbackData("confirm_custom_reply", reviewId),
+              data: buildLinePostbackData(
+                "confirm_custom_reply",
+                reviewId,
+                includeTextInPostback ? userCustomText : undefined,
+              ),
+              displayText: "この内容で確定して投稿します",
             },
           },
           {
@@ -166,6 +173,7 @@ export function buildLineCustomReplyConfirmationMessage({
               type: "postback",
               label: "もう一度修正する",
               data: buildLinePostbackData("request_edit_text", reviewId),
+              displayText: "もう一度修正します",
             },
           },
         ],
