@@ -224,6 +224,51 @@ describe("line-webhook", () => {
     );
   });
 
+  it("does not post a custom confirmation when the review is already replied", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const review = buildReview({
+      status: "REVISED_AND_REPLIED",
+      pendingCustomReply: "再投稿しない返信文です。",
+    });
+    const prisma = {
+      review: {
+        findUnique: vi.fn(async () => review),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "postback",
+          replyToken: "line-reply-token",
+          postback: {
+            data: JSON.stringify({
+              action: "confirm_custom_reply",
+              reviewId: "review-1",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual({ processed: 1, results: ["already_replied"] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.line.me/v2/bot/message/reply",
+      expect.objectContaining({ body: expect.stringContaining("既に返信済み") }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("mybusiness.googleapis.com"),
+      expect.anything(),
+    );
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
   it("completes the mock custom reply confirmation without posting to GBP", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
     const prisma = {
@@ -393,6 +438,158 @@ describe("line-webhook", () => {
     expect(JSON.stringify(body.messages[0])).toContain(
       "sourceなしでも確認したい返信文",
     );
+  });
+
+  it("falls back to a diagnostic text reply when the confirmation Flex Message is rejected", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(async () => null),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            message: "A message (messages[0]) in the request body is invalid",
+          }),
+          { status: 400 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          source: { groupId: "C-review-group" },
+          message: { type: "text", text: "修正文です。" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent_mock"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const fallbackBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(fallbackBody.messages[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("HTTPステータス: 400"),
+    });
+    expect(fallbackBody.messages[0].text).toContain("request body is invalid");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[LINE Webhook] Failed to reply Flex Message.",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("falls back to a generic diagnostic text reply when Flex delivery throws before LINE responds", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(async () => null),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network timeout"))
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          source: { roomId: "R-review-room" },
+          message: { type: "text", text: "roomからの修正文です。" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent_mock"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const fallbackBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(fallbackBody.messages[0]).toMatchObject({
+      type: "text",
+      text: "確認メッセージの送信に失敗しました。Webhookログを確認してください。",
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[LINE Webhook] Failed to reply Flex Message.",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("logs when both Flex and diagnostic text replies fail", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const prisma = {
+      review: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(async () => null),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "Flex message is invalid" }), {
+          status: 400,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "Reply token expired" }), {
+          status: 400,
+        }),
+      );
+
+    const result = await handleLineWebhookEvents({
+      prisma,
+      fetchImpl: fetchMock,
+      events: [
+        {
+          type: "message",
+          replyToken: "line-reply-token",
+          source: {},
+          message: { type: "text", text: "修正文です。" },
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      processed: 1,
+      results: ["custom_reply_confirmation_sent_mock"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[LINE Webhook] Failed to reply diagnostic text message.",
+      expect.any(Error),
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it("reports missing reviews and missing drafts without posting to GBP", async () => {

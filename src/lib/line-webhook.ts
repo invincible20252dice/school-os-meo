@@ -4,6 +4,7 @@ import {
 } from "./gbp-reply";
 import {
   buildLineCustomReplyConfirmationMessage,
+  LineApiError,
   replyLineFlexMessage,
   replyLineMessage,
   replyLineTextMessages,
@@ -131,6 +132,22 @@ function parsePostbackData(data: string) {
   }
 
   return new URLSearchParams(data);
+}
+
+function stringifyLineErrorDetails(details: unknown) {
+  if (!details) {
+    return "詳細なし";
+  }
+
+  if (typeof details === "string") {
+    return details;
+  }
+
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return String(details);
+  }
 }
 
 function buildReviewInclude() {
@@ -261,12 +278,40 @@ async function replyFlexToLine({
     return;
   }
 
-  await replyLineFlexMessage({
-    replyToken,
-    channelAccessToken,
-    message,
-    fetchImpl,
-  });
+  try {
+    await replyLineFlexMessage({
+      replyToken,
+      channelAccessToken,
+      message,
+      fetchImpl,
+    });
+    return;
+  } catch (error) {
+    console.error("[LINE Webhook] Failed to reply Flex Message.", error);
+
+    const diagnosticText =
+      error instanceof LineApiError
+        ? [
+            "確認メッセージの送信に失敗しました。",
+            `HTTPステータス: ${error.status}`,
+            `LINE APIレスポンス: ${stringifyLineErrorDetails(error.details).slice(0, 800)}`,
+          ].join("\n")
+        : "確認メッセージの送信に失敗しました。Webhookログを確認してください。";
+
+    try {
+      await replyLineMessage({
+        replyToken,
+        channelAccessToken,
+        text: diagnosticText,
+        fetchImpl,
+      });
+    } catch (fallbackError) {
+      console.error(
+        "[LINE Webhook] Failed to reply diagnostic text message.",
+        fallbackError,
+      );
+    }
+  }
 }
 
 async function postReplyToGbp({
@@ -575,12 +620,29 @@ async function reviseReply({
 }) {
   const sourceIds = getLineSourceIds(event);
   const replyText = normalizeString(event.message?.text);
+  console.info("[LINE Webhook Text Received]:", {
+    hasReplyToken: Boolean(normalizeString(event.replyToken)),
+    sourceType: event.source
+      ? event.source.groupId
+        ? "group"
+        : event.source.roomId
+          ? "room"
+          : event.source.userId
+            ? "user"
+            : "unknown"
+      : "none",
+    sourceIdCount: sourceIds.length,
+    textLength: replyText.length,
+  });
 
   if (!replyText) {
     return "ignored";
   }
 
   if (!sourceIds.length) {
+    console.info(
+      "[LINE Webhook Text] No source ID found. Sending mock confirmation.",
+    );
     await replyFlexToLine({
       event,
       prisma,
@@ -606,6 +668,11 @@ async function reviseReply({
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     include: buildReviewInclude(),
   })) as ReviewWithSchool | null;
+  console.info("[LINE Webhook Text] Pending review lookup result:", {
+    found: Boolean(review),
+    reviewId: review?.id || null,
+    status: review?.status || null,
+  });
 
   if (!review) {
     await replyFlexToLine({
@@ -683,9 +750,7 @@ export async function handleLineWebhookEvents({
       if (params.get("action") === "request_edit_text") {
         const reviewId = normalizeString(params.get("reviewId")) || "mock";
         results.push(
-          reviewId
-            ? await requestEditText({ event, reviewId, prisma, fetchImpl })
-            : "missing_review_id",
+          await requestEditText({ event, reviewId, prisma, fetchImpl }),
         );
         continue;
       }

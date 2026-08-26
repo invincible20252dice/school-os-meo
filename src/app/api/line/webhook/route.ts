@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    console.info("[LINE Webhook Inbound Payload]:", rawBody || "{}");
     const body = (rawBody ? JSON.parse(rawBody) : {}) as LineWebhookBody;
     const events = Array.isArray(body.events) ? body.events : [];
     console.info("[LINE Webhook] Received events:", events.length);
