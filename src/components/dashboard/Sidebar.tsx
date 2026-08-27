@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { dashboardNavItems, type DashboardNavItem } from "./navigation";
 import styles from "./Sidebar.module.css";
 
@@ -96,7 +96,21 @@ function isActive(pathname: string, item: DashboardNavItem) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const selectedSchoolId = searchParams.get("schoolId") || "";
+  const hrefWithSchool = useMemo(() => {
+    return (href: string) => {
+      if (!selectedSchoolId) {
+        return href;
+      }
+
+      const params = new URLSearchParams();
+      params.set("schoolId", selectedSchoolId);
+
+      return `${href}?${params.toString()}`;
+    };
+  }, [selectedSchoolId]);
 
   return (
     <>
@@ -129,7 +143,7 @@ export default function Sidebar() {
             return (
               <div key={item.href} className={styles.navGroup}>
                 <Link
-                  href={item.href}
+                  href={hrefWithSchool(item.href)}
                   className={active ? `${styles.navLink} ${styles.active}` : styles.navLink}
                   onClick={() => setOpen(false)}
                 >
@@ -141,7 +155,7 @@ export default function Sidebar() {
                     {item.children.map((child) => (
                       <Link
                         key={child.href}
-                        href={child.href}
+                        href={hrefWithSchool(child.href)}
                         className={
                           pathname === child.href
                             ? `${styles.childLink} ${styles.childActive}`

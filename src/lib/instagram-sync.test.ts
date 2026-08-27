@@ -217,6 +217,34 @@ describe("instagram-sync", () => {
     expect(summary).toEqual({ settings: 0, fetched: 0, posted: 0, skipped: 0 });
   });
 
+  it("filters enabled Instagram settings by the selected school", async () => {
+    const prisma = {
+      instagramSetting: {
+        findMany: vi.fn(async () => []),
+        update: vi.fn(),
+      },
+      syncedPost: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
+    };
+
+    await syncInstagramPosts({
+      prisma,
+      fetchImpl: vi.fn(),
+      schoolId: "school-selected",
+    });
+
+    expect(prisma.instagramSetting.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          autoSyncEnabled: true,
+          schoolId: "school-selected",
+        },
+      }),
+    );
+  });
+
   it("requires the GBP local posts endpoint for new media", async () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.GBP_LOCAL_POSTS_API_URL;

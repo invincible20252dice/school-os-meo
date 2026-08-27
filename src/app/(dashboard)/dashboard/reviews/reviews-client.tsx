@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import styles from "./page.module.css";
 
 type ReviewRow = {
@@ -51,6 +52,8 @@ function ratingLabel(rating: number | null) {
 }
 
 export default function ReviewsClient() {
+  const searchParams = useSearchParams();
+  const selectedSchoolId = searchParams.get("schoolId") || "";
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "error">(
@@ -65,13 +68,11 @@ export default function ReviewsClient() {
       return { reviewId: "", action: "" };
     }
 
-    const params = new URLSearchParams(window.location.search);
-
     return {
-      reviewId: params.get("reviewId") || "",
-      action: params.get("action") || "",
+      reviewId: searchParams.get("reviewId") || "",
+      action: searchParams.get("action") || "",
     };
-  }, []);
+  }, [searchParams]);
 
   const highlightedReviewId = routeAction.reviewId;
 
@@ -80,7 +81,16 @@ export default function ReviewsClient() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/reviews", { cache: "no-store" });
+      const params = new URLSearchParams();
+
+      if (selectedSchoolId) {
+        params.set("schoolId", selectedSchoolId);
+      }
+
+      const response = await fetch(
+        `/api/reviews${params.size ? `?${params.toString()}` : ""}`,
+        { cache: "no-store" },
+      );
       const body = (await response.json()) as ReviewsResponse;
 
       if (!response.ok) {
@@ -112,6 +122,7 @@ export default function ReviewsClient() {
         body: JSON.stringify({
           reviewId,
           replyText: drafts[reviewId] || "",
+          schoolId: selectedSchoolId || undefined,
         }),
       });
       const body = (await response.json()) as ReviewsResponse;
@@ -132,7 +143,7 @@ export default function ReviewsClient() {
 
   useEffect(() => {
     void loadReviews();
-  }, []);
+  }, [selectedSchoolId]);
 
   useEffect(() => {
     if (!highlightedReviewId || status === "loading") {

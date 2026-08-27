@@ -11,7 +11,11 @@ function BoltIcon() {
   );
 }
 
-export default function InstagramRealSyncButton() {
+export default function InstagramRealSyncButton({
+  schoolId = "",
+}: {
+  schoolId?: string;
+}) {
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(
     "idle",
@@ -22,9 +26,18 @@ export default function InstagramRealSyncButton() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/instagram/sync", {
-        method: "POST",
-      });
+      const params = new URLSearchParams();
+
+      if (schoolId) {
+        params.set("schoolId", schoolId);
+      }
+
+      const response = await fetch(
+        `/api/instagram/sync${params.size ? `?${params.toString()}` : ""}`,
+        {
+          method: "POST",
+        },
+      );
       const body = (await response.json()) as {
         ok?: boolean;
         message?: string;

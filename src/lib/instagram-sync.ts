@@ -84,13 +84,16 @@ async function postToGbpLocalPosts({
 export async function syncInstagramPosts({
   prisma,
   fetchImpl = fetch,
+  schoolId,
 }: {
   prisma: PrismaInstagramSyncClient;
   fetchImpl?: FetchLike;
+  schoolId?: string;
 }) {
   const settings = await prisma.instagramSetting.findMany({
     where: {
       autoSyncEnabled: true,
+      ...(schoolId ? { schoolId } : {}),
     },
     include: {
       school: {

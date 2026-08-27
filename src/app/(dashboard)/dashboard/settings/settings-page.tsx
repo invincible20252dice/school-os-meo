@@ -61,6 +61,7 @@ export default function SettingsPage({
   initialSetting?: NullableSchoolSettingState;
 }) {
   const searchParams = useSearchParams();
+  const selectedSchoolId = searchParams.get("schoolId") || "";
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [setting, setSetting] = useState<SchoolSettingState>(() =>
     normalizeSchoolSetting(initialSetting ?? buildEmptySchoolSetting("")),
@@ -123,7 +124,7 @@ export default function SettingsPage({
   }
 
   function getActiveSchoolId() {
-    const schoolId = searchParams.get("schoolId") || setting.schoolId;
+    const schoolId = selectedSchoolId || setting.schoolId;
 
     return schoolId === "all" ? "" : schoolId;
   }
@@ -135,7 +136,16 @@ export default function SettingsPage({
       return explicitSchoolId;
     }
 
-    const contextResponse = await fetch("/api/dashboard/context", { headers });
+    const params = new URLSearchParams();
+
+    if (selectedSchoolId) {
+      params.set("schoolId", selectedSchoolId);
+    }
+
+    const contextResponse = await fetch(
+      `/api/dashboard/context${params.size ? `?${params.toString()}` : ""}`,
+      { headers },
+    );
     const contextData = (await contextResponse.json()) as DashboardContextResponse;
 
     if (!contextResponse.ok) {
@@ -532,12 +542,19 @@ export default function SettingsPage({
       setGoogleMessage(errorMessage);
     }
 
-  }, [activeTab, searchParams]);
+  }, [activeTab, selectedSchoolId]);
 
   useEffect(() => {
     void loadSchoolSetting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, searchParams]);
+  }, [activeTab, selectedSchoolId]);
+
+  const dashboardHref = useMemo(() => {
+    const schoolId = getActiveSchoolId();
+
+    return schoolId ? `/dashboard?schoolId=${encodeURIComponent(schoolId)}` : "/dashboard";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSchoolId, setting.schoolId]);
 
   return (
     <main className={styles.page}>
@@ -962,7 +979,7 @@ export default function SettingsPage({
             >
               {isSavingSchoolSetting ? "保存中" : "設定を保存"}
             </button>
-            <Link href="/dashboard">ダッシュボードへ戻る</Link>
+            <Link href={dashboardHref}>ダッシュボードへ戻る</Link>
           </div>
         </div>
       </section>

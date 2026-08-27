@@ -35,7 +35,13 @@ function PinIcon() {
   );
 }
 
-export default async function InstagramSyncPage() {
+export default async function InstagramSyncPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ schoolId?: string }>;
+}) {
+  const params = await searchParams;
+  const selectedSchoolId = params?.schoolId || "";
   const preview = await buildMockInstagramSyncPreview();
   const location = normalizeLocationParams({
     nearestStation: "横浜駅",
@@ -57,7 +63,7 @@ export default async function InstagramSyncPage() {
         <p>
           実APIやDB書き込みを使わずに、Instagram投稿取得、AIリライト、GBP投稿payload生成までの流れを確認します。
         </p>
-        <InstagramRealSyncButton />
+        <InstagramRealSyncButton schoolId={selectedSchoolId} />
       </header>
 
       <section className={styles.notice}>{preview.safety}</section>

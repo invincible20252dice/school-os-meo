@@ -8,7 +8,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className={styles.shell}>
       <AuthApprovalGate />
-      <Sidebar />
+      <Suspense fallback={null}>
+        <Sidebar />
+      </Suspense>
       <div className={styles.content}>
         <Suspense fallback={null}>
           <DashboardHeader />
