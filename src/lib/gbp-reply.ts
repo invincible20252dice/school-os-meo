@@ -36,14 +36,74 @@ function normalizeReviewId(value: string) {
   return value.trim().replace(/^reviews\//, "");
 }
 
+function normalizeLocationResource(gbpLocationId?: string | null) {
+  const locationId = normalizeResourceName(gbpLocationId);
+
+  if (!locationId) {
+    return "";
+  }
+
+  if (locationId.startsWith("locations/")) {
+    return locationId;
+  }
+
+  if (/^\d+$/.test(locationId)) {
+    return `locations/${locationId}`;
+  }
+
+  return locationId;
+}
+
+function isFullReviewResourceName(value: string) {
+  return /^accounts\/[^/]+\/locations\/[^/]+\/reviews\/[^/]+$/.test(value);
+}
+
+function toDetailsString(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+async function readGoogleResponseBody(response: Response, fallbackComment: string) {
+  const text = await response.text().catch(() => "");
+
+  if (!text) {
+    return { comment: fallbackComment };
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
 export function buildGbpReviewReplyEndpoint({
   gbpAccountId,
   gbpLocationId,
   googleReviewId,
 }: Pick<GbpReplyPostInput, "gbpAccountId" | "gbpLocationId" | "googleReviewId">) {
   const accountId = normalizeResourceName(gbpAccountId);
-  const locationId = normalizeResourceName(gbpLocationId);
-  const reviewId = encodeURIComponent(normalizeReviewId(googleReviewId));
+  const locationId = normalizeLocationResource(gbpLocationId);
+  const reviewResourceName = normalizeResourceName(googleReviewId);
+
+  if (!reviewResourceName) {
+    throw new Error("Google口コミIDが設定されていません。");
+  }
+
+  if (isFullReviewResourceName(reviewResourceName)) {
+    return `https://mybusiness.googleapis.com/v4/${reviewResourceName}/reply`;
+  }
+
+  if (locationId.startsWith("accounts/") && locationId.includes("/locations/")) {
+    const reviewId = encodeURIComponent(normalizeReviewId(reviewResourceName));
+
+    if (!reviewId) {
+      throw new Error("Google口コミIDが設定されていません。");
+    }
+
+    return `https://mybusiness.googleapis.com/v4/${locationId}/reviews/${reviewId}/reply`;
+  }
+
+  const reviewId = encodeURIComponent(normalizeReviewId(reviewResourceName));
 
   if (!accountId) {
     throw new Error("GBPアカウントIDが設定されていません。");
@@ -91,7 +151,12 @@ export async function postGbpReviewReply({
     throw new Error("返信文を入力してください。");
   }
 
-  const response = await fetchImpl(buildGbpReviewReplyEndpoint(input), {
+  const targetUrl = buildGbpReviewReplyEndpoint(input);
+
+  console.info("[GBP Reply Request URL]:", targetUrl);
+  console.info("[GBP Reply Payload]:", { comment });
+
+  const response = await fetchImpl(targetUrl, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -100,10 +165,14 @@ export async function postGbpReviewReply({
     body: JSON.stringify({ comment }),
   });
 
+  const responseBody = await readGoogleResponseBody(response, comment);
+
+  console.info("[GBP Reply Response Status]:", response.status);
+  console.info("[GBP Reply Response Body]:", responseBody);
+
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    throw new GbpReplyError(response.status, details);
+    throw new GbpReplyError(response.status, toDetailsString(responseBody));
   }
 
-  return response.json().catch(() => ({ comment }));
+  return responseBody;
 }

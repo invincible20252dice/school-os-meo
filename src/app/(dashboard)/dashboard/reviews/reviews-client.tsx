@@ -106,7 +106,7 @@ export default function ReviewsClient() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/gbp/reply", {
+      const response = await fetch("/api/reviews/reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

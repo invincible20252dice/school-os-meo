@@ -14,10 +14,16 @@ import {
 type ReplyBody = {
   reviewId?: string;
   replyText?: string;
+  schoolId?: string;
 };
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function toGbpAccountResource(value?: string | null) {
+  const accountId = normalizeString(value);
+  return accountId.startsWith("accounts/") ? accountId : "";
 }
 
 function toDashboardRedirect(request: Request, reviewId: string) {
@@ -48,6 +54,7 @@ async function assertCanAccessReview(request: Request, reviewId: string) {
           gbpLocationId: true,
           schoolSetting: {
             select: {
+              googleAccountId: true,
               googleRefreshToken: true,
               selectedGbpLocationId: true,
             },
@@ -140,7 +147,9 @@ export async function POST(request: Request) {
     });
 
     await postGbpReviewReply({
-      gbpAccountId: review.school.gbpAccountId,
+      gbpAccountId:
+        toGbpAccountResource(review.school.gbpAccountId) ||
+        toGbpAccountResource(review.school.schoolSetting?.googleAccountId),
       gbpLocationId:
         review.school.gbpLocationId ||
         review.school.schoolSetting?.selectedGbpLocationId,
