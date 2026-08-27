@@ -4,13 +4,36 @@ type FetchLike = typeof fetch;
 
 export type IncomingGbpReview = {
   googleReviewId: string;
+  gbpReviewId?: string;
   googlePlaceId?: string;
   gbpLocationId?: string;
   reviewerName?: string;
+  authorPhotoUrl?: string | null;
   rating: number;
   reviewText: string;
   reviewUrl?: string;
   reviewedAt?: string;
+};
+
+type GbpReviewApiItem = {
+  name?: string;
+  reviewId?: string;
+  reviewer?: {
+    displayName?: string;
+    profilePhotoUrl?: string;
+    isAnonymous?: boolean;
+  };
+  authorName?: string;
+  starRating?: string;
+  rating?: number;
+  comment?: string;
+  reviewText?: string;
+  reviewReplyUrl?: string;
+  reviewUrl?: string;
+  createTime?: string;
+  updateTime?: string;
+  googlePlaceId?: string;
+  gbpLocationId?: string;
 };
 
 type SchoolRecord = {
@@ -104,9 +127,12 @@ export async function generateGbpReviewReply(
 }
 
 function buildSchoolWhere(review: IncomingGbpReview) {
+  const shortLocationId = review.gbpLocationId?.split("/locations/").pop();
   const candidates = [
     review.googlePlaceId ? { googlePlaceId: review.googlePlaceId } : null,
     review.gbpLocationId ? { gbpLocationId: review.gbpLocationId } : null,
+    shortLocationId ? { gbpLocationId: `locations/${shortLocationId}` } : null,
+    shortLocationId ? { gbpLocationId: shortLocationId } : null,
   ].filter(Boolean);
 
   return candidates.length === 1 ? candidates[0] : { OR: candidates };
@@ -132,6 +158,67 @@ function normalizeToken(value?: string | null) {
   const token = value?.trim() || "";
 
   return token && !token.includes("*") ? token : "";
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function ratingFromStarRating(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(5, Math.max(0, Math.trunc(value)));
+  }
+
+  const normalized = normalizeText(value).toUpperCase();
+  const ratings: Record<string, number> = {
+    ONE: 1,
+    TWO: 2,
+    THREE: 3,
+    FOUR: 4,
+    FIVE: 5,
+  };
+
+  return ratings[normalized] ?? 0;
+}
+
+function reviewIdFromName(value: unknown) {
+  const name = normalizeText(value);
+  return name ? name.split("/").filter(Boolean).pop() || "" : "";
+}
+
+function locationResourceFromReviewName(value: unknown) {
+  const name = normalizeText(value);
+  const match = name.match(/^(accounts\/[^/]+\/locations\/[^/]+)\/reviews\/[^/]+$/);
+  return match?.[1] || "";
+}
+
+function normalizeGbpReviewItem(item: GbpReviewApiItem): IncomingGbpReview | null {
+  const googleReviewName = normalizeText(item.name);
+  const shortReviewId = normalizeText(item.reviewId) || reviewIdFromName(googleReviewName);
+  const googleReviewId = googleReviewName || shortReviewId;
+  const locationResource = locationResourceFromReviewName(googleReviewName);
+
+  if (!googleReviewId) {
+    return null;
+  }
+
+  const reviewerName =
+    normalizeText(item.reviewer?.displayName) ||
+    normalizeText(item.authorName) ||
+    "Googleユーザー";
+
+  return {
+    googleReviewId,
+    gbpReviewId: shortReviewId || googleReviewId,
+    googlePlaceId: normalizeText(item.googlePlaceId) || undefined,
+    gbpLocationId: normalizeText(item.gbpLocationId) || locationResource || undefined,
+    reviewerName,
+    authorPhotoUrl: normalizeText(item.reviewer?.profilePhotoUrl) || null,
+    rating: ratingFromStarRating(item.starRating ?? item.rating),
+    reviewText: normalizeText(item.comment) || normalizeText(item.reviewText),
+    reviewUrl: normalizeText(item.reviewReplyUrl) || normalizeText(item.reviewUrl) || undefined,
+    reviewedAt: normalizeText(item.createTime) || normalizeText(item.updateTime) || undefined,
+  };
 }
 
 function shouldNotifyLine(school: SchoolRecord, review: IncomingGbpReview) {
@@ -197,7 +284,7 @@ export async function processGbpReviews({
         schoolId: school.id,
         OR: [
           { googleReviewId: review.googleReviewId },
-          { gbpReviewId: review.googleReviewId },
+          { gbpReviewId: review.gbpReviewId || review.googleReviewId },
         ],
       },
     });
@@ -213,7 +300,7 @@ export async function processGbpReviews({
       comment: review.reviewText,
       selectedReviewText: review.reviewText,
       googleReviewId: review.googleReviewId,
-      gbpReviewId: review.googleReviewId,
+      gbpReviewId: review.gbpReviewId || review.googleReviewId,
       aiReplyText,
       aiReplyDraft: aiReplyText,
       aiReplyGeneratedAt: new Date(),
@@ -268,5 +355,23 @@ export async function fetchGbpReviews(fetchImpl: FetchLike = fetch) {
   }
 
   const data = await response.json();
-  return Array.isArray(data.reviews) ? (data.reviews as IncomingGbpReview[]) : [];
+  return Array.isArray(data.reviews)
+    ? data.reviews
+        .map((item: GbpReviewApiItem | IncomingGbpReview | null) => {
+          if (
+            item &&
+            typeof item === "object" &&
+            "reviewText" in item &&
+            "googleReviewId" in item
+          ) {
+            return item as IncomingGbpReview;
+          }
+
+          return normalizeGbpReviewItem((item || {}) as GbpReviewApiItem);
+        })
+        .filter(
+          (item: IncomingGbpReview | null): item is IncomingGbpReview =>
+            Boolean(item),
+        )
+    : [];
 }

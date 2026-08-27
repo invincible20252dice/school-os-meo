@@ -33,6 +33,7 @@ vi.mock("@/lib/prisma", () => ({
           source: "GOOGLE",
           status: "GENERATED",
           parentName: "保護者A",
+          authorName: "佐藤英樹",
           rating: 5,
           originalText: "先生が丁寧でした。",
           googleReviewId: "google-review-1",
@@ -66,6 +67,7 @@ describe("/api/reviews", () => {
       schoolName: "iスクール予備校",
       status: "GENERATED",
       aiReplyText: "ありがとうございます。",
+      parentName: "佐藤英樹",
     });
     expect(prisma.review.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -170,6 +172,7 @@ describe("/api/reviews", () => {
         parentName: null,
         rating: null,
         originalText: null,
+        authorName: null,
         googleReviewId: null,
         aiReplyText: null,
         aiReplyGeneratedAt: null,
@@ -190,6 +193,34 @@ describe("/api/reviews", () => {
       aiReplyGeneratedAt: "",
       repliedAt: "2026-08-01T11:00:00.000Z",
     });
+  });
+
+  it("falls back to the legacy parent name when author name is absent", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      {
+        id: "review-3",
+        schoolId: "school-1",
+        source: "GOOGLE",
+        status: "GENERATED",
+        parentName: "一ノ瀬大輝",
+        authorName: null,
+        rating: 5,
+        originalText: "通いやすいです。",
+        googleReviewId: "accounts/1/locations/2/reviews/3",
+        aiReplyText: "ありがとうございます。",
+        aiReplyGeneratedAt: null,
+        repliedAt: null,
+        createdAt: new Date("2026-08-01T09:00:00.000Z"),
+        school: { name: "iスクール予備校" },
+      },
+    ]);
+
+    const response = await GET(new Request("https://app.example.com/api/reviews"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.reviews[0].parentName).toBe("一ノ瀬大輝");
   });
 
   it("returns a Japanese error when DB lookup fails", async () => {

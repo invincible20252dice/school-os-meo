@@ -400,6 +400,214 @@ describe("gbp-webhook", () => {
     });
   });
 
+  it("normalizes official GBP review fields into stored review identifiers and author names", async () => {
+    process.env.GBP_API_REVIEWS_URL =
+      "https://mybusiness.googleapis.com/v4/accounts/10/locations/20/reviews";
+    process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          reviews: [
+            {
+              name: "accounts/10/locations/20/reviews/encrypted-review-30",
+              reviewId: "encrypted-review-30",
+              reviewer: {
+                displayName: "佐藤英樹",
+                profilePhotoUrl: "https://lh3.googleusercontent.com/photo",
+                isAnonymous: false,
+              },
+              starRating: "FIVE",
+              comment: "丁寧に見てもらえました。",
+              reviewReplyUrl: "https://business.google.com/reviews/reply",
+              createTime: "2026-08-20T00:00:00Z",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const reviews = await fetchGbpReviews(fetchMock);
+
+    expect(reviews).toEqual([
+      expect.objectContaining({
+        googleReviewId: "accounts/10/locations/20/reviews/encrypted-review-30",
+        gbpReviewId: "encrypted-review-30",
+        gbpLocationId: "accounts/10/locations/20",
+        reviewerName: "佐藤英樹",
+        authorPhotoUrl: "https://lh3.googleusercontent.com/photo",
+        rating: 5,
+        reviewText: "丁寧に見てもらえました。",
+        reviewUrl: "https://business.google.com/reviews/reply",
+        reviewedAt: "2026-08-20T00:00:00Z",
+      }),
+    ]);
+  });
+
+  it("normalizes anonymous and legacy-shaped GBP review fields safely", async () => {
+    process.env.GBP_API_REVIEWS_URL = "https://gbp.example/reviews";
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          reviews: [
+            {
+              name: "accounts/10/locations/20/reviews/no-review-id",
+              reviewer: { isAnonymous: true },
+              starRating: "STAR_RATING_UNSPECIFIED",
+              reviewText: "本文だけがある口コミです。",
+              reviewUrl: "https://maps.example/review",
+              updateTime: "2026-08-21T00:00:00Z",
+            },
+            {
+              reviewId: "legacy-review-id",
+              authorName: "一ノ瀬大輝",
+              rating: 6.8,
+              comment: "数値評価の口コミです。",
+              gbpLocationId: "locations/20",
+            },
+            {
+              reviewer: { displayName: "IDなし投稿者" },
+              comment: "IDがないため同期対象外です。",
+            },
+            null,
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const reviews = await fetchGbpReviews(fetchMock);
+
+    expect(reviews).toEqual([
+      expect.objectContaining({
+        googleReviewId: "accounts/10/locations/20/reviews/no-review-id",
+        gbpReviewId: "no-review-id",
+        reviewerName: "Googleユーザー",
+        rating: 0,
+        reviewText: "本文だけがある口コミです。",
+        reviewUrl: "https://maps.example/review",
+        reviewedAt: "2026-08-21T00:00:00Z",
+      }),
+      expect.objectContaining({
+        googleReviewId: "legacy-review-id",
+        gbpReviewId: "legacy-review-id",
+        reviewerName: "一ノ瀬大輝",
+        rating: 5,
+        reviewText: "数値評価の口コミです。",
+        gbpLocationId: "locations/20",
+      }),
+    ]);
+  });
+
+  it("persists official GBP review names for reliable reply posting", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const prisma = {
+      school: {
+        findFirst: vi.fn(async () => ({
+          id: "school_1",
+          name: "iスクール予備校",
+          gbpLocationId: "locations/20",
+          lineChannelId: null,
+          schoolSetting: {
+            lineNotifyEnabled: false,
+            lineChannelAccessToken: null,
+            lineDestinationId: null,
+            notifyOnNewReview: true,
+            notifyOnLowRating: true,
+          },
+        })),
+      },
+      review: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: "review_db_1", ...data })),
+        update: vi.fn(),
+      },
+    };
+
+    await processGbpReviews({
+      reviews: [
+        {
+          googleReviewId: "accounts/10/locations/20/reviews/encrypted-review-30",
+          gbpReviewId: "encrypted-review-30",
+          gbpLocationId: "locations/20",
+          reviewerName: "一ノ瀬大輝",
+          rating: 5,
+          reviewText: "質問しやすかったです。",
+        },
+      ],
+      prisma,
+      fetchImpl: vi.fn(),
+    });
+
+    expect(prisma.review.findFirst).toHaveBeenCalledWith({
+      where: {
+        schoolId: "school_1",
+        OR: [
+          { googleReviewId: "accounts/10/locations/20/reviews/encrypted-review-30" },
+          { gbpReviewId: "encrypted-review-30" },
+        ],
+      },
+    });
+    expect(prisma.review.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          parentName: "一ノ瀬大輝",
+          authorName: "一ノ瀬大輝",
+          googleReviewId: "accounts/10/locations/20/reviews/encrypted-review-30",
+          gbpReviewId: "encrypted-review-30",
+        }),
+      }),
+    );
+  });
+
+  it("matches schools by Google place id without adding location alternatives", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const prisma = {
+      school: {
+        findFirst: vi.fn(async () => ({
+          id: "school_1",
+          name: "iスクール予備校",
+          googlePlaceId: "place_1",
+          gbpLocationId: null,
+          lineChannelId: null,
+          schoolSetting: {
+            lineNotifyEnabled: false,
+            lineChannelAccessToken: null,
+            lineDestinationId: null,
+            notifyOnNewReview: true,
+            notifyOnLowRating: true,
+          },
+        })),
+      },
+      review: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: "review_db_1", ...data })),
+        update: vi.fn(),
+      },
+    };
+
+    await processGbpReviews({
+      reviews: [
+        {
+          googleReviewId: "google_review_1",
+          googlePlaceId: "place_1",
+          reviewerName: "佐藤英樹",
+          rating: 5,
+          reviewText: "丁寧でした。",
+        },
+      ],
+      prisma,
+      fetchImpl: vi.fn(),
+    });
+
+    expect(prisma.school.findFirst).toHaveBeenCalledWith({
+      where: { googlePlaceId: "place_1" },
+      include: { schoolSetting: true },
+    });
+  });
+
   it("returns an empty list when GBP response does not contain an array", async () => {
     process.env.GBP_API_REVIEWS_URL = "https://gbp.example/reviews";
     delete process.env.GBP_API_ACCESS_TOKEN;

@@ -12,6 +12,7 @@ function serializeReview(review: {
   source: string;
   status: string;
   parentName: string | null;
+  authorName: string | null;
   rating: number | null;
   originalText: string | null;
   googleReviewId: string | null;
@@ -27,7 +28,7 @@ function serializeReview(review: {
     schoolName: review.school.name,
     source: review.source,
     status: review.status,
-    parentName: review.parentName || "Googleユーザー",
+    parentName: review.authorName || review.parentName || "Googleユーザー",
     rating: review.rating,
     originalText: review.originalText || "",
     googleReviewId: review.googleReviewId || "",
@@ -66,6 +67,7 @@ export async function GET(request: Request) {
         source: true,
         status: true,
         parentName: true,
+        authorName: true,
         rating: true,
         originalText: true,
         googleReviewId: true,
