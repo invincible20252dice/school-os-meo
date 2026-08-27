@@ -191,6 +191,41 @@ describe("/api/gbp/reply", () => {
     expect(body.message).toBe("対象の口コミが見つかりませんでした。");
   });
 
+  it("returns not found when the review is missing its Google review id", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
+      id: "review-1",
+      schoolId: "school-1",
+      googleReviewId: null,
+      school: {
+        gbpAccountId: "accounts/1",
+        gbpLocationId: "locations/100",
+        schoolSetting: {
+          googleAccountId: "accounts/setting-1",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/100",
+        },
+      },
+    });
+    const gbpReply = await import("@/lib/gbp-reply");
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "ありがとうございます。",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.message).toBe("対象の口コミが見つかりませんでした。");
+    expect(gbpReply.postGbpReviewReply).not.toHaveBeenCalled();
+  });
+
   it("rejects users outside the review school scope", async () => {
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
@@ -277,6 +312,79 @@ describe("/api/gbp/reply", () => {
     expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
       expect.objectContaining({
         gbpLocationId: "locations/setting-100",
+      }),
+    );
+  });
+
+  it("uses the GBP account resource saved on school settings when school account is blank", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
+      id: "review-1",
+      schoolId: "school-1",
+      googleReviewId: "google-review-1",
+      school: {
+        gbpAccountId: null,
+        gbpLocationId: "locations/100",
+        schoolSetting: {
+          googleAccountId: "accounts/setting-1",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/setting-100",
+        },
+      },
+    });
+    const gbpReply = await import("@/lib/gbp-reply");
+    const { POST } = await import("./route");
+
+    await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "ありがとうございます。",
+        }),
+      }),
+    );
+
+    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gbpAccountId: "accounts/setting-1",
+        gbpLocationId: "locations/100",
+      }),
+    );
+  });
+
+  it("does not treat a Google account email as a GBP account resource", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
+      id: "review-1",
+      schoolId: "school-1",
+      googleReviewId: "google-review-1",
+      school: {
+        gbpAccountId: null,
+        gbpLocationId: "locations/100",
+        schoolSetting: {
+          googleAccountId: "owner@example.com",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/setting-100",
+        },
+      },
+    });
+    const gbpReply = await import("@/lib/gbp-reply");
+    const { POST } = await import("./route");
+
+    await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "ありがとうございます。",
+        }),
+      }),
+    );
+
+    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gbpAccountId: "",
       }),
     );
   });
