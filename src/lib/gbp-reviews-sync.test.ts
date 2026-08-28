@@ -146,6 +146,13 @@ describe("gbp-reviews-sync", () => {
           selectedGbpLocationId: "locations/456",
           school: { name: "大学受験専門塾 iスクール予備校" },
         })),
+        update: vi.fn(async ({ data }) => ({
+          schoolId: "school-1",
+          googleAccountId: data.googleAccountId,
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/456",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
       },
       review: {
         findFirst: vi.fn(async () => null),
@@ -212,6 +219,144 @@ describe("gbp-reviews-sync", () => {
     });
   });
 
+  it("auto-resolves and persists the GBP account id before syncing reviews", async () => {
+    const prisma = {
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({
+          schoolId: "school-1",
+          googleAccountId: "",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/6467241578381534467",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
+        update: vi.fn(async ({ data }) => ({
+          schoolId: "school-1",
+          googleAccountId: data.googleAccountId,
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/6467241578381534467",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
+      },
+      review: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: "review-db-1", ...data })),
+        update: vi.fn(),
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ accounts: [{ name: "accounts/987" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            reviews: [
+              {
+                name: "accounts/987/locations/6467241578381534467/reviews/111",
+                reviewer: { displayName: "佐藤英樹" },
+                starRating: "FIVE",
+                comment: "とても良い塾です。",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await syncGbpReviewsForSchool({
+      prisma,
+      schoolId: "school-1",
+      fetchImpl: fetchMock,
+    });
+
+    expect(result).toEqual({ success: true, count: 1, schoolId: "school-1" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer access-token" },
+      }),
+    );
+    expect(prisma.schoolSetting.update).toHaveBeenCalledWith({
+      where: { schoolId: "school-1" },
+      data: { googleAccountId: "accounts/987" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://mybusiness.googleapis.com/v4/accounts/987/locations/6467241578381534467/reviews",
+      expect.any(Object),
+    );
+    expect(prisma.review.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        authorName: "佐藤英樹",
+        googleReviewId: "accounts/987/locations/6467241578381534467/reviews/111",
+      }),
+    });
+  });
+
+  it("surfaces account API errors while auto-resolving googleAccountId", async () => {
+    const prisma = {
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({
+          schoolId: "school-1",
+          googleAccountId: "",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/6467241578381534467",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
+        update: vi.fn(),
+      },
+      review: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+
+    await expect(
+      syncGbpReviewsForSchool({
+        prisma,
+        schoolId: "school-1",
+        fetchImpl: vi.fn(async () => new Response("account quota exceeded", { status: 429 })),
+      }),
+    ).rejects.toThrow("account quota exceeded");
+    expect(prisma.schoolSetting.update).not.toHaveBeenCalled();
+  });
+
+  it("stops with a clear error when Google returns no GBP accounts", async () => {
+    const prisma = {
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({
+          schoolId: "school-1",
+          googleAccountId: "",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/6467241578381534467",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
+        update: vi.fn(),
+      },
+      review: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+
+    await expect(
+      syncGbpReviewsForSchool({
+        prisma,
+        schoolId: "school-1",
+        fetchImpl: vi.fn(
+          async () => new Response(JSON.stringify({ accounts: [] }), { status: 200 }),
+        ),
+      }),
+    ).rejects.toThrow("アカウントIDを自動取得");
+    expect(prisma.review.create).not.toHaveBeenCalled();
+  });
+
   it("updates existing synced reviews instead of creating duplicates", async () => {
     const prisma = {
       schoolSetting: {
@@ -222,6 +367,7 @@ describe("gbp-reviews-sync", () => {
           selectedGbpLocationId: "locations/456",
           school: { name: "大学受験専門塾 iスクール予備校" },
         })),
+        update: vi.fn(),
       },
       review: {
         findFirst: vi.fn(async () => ({ id: "review-db-1" })),
@@ -274,6 +420,7 @@ describe("gbp-reviews-sync", () => {
           selectedGbpLocationId: "locations/456",
           school: { name: "大学受験専門塾 iスクール予備校" },
         })),
+        update: vi.fn(),
       },
       review: {
         findFirst: vi.fn(),
@@ -296,6 +443,34 @@ describe("gbp-reviews-sync", () => {
     ).rejects.toThrow("quota exceeded");
   });
 
+  it("adds the Google response status when the reviews API error body is empty", async () => {
+    const prisma = {
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({
+          schoolId: "school-1",
+          googleAccountId: "accounts/123",
+          googleRefreshToken: "refresh-token",
+          selectedGbpLocationId: "locations/456",
+          school: { name: "大学受験専門塾 iスクール予備校" },
+        })),
+        update: vi.fn(),
+      },
+      review: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+    };
+
+    await expect(
+      syncGbpReviewsForSchool({
+        prisma,
+        schoolId: "school-1",
+        fetchImpl: vi.fn(async () => new Response("", { status: 500 })),
+      }),
+    ).rejects.toThrow("status=500");
+  });
+
   it("surfaces non-JSON Google API errors without hiding the upstream response", async () => {
     const prisma = {
       schoolSetting: {
@@ -306,6 +481,7 @@ describe("gbp-reviews-sync", () => {
           selectedGbpLocationId: "locations/456",
           school: null,
         })),
+        update: vi.fn(),
       },
       review: {
         findFirst: vi.fn(),
@@ -333,6 +509,7 @@ describe("gbp-reviews-sync", () => {
           selectedGbpLocationId: "locations/456",
           school: null,
         })),
+        update: vi.fn(),
       },
       review: {
         findFirst: vi.fn(),
@@ -359,6 +536,7 @@ describe("gbp-reviews-sync", () => {
     const prisma = {
       schoolSetting: {
         findFirst: vi.fn(async () => null),
+        update: vi.fn(),
       },
       review: {
         findFirst: vi.fn(),

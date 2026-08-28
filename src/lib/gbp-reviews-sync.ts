@@ -20,6 +20,7 @@ type ReviewRecord = {
 type PrismaGbpReviewsSyncClient = {
   schoolSetting: {
     findFirst(args: unknown): Promise<SchoolSettingRecord | null>;
+    update(args: unknown): Promise<SchoolSettingRecord>;
   };
   review: {
     findFirst(args: unknown): Promise<ReviewRecord | null>;
@@ -45,6 +46,10 @@ type GbpReviewsApiItem = {
   };
   createTime?: string;
   updateTime?: string;
+};
+
+type GbpAccountApiItem = {
+  name?: string;
 };
 
 function normalizeString(value: unknown) {
@@ -124,6 +129,74 @@ export function buildGbpReviewsListEndpoint({
   )}/reviews`;
 }
 
+async function fetchFirstGbpAccountResource({
+  accessToken,
+  fetchImpl,
+}: {
+  accessToken: string;
+  fetchImpl: FetchLike;
+}) {
+  const response = await fetchImpl(
+    "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+  const data = await readJsonResponse(response);
+
+  console.info("[GBP Accounts API Response]:", JSON.stringify(data, null, 2));
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message || `Googleアカウント一覧を取得できませんでした。status=${response.status}`,
+    );
+  }
+
+  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  const accountResource = toAccountResource(
+    accounts.find((account: GbpAccountApiItem) => toAccountResource(account.name))?.name,
+  );
+
+  if (!accountResource) {
+    throw new Error("Google Business ProfileのアカウントIDを自動取得できませんでした。");
+  }
+
+  return accountResource;
+}
+
+async function ensureGbpAccountResource({
+  prisma,
+  setting,
+  accessToken,
+  fetchImpl,
+}: {
+  prisma: PrismaGbpReviewsSyncClient;
+  setting: SchoolSettingRecord;
+  accessToken: string;
+  fetchImpl: FetchLike;
+}) {
+  const locationResource = toLocationResource(setting.selectedGbpLocationId);
+  const embeddedAccountResource = accountResourceFromLocation(locationResource);
+  const existingAccountResource =
+    toAccountResource(setting.googleAccountId) || embeddedAccountResource;
+
+  if (existingAccountResource) {
+    return existingAccountResource;
+  }
+
+  const resolvedAccountResource = await fetchFirstGbpAccountResource({
+    accessToken,
+    fetchImpl,
+  });
+
+  await prisma.schoolSetting.update({
+    where: { schoolId: setting.schoolId },
+    data: { googleAccountId: resolvedAccountResource },
+  });
+
+  return resolvedAccountResource;
+}
+
 export function ratingFromGbpStarRating(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.min(5, Math.max(1, Math.trunc(value)));
@@ -190,7 +263,11 @@ async function readJsonResponse(response: Response) {
   }
 
   try {
-    return JSON.parse(text) as { reviews?: GbpReviewsApiItem[]; error?: { message?: string } };
+    return JSON.parse(text) as {
+      reviews?: GbpReviewsApiItem[];
+      accounts?: GbpAccountApiItem[];
+      error?: { message?: string };
+    };
   } catch {
     return { error: { message: text } };
   }
@@ -225,13 +302,19 @@ export async function syncGbpReviewsForSchool({
     throw new Error("Google連携設定（ロケーションID）が見つかりません。設定画面をご確認ください。");
   }
 
-  const endpoint = buildGbpReviewsListEndpoint({
-    googleAccountId: setting.googleAccountId,
-    selectedGbpLocationId: setting.selectedGbpLocationId,
-  });
   const accessToken = await resolveGbpAccessToken({
     googleRefreshToken: setting.googleRefreshToken,
     fetchImpl,
+  });
+  const accountResource = await ensureGbpAccountResource({
+    prisma,
+    setting,
+    accessToken,
+    fetchImpl,
+  });
+  const endpoint = buildGbpReviewsListEndpoint({
+    googleAccountId: accountResource,
+    selectedGbpLocationId: setting.selectedGbpLocationId,
   });
 
   console.info("[GBP Fetching Reviews]:", endpoint);
