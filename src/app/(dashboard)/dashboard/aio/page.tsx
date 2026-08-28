@@ -6,6 +6,8 @@ import {
   type AioRecommendationStatus,
   type AioTrendPoint,
 } from "@/lib/mock/aioData";
+import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
+import { prisma } from "@/lib/prisma";
 import styles from "./page.module.css";
 
 function AioIcon() {
@@ -116,8 +118,20 @@ function Metrics({ data }: { data: AioDashboardData }) {
   );
 }
 
-export default function AioDashboardPage() {
-  const data = normalizeAioDashboardData(buildMockAioDashboardData());
+export default async function AioDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ schoolId?: string }>;
+}) {
+  const params = await searchParams;
+  const selectedSchoolName = await findDashboardSchoolName(
+    prisma,
+    params?.schoolId,
+  );
+  const data = normalizeAioDashboardData({
+    ...buildMockAioDashboardData(),
+    ...(selectedSchoolName ? { schoolName: selectedSchoolName } : {}),
+  });
   const trendPoints = buildLinePoints(data.trend ?? []);
   const ownRadarPoints = buildRadarPoints(data.radar ?? [], "ownSchool");
   const competitorRadarPoints = buildRadarPoints(data.radar ?? [], "competitor");

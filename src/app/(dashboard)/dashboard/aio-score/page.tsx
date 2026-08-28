@@ -1,4 +1,6 @@
 import { buildMockAioScoreDashboard } from "@/lib/aio-analyzer";
+import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
+import { prisma } from "@/lib/prisma";
 import styles from "./page.module.css";
 
 function BrainIcon() {
@@ -51,8 +53,18 @@ function ScoreCard({
   );
 }
 
-export default function AioScorePage() {
+export default async function AioScorePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ schoolId?: string }>;
+}) {
+  const params = await searchParams;
+  const selectedSchoolName = await findDashboardSchoolName(
+    prisma,
+    params?.schoolId,
+  );
   const dashboard = buildMockAioScoreDashboard();
+  const schoolName = selectedSchoolName || dashboard.schoolName;
 
   return (
     <main className={styles.page}>
@@ -84,7 +96,7 @@ export default function AioScorePage() {
           <BrainIcon />
           <div>
             <h2>キーワード別AIO比較</h2>
-            <p>{dashboard.schoolName} のAI検索表示状況です。</p>
+            <p>{schoolName} のAI検索表示状況です。</p>
           </div>
         </div>
         <div className={styles.tableWrap}>
@@ -138,7 +150,7 @@ export default function AioScorePage() {
             <BrainIcon />
             <div>
               <h2>AI言及文脈</h2>
-              <p>Mock分析での回答抜粋です。</p>
+              <p>{schoolName} のMock分析での回答抜粋です。</p>
             </div>
           </div>
           <div className={styles.mentions}>

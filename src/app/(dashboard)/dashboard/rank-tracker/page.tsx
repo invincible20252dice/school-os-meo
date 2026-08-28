@@ -1,3 +1,5 @@
+import { prisma } from "@/lib/prisma";
+import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
 import { buildMockRankTrackerDashboard } from "@/lib/rank-tracker";
 import styles from "./page.module.css";
 
@@ -34,8 +36,21 @@ function formatRank(rank: number | null) {
   return rank ? `${rank}位` : "圏外";
 }
 
-export default function RankTrackerPage() {
+export default async function RankTrackerPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ schoolId?: string }>;
+}) {
+  const params = await searchParams;
+  const selectedSchoolName = await findDashboardSchoolName(
+    prisma,
+    params?.schoolId,
+  );
   const dashboard = buildMockRankTrackerDashboard();
+  const targetSchoolName = selectedSchoolName || dashboard.target.schoolName;
+  const competitors = dashboard.competitors.map((competitor) =>
+    competitor.isOwnSchool ? { ...competitor, name: targetSchoolName } : competitor,
+  );
   const maxRank = 8;
 
   return (
@@ -81,7 +96,7 @@ export default function RankTrackerPage() {
         <div className={styles.locationGrid}>
           <div>
             <span>校舎</span>
-            <strong>{dashboard.target.schoolName}</strong>
+            <strong>{targetSchoolName}</strong>
           </div>
           <div>
             <span>市町村</span>
@@ -171,7 +186,7 @@ export default function RankTrackerPage() {
               </tr>
             </thead>
             <tbody>
-              {dashboard.competitors.map((competitor) => (
+              {competitors.map((competitor) => (
                 <tr
                   key={competitor.placeId}
                   className={competitor.isOwnSchool ? styles.ownRow : undefined}
