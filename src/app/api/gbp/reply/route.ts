@@ -23,7 +23,15 @@ function normalizeString(value: unknown) {
 
 function toGbpAccountResource(value?: string | null) {
   const accountId = normalizeString(value);
-  return accountId.startsWith("accounts/") ? accountId : "";
+  if (!accountId) {
+    return "";
+  }
+
+  if (accountId.includes("@")) {
+    return "";
+  }
+
+  return accountId.startsWith("accounts/") ? accountId : `accounts/${accountId}`;
 }
 
 function toDashboardRedirect(request: Request, reviewId: string) {
@@ -48,6 +56,7 @@ async function assertCanAccessReview(request: Request, reviewId: string) {
       id: true,
       schoolId: true,
       googleReviewId: true,
+      gbpReviewId: true,
       school: {
         select: {
           gbpAccountId: true,
@@ -138,7 +147,9 @@ export async function POST(request: Request) {
 
     const { review } = await assertCanAccessReview(request, reviewId);
 
-    if (!review.googleReviewId) {
+    const googleReviewId = review.googleReviewId || review.gbpReviewId;
+
+    if (!googleReviewId) {
       throw new Error("REVIEW_NOT_FOUND");
     }
 
@@ -153,7 +164,7 @@ export async function POST(request: Request) {
       gbpLocationId:
         review.school.gbpLocationId ||
         review.school.schoolSetting?.selectedGbpLocationId,
-      googleReviewId: review.googleReviewId,
+      googleReviewId,
       replyText,
       accessToken,
     });

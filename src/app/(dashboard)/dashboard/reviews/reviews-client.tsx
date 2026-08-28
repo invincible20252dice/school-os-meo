@@ -141,6 +141,38 @@ export default function ReviewsClient() {
     }
   }
 
+  async function syncGbpReviews() {
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/dashboard/reviews/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: selectedSchoolId || undefined,
+        }),
+      });
+      const body = (await response.json()) as {
+        success?: boolean;
+        count?: number;
+        error?: string;
+      };
+
+      if (!response.ok || !body.success) {
+        throw new Error(body.error || "Google口コミを同期できませんでした。");
+      }
+
+      await loadReviews();
+      setMessage(`Google口コミを${body.count ?? 0}件同期しました。`);
+    } catch (error) {
+      setStatus("error");
+      setMessage(
+        error instanceof Error ? error.message : "Google口コミを同期できませんでした。",
+      );
+    }
+  }
+
   useEffect(() => {
     void loadReviews();
   }, [selectedSchoolId]);
@@ -168,6 +200,15 @@ export default function ReviewsClient() {
         <button type="button" className={styles.secondaryButton} onClick={loadReviews}>
           <RefreshIcon />
           再読み込み
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          onClick={() => void syncGbpReviews()}
+          disabled={status === "loading" || status === "saving"}
+        >
+          <RefreshIcon />
+          GBP口コミを同期
         </button>
       </div>
 

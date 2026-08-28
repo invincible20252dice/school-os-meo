@@ -41,6 +41,7 @@ vi.mock("@/lib/prisma", () => ({
         id: "review-1",
         schoolId: "school-1",
         googleReviewId: "google-review-1",
+        gbpReviewId: "short-review-1",
         school: {
           gbpAccountId: "accounts/1",
           gbpLocationId: "locations/100",
@@ -121,7 +122,6 @@ describe("/api/gbp/reply", () => {
       expect.objectContaining({
         select: expect.not.objectContaining({
           comment: expect.anything(),
-          gbpReviewId: expect.anything(),
           aiReplyDraft: expect.anything(),
         }),
       }),
@@ -171,6 +171,25 @@ describe("/api/gbp/reply", () => {
     expect(body.message).toBe("返信する口コミと返信文を確認してください。");
   });
 
+  it("returns a safe server error when the request body is invalid JSON", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: "{invalid-json",
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.message).toBe("口コミ返信を投稿できませんでした。");
+    consoleErrorSpy.mockRestore();
+  });
+
   it("returns not found when the review does not exist", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findUnique).mockResolvedValueOnce(null);
@@ -197,6 +216,7 @@ describe("/api/gbp/reply", () => {
       id: "review-1",
       schoolId: "school-1",
       googleReviewId: null,
+      gbpReviewId: null,
       school: {
         gbpAccountId: "accounts/1",
         gbpLocationId: "locations/100",
