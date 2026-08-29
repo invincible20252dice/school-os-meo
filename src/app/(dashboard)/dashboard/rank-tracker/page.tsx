@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
-import { buildMockRankTrackerDashboard } from "@/lib/rank-tracker";
+import {
+  buildDashboardRankingData,
+  type DashboardKeywordRankRecord,
+  type DashboardSchoolRecord,
+  type DashboardTargetKeywordRecord,
+} from "@/lib/dashboard-rankings";
 import styles from "./page.module.css";
 
 function MapIcon() {
@@ -36,22 +40,63 @@ function formatRank(rank: number | null) {
   return rank ? `${rank}位` : "圏外";
 }
 
+async function loadDashboardRankingData(schoolId?: string) {
+  const school = schoolId
+    ? await prisma.school.findUnique({
+        where: { id: schoolId },
+        select: {
+          id: true,
+          name: true,
+          prefecture: true,
+          city: true,
+          addressLine: true,
+          googlePlaceId: true,
+        },
+      })
+    : null;
+  const keywords = await prisma.targetKeyword.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      rankHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 20,
+      },
+      aioScoreHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 5,
+      },
+    },
+  });
+  const keywordRanks = await prisma.keywordRank.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: { measuredAt: "desc" },
+    take: 20,
+  });
+
+  return buildDashboardRankingData({
+    school: school as DashboardSchoolRecord | null,
+    keywords: keywords as DashboardTargetKeywordRecord[],
+    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
+  });
+}
+
 export default async function RankTrackerPage({
   searchParams,
 }: {
   searchParams?: Promise<{ schoolId?: string }>;
 }) {
   const params = await searchParams;
-  const selectedSchoolName = await findDashboardSchoolName(
-    prisma,
-    params?.schoolId,
+  const dashboard = await loadDashboardRankingData(params?.schoolId);
+  const targetSchoolName = dashboard.school?.name || "校舎未選択";
+  const maxRank = Math.max(
+    8,
+    ...dashboard.history.map((item) => item.rank || 0),
   );
-  const dashboard = buildMockRankTrackerDashboard();
-  const targetSchoolName = selectedSchoolName || dashboard.target.schoolName;
-  const competitors = dashboard.competitors.map((competitor) =>
-    competitor.isOwnSchool ? { ...competitor, name: targetSchoolName } : competitor,
-  );
-  const maxRank = 8;
+  const rankChange =
+    dashboard.currentRank && dashboard.previousRank
+      ? dashboard.previousRank - dashboard.currentRank
+      : null;
 
   return (
     <main className={styles.page}>
@@ -67,20 +112,18 @@ export default async function RankTrackerPage({
         <article>
           <MapIcon />
           <span>対象キーワード</span>
-          <strong>{dashboard.target.keyword}</strong>
+          <strong>{dashboard.currentKeyword || "未登録"}</strong>
         </article>
         <article>
           <TrendIcon />
           <span>最新順位</span>
-          <strong>{formatRank(dashboard.latest.rank)}</strong>
+          <strong>{formatRank(dashboard.currentRank)}</strong>
         </article>
         <article>
           <PinIcon />
           <span>前回比</span>
           <strong>
-            {dashboard.latest.change && dashboard.latest.change > 0
-              ? `+${dashboard.latest.change}`
-              : dashboard.latest.change}
+            {rankChange === null ? "-" : rankChange > 0 ? `+${rankChange}` : rankChange}
           </strong>
         </article>
       </section>
@@ -90,7 +133,7 @@ export default async function RankTrackerPage({
           <PinIcon />
           <div>
             <h2>計測位置パラメータ</h2>
-            <p>{dashboard.searchLabel}</p>
+            <p>{dashboard.searchLabel || "登録済みキーワードの計測条件を表示します。"}</p>
           </div>
         </div>
         <div className={styles.locationGrid}>
@@ -100,26 +143,28 @@ export default async function RankTrackerPage({
           </div>
           <div>
             <span>市町村</span>
-            <strong>{dashboard.target.location.municipality}</strong>
+            <strong>{dashboard.school?.municipality || "-"}</strong>
           </div>
           <div>
             <span>最寄り駅</span>
-            <strong>{dashboard.target.location.nearestStation}</strong>
+            <strong>{dashboard.school?.nearestStation || "-"}</strong>
           </div>
           <div>
             <span>緯度・経度</span>
             <strong>
-              {dashboard.target.location.latitude},{" "}
-              {dashboard.target.location.longitude}
+              {dashboard.school?.latitude !== undefined &&
+              dashboard.school?.longitude !== undefined
+                ? `${dashboard.school.latitude}, ${dashboard.school.longitude}`
+                : "-"}
             </strong>
           </div>
           <div>
             <span>計測半径</span>
-            <strong>{dashboard.target.location.radiusMeters}m</strong>
+            <strong>{dashboard.keywords[0] ? `${dashboard.keywords[0].radiusMeters}m` : "-"}</strong>
           </div>
           <div>
             <span>計測時刻</span>
-            <strong>{dashboard.latest.checkedAt}</strong>
+            <strong>{dashboard.rankingLogs[0]?.checkedAt || "-"}</strong>
           </div>
         </div>
       </section>
@@ -130,21 +175,28 @@ export default async function RankTrackerPage({
             <TrendIcon />
             <div>
               <h2>順位推移</h2>
-              <p>直近7日間のMock履歴です。</p>
+              <p>登録済みキーワードの直近履歴です。</p>
             </div>
           </div>
           <div className={styles.chart}>
-            {dashboard.history.map((item) => (
-              <div key={item.date} className={styles.chartItem}>
-                <span>{item.rank}位</span>
-                <div
-                  style={{
-                    height: `${Math.max(18, (maxRank - item.rank + 1) * 18)}px`,
-                  }}
-                />
-                <small>{item.date.slice(5)}</small>
-              </div>
-            ))}
+            {dashboard.history.length ? (
+              dashboard.history.map((item, index) => (
+                <div key={`${item.date}-${index}`} className={styles.chartItem}>
+                  <span>{item.rank ? `${item.rank}位` : "圏外"}</span>
+                  <div
+                    style={{
+                      height: `${Math.max(
+                        18,
+                        (maxRank - (item.rank || maxRank) + 1) * 18,
+                      )}px`,
+                    }}
+                  />
+                  <small>{item.date.slice(5) || "-"}</small>
+                </div>
+              ))
+            ) : (
+              <p>順位履歴はまだありません。</p>
+            )}
           </div>
         </article>
 
@@ -157,10 +209,12 @@ export default async function RankTrackerPage({
             </div>
           </div>
           <div className={styles.positionBox}>
-            <strong>{formatRank(dashboard.latest.rank)}</strong>
+            <strong>{formatRank(dashboard.currentRank)}</strong>
             <span>上位20店舗中</span>
             <p>
-              自校舎は3位に表示されています。1位・2位との差分は口コミ数と駅前エリアでの露出です。
+              {dashboard.currentKeyword
+                ? `${dashboard.currentKeyword} の現在順位です。`
+                : "キーワードを登録すると順位計測の結果が表示されます。"}
             </p>
           </div>
         </article>
@@ -168,13 +222,13 @@ export default async function RankTrackerPage({
 
       <section className={styles.panel}>
         <div className={styles.panelTitle}>
-          <MapIcon />
-          <div>
-            <h2>上位20店舗</h2>
-            <p>自校舎は強調表示しています。</p>
+            <MapIcon />
+            <div>
+              <h2>上位20店舗</h2>
+              <p>取得済みの競合データを表示します。</p>
+            </div>
           </div>
-        </div>
-        <div className={styles.tableWrap}>
+          <div className={styles.tableWrap}>
           <table>
             <thead>
               <tr>
@@ -186,9 +240,9 @@ export default async function RankTrackerPage({
               </tr>
             </thead>
             <tbody>
-              {competitors.map((competitor) => (
+              {dashboard.competitors.map((competitor) => (
                 <tr
-                  key={competitor.placeId}
+                  key={`${competitor.rank}-${competitor.name}`}
                   className={competitor.isOwnSchool ? styles.ownRow : undefined}
                 >
                   <td>{competitor.rank}</td>
@@ -198,6 +252,11 @@ export default async function RankTrackerPage({
                   <td>{competitor.address ?? "-"}</td>
                 </tr>
               ))}
+              {!dashboard.competitors.length ? (
+                <tr>
+                  <td colSpan={5}>競合データはまだありません。</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

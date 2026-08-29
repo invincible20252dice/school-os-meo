@@ -1,5 +1,9 @@
-import { buildMockAioScoreDashboard } from "@/lib/aio-analyzer";
-import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
+import {
+  buildDashboardRankingData,
+  type DashboardKeywordRankRecord,
+  type DashboardSchoolRecord,
+  type DashboardTargetKeywordRecord,
+} from "@/lib/dashboard-rankings";
 import { prisma } from "@/lib/prisma";
 import styles from "./page.module.css";
 
@@ -53,18 +57,55 @@ function ScoreCard({
   );
 }
 
+async function loadAioScoreDashboard(schoolId?: string) {
+  const school = schoolId
+    ? await prisma.school.findUnique({
+        where: { id: schoolId },
+        select: {
+          id: true,
+          name: true,
+          prefecture: true,
+          city: true,
+          addressLine: true,
+          googlePlaceId: true,
+        },
+      })
+    : null;
+  const keywords = await prisma.targetKeyword.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      rankHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 1,
+      },
+      aioScoreHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 8,
+      },
+    },
+  });
+  const keywordRanks = await prisma.keywordRank.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: { measuredAt: "desc" },
+    take: 20,
+  });
+
+  return buildDashboardRankingData({
+    school: school as DashboardSchoolRecord | null,
+    keywords: keywords as DashboardTargetKeywordRecord[],
+    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
+  });
+}
+
 export default async function AioScorePage({
   searchParams,
 }: {
   searchParams?: Promise<{ schoolId?: string }>;
 }) {
   const params = await searchParams;
-  const selectedSchoolName = await findDashboardSchoolName(
-    prisma,
-    params?.schoolId,
-  );
-  const dashboard = buildMockAioScoreDashboard();
-  const schoolName = selectedSchoolName || dashboard.schoolName;
+  const dashboard = await loadAioScoreDashboard(params?.schoolId);
+  const schoolName = dashboard.school?.name || "校舎未選択";
 
   return (
     <main className={styles.page}>
@@ -77,17 +118,17 @@ export default async function AioScorePage({
       </header>
 
       <section className={styles.summary}>
-        <ScoreCard label="ChatGPT" score={dashboard.summary.chatgptScore} />
-        <ScoreCard label="Gemini" score={dashboard.summary.geminiScore} />
+        <ScoreCard label="ChatGPT" score={dashboard.aio.summary.chatgptScore} />
+        <ScoreCard label="Gemini" score={dashboard.aio.summary.geminiScore} />
         <ScoreCard
           label="Google AIモード"
-          score={dashboard.summary.googleAiScore}
+          score={dashboard.aio.summary.googleAiScore}
         />
         <article className={styles.totalCard}>
           <BrainIcon />
           <span>総合AIOスコア</span>
-          <strong>{dashboard.summary.totalScore}%</strong>
-          <small>{dashboard.checkedAt}</small>
+          <strong>{dashboard.aio.summary.totalScore}%</strong>
+          <small>{dashboard.aio.checkedAt || "未計測"}</small>
         </article>
       </section>
 
@@ -112,7 +153,7 @@ export default async function AioScorePage({
               </tr>
             </thead>
             <tbody>
-              {dashboard.keywordRows.map((row) => (
+              {dashboard.aio.keywordRows.map((row) => (
                 <tr key={row.keyword}>
                   <td>{row.keyword}</td>
                   <td>{row.chatgptScore}%</td>
@@ -124,6 +165,11 @@ export default async function AioScorePage({
                   </td>
                 </tr>
               ))}
+              {!dashboard.aio.keywordRows.length ? (
+                <tr>
+                  <td colSpan={6}>AIO計測対象のキーワードはまだ登録されていません。</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -139,9 +185,9 @@ export default async function AioScorePage({
             </div>
           </div>
           <ul className={styles.actions}>
-            {dashboard.actions.map((action) => (
-              <li key={action}>{action}</li>
-            ))}
+            <li>TargetKeywordに市町村名、最寄り駅、緯度経度を登録してください。</li>
+            <li>Googleビジネスプロフィールと校舎ページに対象キーワードを自然に反映してください。</li>
+            <li>AIO計測を実行すると、ここにDB上のスコアが反映されます。</li>
           </ul>
         </article>
 
@@ -150,21 +196,21 @@ export default async function AioScorePage({
             <BrainIcon />
             <div>
               <h2>AI言及文脈</h2>
-              <p>{schoolName} のMock分析での回答抜粋です。</p>
+              <p>{schoolName} のDB計測結果に基づく回答抜粋です。</p>
             </div>
           </div>
           <div className={styles.mentions}>
             <section>
               <h3>ChatGPT</h3>
-              <p>{dashboard.mentions.chatgpt}</p>
+              <p>{dashboard.aio.mentions.chatgpt || "計測結果はまだありません。"}</p>
             </section>
             <section>
               <h3>Gemini</h3>
-              <p>{dashboard.mentions.gemini}</p>
+              <p>{dashboard.aio.mentions.gemini || "計測結果はまだありません。"}</p>
             </section>
             <section>
               <h3>Google AI</h3>
-              <p>{dashboard.mentions.googleAi}</p>
+              <p>{dashboard.aio.mentions.googleAi || "計測結果はまだありません。"}</p>
             </section>
           </div>
         </article>

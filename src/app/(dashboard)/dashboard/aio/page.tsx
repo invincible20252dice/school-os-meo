@@ -1,12 +1,15 @@
 import {
-  buildMockAioDashboardData,
-  normalizeAioDashboardData,
   type AioDashboardData,
   type AioRadarAxis,
   type AioRecommendationStatus,
   type AioTrendPoint,
 } from "@/lib/mock/aioData";
-import { findDashboardSchoolName } from "@/lib/dashboard-school-name";
+import {
+  buildDashboardRankingData,
+  type DashboardKeywordRankRecord,
+  type DashboardSchoolRecord,
+  type DashboardTargetKeywordRecord,
+} from "@/lib/dashboard-rankings";
 import { prisma } from "@/lib/prisma";
 import styles from "./page.module.css";
 
@@ -118,20 +121,98 @@ function Metrics({ data }: { data: AioDashboardData }) {
   );
 }
 
+async function loadAioDashboardData(schoolId?: string): Promise<AioDashboardData> {
+  const school = schoolId
+    ? await prisma.school.findUnique({
+        where: { id: schoolId },
+        select: {
+          id: true,
+          name: true,
+          prefecture: true,
+          city: true,
+          addressLine: true,
+          googlePlaceId: true,
+        },
+      })
+    : null;
+  const keywords = await prisma.targetKeyword.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      rankHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 1,
+      },
+      aioScoreHistories: {
+        orderBy: { checkedAt: "desc" },
+        take: 8,
+      },
+    },
+  });
+  const keywordRanks = await prisma.keywordRank.findMany({
+    where: schoolId ? { schoolId } : undefined,
+    orderBy: { measuredAt: "desc" },
+    take: 20,
+  });
+  const dashboard = buildDashboardRankingData({
+    school: school as DashboardSchoolRecord | null,
+    keywords: keywords as DashboardTargetKeywordRecord[],
+    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
+  });
+  const schoolName = dashboard.school?.name || "校舎未選択";
+
+  return {
+    schoolName,
+    subtitle: `${schoolName} の登録キーワードに基づくAI検索表示率分析`,
+    metrics: [
+      {
+        label: "総合AIOスコア",
+        value: `${dashboard.aio.summary.totalScore}/100`,
+        helper: "登録キーワード全体の平均スコア",
+        trend: dashboard.aio.checkedAt || "未計測",
+      },
+      {
+        label: "ChatGPT推奨率",
+        value: `${dashboard.aio.summary.chatgptScore}%`,
+        helper: "ChatGPT回答内での表示・推奨度",
+        trend: `${dashboard.aio.keywordRows.length}件`,
+      },
+      {
+        label: "Gemini露出度",
+        value: `${dashboard.aio.summary.geminiScore}%`,
+        helper: "Gemini回答内での表示・推奨度",
+        trend: `${dashboard.aio.keywordRows.length}件`,
+      },
+      {
+        label: "Google AI露出度",
+        value: `${dashboard.aio.summary.googleAiScore}%`,
+        helper: "Google AI回答内での表示・推奨度",
+        trend: `${dashboard.aio.keywordRows.length}件`,
+      },
+    ],
+    trend: dashboard.aio.trend,
+    radar: dashboard.aio.radar,
+    mentions: dashboard.aio.keywordRows.map((row) => ({
+      query: row.keyword,
+      chatgptSummary: dashboard.aio.mentions.chatgpt || "計測結果はまだありません。",
+      perplexitySummary: "この画面では現在、登録済みDBデータのみを表示しています。",
+      geminiSummary: dashboard.aio.mentions.gemini || "計測結果はまだありません。",
+      status: row.status as AioRecommendationStatus,
+      action:
+        row.totalScore >= 80
+          ? "現在の情報更新を継続してください。"
+          : "校舎ページ、口コミ、GBP投稿に地域名・駅名・対象キーワードを追加してください。",
+    })),
+  };
+}
+
 export default async function AioDashboardPage({
   searchParams,
 }: {
   searchParams?: Promise<{ schoolId?: string }>;
 }) {
   const params = await searchParams;
-  const selectedSchoolName = await findDashboardSchoolName(
-    prisma,
-    params?.schoolId,
-  );
-  const data = normalizeAioDashboardData({
-    ...buildMockAioDashboardData(),
-    ...(selectedSchoolName ? { schoolName: selectedSchoolName } : {}),
-  });
+  const data = await loadAioDashboardData(params?.schoolId);
   const trendPoints = buildLinePoints(data.trend ?? []);
   const ownRadarPoints = buildRadarPoints(data.radar ?? [], "ownSchool");
   const competitorRadarPoints = buildRadarPoints(data.radar ?? [], "competitor");
