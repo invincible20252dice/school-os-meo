@@ -1,5 +1,6 @@
 import {
   buildDashboardRankingData,
+  type DashboardRankingData,
   type DashboardKeywordRankRecord,
   type DashboardSchoolRecord,
   type DashboardTargetKeywordRecord,
@@ -58,44 +59,57 @@ function ScoreCard({
 }
 
 async function loadAioScoreDashboard(schoolId?: string) {
-  const school = schoolId
-    ? await prisma.school.findUnique({
-        where: { id: schoolId },
-        select: {
-          id: true,
-          name: true,
-          prefecture: true,
-          city: true,
-          addressLine: true,
-          googlePlaceId: true,
+  try {
+    const school = schoolId
+      ? await prisma.school.findUnique({
+          where: { id: schoolId },
+          select: {
+            id: true,
+            name: true,
+            prefecture: true,
+            city: true,
+            addressLine: true,
+            googlePlaceId: true,
+          },
+        })
+      : null;
+    const keywords = await prisma.targetKeyword.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: [{ createdAt: "asc" }],
+      include: {
+        rankHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 1,
         },
-      })
-    : null;
-  const keywords = await prisma.targetKeyword.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: [{ createdAt: "asc" }],
-    include: {
-      rankHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 1,
+        aioScoreHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 8,
+        },
       },
-      aioScoreHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 8,
-      },
-    },
-  });
-  const keywordRanks = await prisma.keywordRank.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: { measuredAt: "desc" },
-    take: 20,
-  });
+    });
+    const keywordRanks = await prisma.keywordRank.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: { measuredAt: "desc" },
+      take: 20,
+    });
 
-  return buildDashboardRankingData({
-    school: school as DashboardSchoolRecord | null,
-    keywords: keywords as DashboardTargetKeywordRecord[],
-    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
-  });
+    return buildDashboardRankingData({
+      school: school as DashboardSchoolRecord | null,
+      keywords: Array.isArray(keywords)
+        ? keywords as DashboardTargetKeywordRecord[]
+        : [],
+      keywordRanks: Array.isArray(keywordRanks)
+        ? keywordRanks as DashboardKeywordRankRecord[]
+        : [],
+    });
+  } catch (error) {
+    console.error("[AioScorePage] Failed to load AIO score data:", error);
+    return buildDashboardRankingData({
+      school: null,
+      keywords: [],
+      keywordRanks: [],
+    });
+  }
 }
 
 export default async function AioScorePage({
@@ -105,6 +119,8 @@ export default async function AioScorePage({
 }) {
   const params = await searchParams;
   const dashboard = await loadAioScoreDashboard(params?.schoolId);
+  const aio = (dashboard as DashboardRankingData).aio;
+  const keywordRows = Array.isArray(aio.keywordRows) ? aio.keywordRows : [];
   const schoolName = dashboard.school?.name || "校舎未選択";
 
   return (
@@ -118,17 +134,17 @@ export default async function AioScorePage({
       </header>
 
       <section className={styles.summary}>
-        <ScoreCard label="ChatGPT" score={dashboard.aio.summary.chatgptScore} />
-        <ScoreCard label="Gemini" score={dashboard.aio.summary.geminiScore} />
+        <ScoreCard label="ChatGPT" score={aio.summary.chatgptScore} />
+        <ScoreCard label="Gemini" score={aio.summary.geminiScore} />
         <ScoreCard
           label="Google AIモード"
-          score={dashboard.aio.summary.googleAiScore}
+          score={aio.summary.googleAiScore}
         />
         <article className={styles.totalCard}>
           <BrainIcon />
           <span>総合AIOスコア</span>
-          <strong>{dashboard.aio.summary.totalScore}%</strong>
-          <small>{dashboard.aio.checkedAt || "未計測"}</small>
+          <strong>{aio.summary.totalScore}%</strong>
+          <small>{aio.checkedAt || "未計測"}</small>
         </article>
       </section>
 
@@ -153,7 +169,7 @@ export default async function AioScorePage({
               </tr>
             </thead>
             <tbody>
-              {dashboard.aio.keywordRows.map((row) => (
+              {keywordRows.map((row) => (
                 <tr key={row.keyword}>
                   <td>{row.keyword}</td>
                   <td>{row.chatgptScore}%</td>
@@ -165,7 +181,7 @@ export default async function AioScorePage({
                   </td>
                 </tr>
               ))}
-              {!dashboard.aio.keywordRows.length ? (
+              {!keywordRows.length ? (
                 <tr>
                   <td colSpan={6}>AIO計測対象のキーワードはまだ登録されていません。</td>
                 </tr>

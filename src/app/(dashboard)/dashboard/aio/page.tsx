@@ -6,6 +6,7 @@ import {
 } from "@/lib/mock/aioData";
 import {
   buildDashboardRankingData,
+  type DashboardRankingData,
   type DashboardKeywordRankRecord,
   type DashboardSchoolRecord,
   type DashboardTargetKeywordRecord,
@@ -121,45 +122,11 @@ function Metrics({ data }: { data: AioDashboardData }) {
   );
 }
 
-async function loadAioDashboardData(schoolId?: string): Promise<AioDashboardData> {
-  const school = schoolId
-    ? await prisma.school.findUnique({
-        where: { id: schoolId },
-        select: {
-          id: true,
-          name: true,
-          prefecture: true,
-          city: true,
-          addressLine: true,
-          googlePlaceId: true,
-        },
-      })
-    : null;
-  const keywords = await prisma.targetKeyword.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: [{ createdAt: "asc" }],
-    include: {
-      rankHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 1,
-      },
-      aioScoreHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 8,
-      },
-    },
-  });
-  const keywordRanks = await prisma.keywordRank.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: { measuredAt: "desc" },
-    take: 20,
-  });
-  const dashboard = buildDashboardRankingData({
-    school: school as DashboardSchoolRecord | null,
-    keywords: keywords as DashboardTargetKeywordRecord[],
-    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
-  });
+function toAioDashboardData(dashboard: DashboardRankingData): AioDashboardData {
   const schoolName = dashboard.school?.name || "校舎未選択";
+  const keywordRows = Array.isArray(dashboard.aio.keywordRows)
+    ? dashboard.aio.keywordRows
+    : [];
 
   return {
     schoolName,
@@ -175,24 +142,24 @@ async function loadAioDashboardData(schoolId?: string): Promise<AioDashboardData
         label: "ChatGPT推奨率",
         value: `${dashboard.aio.summary.chatgptScore}%`,
         helper: "ChatGPT回答内での表示・推奨度",
-        trend: `${dashboard.aio.keywordRows.length}件`,
+        trend: `${keywordRows.length}件`,
       },
       {
         label: "Gemini露出度",
         value: `${dashboard.aio.summary.geminiScore}%`,
         helper: "Gemini回答内での表示・推奨度",
-        trend: `${dashboard.aio.keywordRows.length}件`,
+        trend: `${keywordRows.length}件`,
       },
       {
         label: "Google AI露出度",
         value: `${dashboard.aio.summary.googleAiScore}%`,
         helper: "Google AI回答内での表示・推奨度",
-        trend: `${dashboard.aio.keywordRows.length}件`,
+        trend: `${keywordRows.length}件`,
       },
     ],
-    trend: dashboard.aio.trend,
-    radar: dashboard.aio.radar,
-    mentions: dashboard.aio.keywordRows.map((row) => ({
+    trend: Array.isArray(dashboard.aio.trend) ? dashboard.aio.trend : [],
+    radar: Array.isArray(dashboard.aio.radar) ? dashboard.aio.radar : [],
+    mentions: keywordRows.map((row) => ({
       query: row.keyword,
       chatgptSummary: dashboard.aio.mentions.chatgpt || "計測結果はまだありません。",
       perplexitySummary: "この画面では現在、登録済みDBデータのみを表示しています。",
@@ -204,6 +171,61 @@ async function loadAioDashboardData(schoolId?: string): Promise<AioDashboardData
           : "校舎ページ、口コミ、GBP投稿に地域名・駅名・対象キーワードを追加してください。",
     })),
   };
+}
+
+async function loadAioDashboardData(schoolId?: string): Promise<AioDashboardData> {
+  try {
+    const school = schoolId
+      ? await prisma.school.findUnique({
+          where: { id: schoolId },
+          select: {
+            id: true,
+            name: true,
+            prefecture: true,
+            city: true,
+            addressLine: true,
+            googlePlaceId: true,
+          },
+        })
+      : null;
+    const keywords = await prisma.targetKeyword.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: [{ createdAt: "asc" }],
+      include: {
+        rankHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 1,
+        },
+        aioScoreHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 8,
+        },
+      },
+    });
+    const keywordRanks = await prisma.keywordRank.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: { measuredAt: "desc" },
+      take: 20,
+    });
+    const dashboard = buildDashboardRankingData({
+      school: school as DashboardSchoolRecord | null,
+      keywords: Array.isArray(keywords)
+        ? keywords as DashboardTargetKeywordRecord[]
+        : [],
+      keywordRanks: Array.isArray(keywordRanks)
+        ? keywordRanks as DashboardKeywordRankRecord[]
+        : [],
+    });
+
+    return toAioDashboardData(dashboard);
+  } catch (error) {
+    console.error("[AioDashboardPage] Failed to load AIO data:", error);
+    return toAioDashboardData(buildDashboardRankingData({
+      school: null,
+      keywords: [],
+      keywordRanks: [],
+    }));
+  }
 }
 
 export default async function AioDashboardPage({

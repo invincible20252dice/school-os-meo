@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   buildDashboardRankingData,
+  type DashboardRankingData,
   type DashboardKeywordRankRecord,
   type DashboardSchoolRecord,
   type DashboardTargetKeywordRecord,
@@ -40,45 +41,62 @@ function formatRank(rank: number | null) {
   return rank ? `${rank}位` : "圏外";
 }
 
-async function loadDashboardRankingData(schoolId?: string) {
-  const school = schoolId
-    ? await prisma.school.findUnique({
-        where: { id: schoolId },
-        select: {
-          id: true,
-          name: true,
-          prefecture: true,
-          city: true,
-          addressLine: true,
-          googlePlaceId: true,
-        },
-      })
-    : null;
-  const keywords = await prisma.targetKeyword.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: [{ createdAt: "asc" }],
-    include: {
-      rankHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 20,
-      },
-      aioScoreHistories: {
-        orderBy: { checkedAt: "desc" },
-        take: 5,
-      },
-    },
-  });
-  const keywordRanks = await prisma.keywordRank.findMany({
-    where: schoolId ? { schoolId } : undefined,
-    orderBy: { measuredAt: "desc" },
-    take: 20,
-  });
-
+function emptyDashboardRankingData(): DashboardRankingData {
   return buildDashboardRankingData({
-    school: school as DashboardSchoolRecord | null,
-    keywords: keywords as DashboardTargetKeywordRecord[],
-    keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
+    school: null,
+    keywords: [],
+    keywordRanks: [],
   });
+}
+
+async function loadDashboardRankingData(schoolId?: string) {
+  try {
+    const school = schoolId
+      ? await prisma.school.findUnique({
+          where: { id: schoolId },
+          select: {
+            id: true,
+            name: true,
+            prefecture: true,
+            city: true,
+            addressLine: true,
+            googlePlaceId: true,
+          },
+        })
+      : null;
+    const keywords = await prisma.targetKeyword.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: [{ createdAt: "asc" }],
+      include: {
+        rankHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 20,
+        },
+        aioScoreHistories: {
+          orderBy: { checkedAt: "desc" },
+          take: 5,
+        },
+      },
+    });
+    const keywordRanks = await prisma.keywordRank.findMany({
+      where: schoolId ? { schoolId } : undefined,
+      orderBy: { measuredAt: "desc" },
+      take: 20,
+    });
+
+    return buildDashboardRankingData({
+      school: school as DashboardSchoolRecord | null,
+      keywords: Array.isArray(keywords)
+        ? keywords as DashboardTargetKeywordRecord[]
+        : [],
+      keywordRanks: Array.isArray(keywordRanks)
+        ? keywordRanks as DashboardKeywordRankRecord[]
+        : [],
+    });
+  } catch (error) {
+    console.error("[RankTrackerPage] Failed to load ranking data:", error);
+    return emptyDashboardRankingData();
+  }
 }
 
 export default async function RankTrackerPage({
@@ -88,10 +106,18 @@ export default async function RankTrackerPage({
 }) {
   const params = await searchParams;
   const dashboard = await loadDashboardRankingData(params?.schoolId);
+  const keywords = Array.isArray(dashboard.keywords) ? dashboard.keywords : [];
+  const rankingLogs = Array.isArray(dashboard.rankingLogs)
+    ? dashboard.rankingLogs
+    : [];
+  const history = Array.isArray(dashboard.history) ? dashboard.history : [];
+  const competitors = Array.isArray(dashboard.competitors)
+    ? dashboard.competitors
+    : [];
   const targetSchoolName = dashboard.school?.name || "校舎未選択";
   const maxRank = Math.max(
     8,
-    ...dashboard.history.map((item) => item.rank || 0),
+    ...history.map((item) => item.rank || 0),
   );
   const rankChange =
     dashboard.currentRank && dashboard.previousRank
@@ -160,11 +186,11 @@ export default async function RankTrackerPage({
           </div>
           <div>
             <span>計測半径</span>
-            <strong>{dashboard.keywords[0] ? `${dashboard.keywords[0].radiusMeters}m` : "-"}</strong>
+            <strong>{keywords[0] ? `${keywords[0].radiusMeters}m` : "-"}</strong>
           </div>
           <div>
             <span>計測時刻</span>
-            <strong>{dashboard.rankingLogs[0]?.checkedAt || "-"}</strong>
+            <strong>{rankingLogs[0]?.checkedAt || "-"}</strong>
           </div>
         </div>
       </section>
@@ -179,8 +205,8 @@ export default async function RankTrackerPage({
             </div>
           </div>
           <div className={styles.chart}>
-            {dashboard.history.length ? (
-              dashboard.history.map((item, index) => (
+            {history.length ? (
+              history.map((item, index) => (
                 <div key={`${item.date}-${index}`} className={styles.chartItem}>
                   <span>{item.rank ? `${item.rank}位` : "圏外"}</span>
                   <div
@@ -240,7 +266,7 @@ export default async function RankTrackerPage({
               </tr>
             </thead>
             <tbody>
-              {dashboard.competitors.map((competitor) => (
+              {competitors.map((competitor) => (
                 <tr
                   key={`${competitor.rank}-${competitor.name}`}
                   className={competitor.isOwnSchool ? styles.ownRow : undefined}
@@ -252,7 +278,7 @@ export default async function RankTrackerPage({
                   <td>{competitor.address ?? "-"}</td>
                 </tr>
               ))}
-              {!dashboard.competitors.length ? (
+              {!competitors.length ? (
                 <tr>
                   <td colSpan={5}>競合データはまだありません。</td>
                 </tr>
