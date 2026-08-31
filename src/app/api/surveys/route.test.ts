@@ -190,6 +190,70 @@ describe("/api/surveys", () => {
     });
   });
 
+  it("falls back to all surveys when an admin-selected school has no surveys", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "admin",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "本部",
+        email: "admin@example.com",
+        status: "active",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(prisma.survey.findMany)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "survey-actual",
+          schoolId: "cms5tnzlr0001jt04qh0lluva",
+          title: "予備校下通り校",
+          requiredKeywords: "下通り, 大学受験",
+          minCharCount: 100,
+          maxCharCount: 300,
+          isValid: true,
+          benefitType: null,
+          benefitShowTiming: null,
+          createdAt: new Date("2026-07-20T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-21T00:00:00.000Z"),
+          school: {
+            id: "cms5tnzlr0001jt04qh0lluva",
+            name: "大学受験専門塾 iスクール予備校",
+          },
+          items: [],
+        },
+      ] as never);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/surveys?schoolId=stale-school"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(prisma.survey.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { schoolId: "stale-school" },
+      }),
+    );
+    expect(prisma.survey.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {},
+      }),
+    );
+    expect(body.surveys[0]).toMatchObject({
+      id: "survey-actual",
+      schoolName: "大学受験専門塾 iスクール予備校",
+      title: "予備校下通り校",
+    });
+  });
+
   it("loads the survey list when the production DB is missing the optional placeholder column", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")

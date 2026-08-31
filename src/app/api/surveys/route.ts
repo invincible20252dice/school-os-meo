@@ -155,6 +155,26 @@ async function findSurveySummaryRows(where: Record<string, unknown>) {
   })) as SurveyListRow[];
 }
 
+async function findSurveyRowsWithSchemaFallback(where: Record<string, unknown>) {
+  try {
+    return await findSurveyListRows({ where, includePlaceholder: true });
+  } catch (error) {
+    if (isMissingColumnError(error, "SurveyItem.placeholder")) {
+      console.error(
+        "SurveyItem.placeholder is missing in the database. Run `npx prisma db push` to sync the schema.",
+        error,
+      );
+      return findSurveyListRows({ where, includePlaceholder: false });
+    }
+
+    console.error(
+      "[GET /api/surveys] Rich survey query failed. Retrying with Survey base columns only.",
+      error,
+    );
+    return findSurveySummaryRows(where);
+  }
+}
+
 function buildSurveyListAccessLabel(
   accessResult: Awaited<ReturnType<typeof resolveRequestAccess>>,
   scopedSchool: ReturnType<typeof buildScopedSchoolFilter>,
@@ -224,24 +244,15 @@ export async function GET(request: Request) {
       shouldApplySchoolFilter,
       effectiveSchoolId: scopedSchool.effectiveSchoolId,
     });
-    let surveys: SurveyListRow[];
+    let surveys = await findSurveyRowsWithSchemaFallback(where);
 
-    try {
-      surveys = await findSurveyListRows({ where, includePlaceholder: true });
-    } catch (error) {
-      if (isMissingColumnError(error, "SurveyItem.placeholder")) {
-        console.error(
-          "SurveyItem.placeholder is missing in the database. Run `npx prisma db push` to sync the schema.",
-          error,
-        );
-        surveys = await findSurveyListRows({ where, includePlaceholder: false });
-      } else {
-        console.error(
-          "[GET /api/surveys] Rich survey query failed. Retrying with Survey base columns only.",
-          error,
-        );
-        surveys = await findSurveySummaryRows(where);
-      }
+    if (
+      surveys.length === 0 &&
+      scopedSchool.canSwitchSchool &&
+      scopedSchool.effectiveSchoolId &&
+      !requestedSurveyId
+    ) {
+      surveys = await findSurveyRowsWithSchemaFallback({});
     }
 
     return NextResponse.json({
