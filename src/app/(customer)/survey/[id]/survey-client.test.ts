@@ -3,6 +3,8 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import SurveyClient, {
   getPublicSurveyReviewDestinationUrl,
+  normalizePublicSurveyRating,
+  shouldShowGoogleReviewGuide,
 } from "./survey-client";
 import type { SerializedPublicSurveyResponse } from "@/lib/public-survey-query";
 import { DEFAULT_GOOGLE_REVIEW_URL } from "@/lib/google-review-url";
@@ -110,9 +112,26 @@ describe("SurveyClient", () => {
     expect(html).toContain("<textarea");
     expect(html).toContain("口コミに入れてもよい学年を選んでください");
     expect(html).toContain("選択設問");
-    expect(html).toContain("AIで口コミを生成");
+    expect(html).toContain("今回の通塾体験はいかがでしたか？");
+    expect(html).toContain("回答を送信する");
     expect(html).not.toContain("AIで口コミを3案生成");
     expect(html).not.toContain("設問データを取得できませんでした");
+  });
+
+  it("normalizes public survey ratings for redirect decisions", () => {
+    expect(normalizePublicSurveyRating("5")).toBe(5);
+    expect(normalizePublicSurveyRating("4.8")).toBe(4);
+    expect(normalizePublicSurveyRating(0)).toBe(1);
+    expect(normalizePublicSurveyRating(9)).toBe(5);
+    expect(normalizePublicSurveyRating("bad")).toBe(0);
+  });
+
+  it("shows Google review guidance only for high-rating responses", () => {
+    expect(shouldShowGoogleReviewGuide(5)).toBe(true);
+    expect(shouldShowGoogleReviewGuide(4)).toBe(true);
+    expect(shouldShowGoogleReviewGuide(3)).toBe(false);
+    expect(shouldShowGoogleReviewGuide(5, 5)).toBe(true);
+    expect(shouldShowGoogleReviewGuide(4, 5)).toBe(false);
   });
 
   it("falls back to the iSchool review URL when the saved review URL is incomplete", () => {

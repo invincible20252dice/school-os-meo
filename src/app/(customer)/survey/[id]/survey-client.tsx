@@ -97,6 +97,23 @@ function getInitialTextRange(data?: SerializedPublicSurveyResponse | null) {
   };
 }
 
+export function normalizePublicSurveyRating(value: unknown) {
+  const rating = Number(value);
+
+  if (!Number.isFinite(rating)) {
+    return 0;
+  }
+
+  return Math.min(5, Math.max(1, Math.trunc(rating)));
+}
+
+export function shouldShowGoogleReviewGuide(
+  rating: number,
+  minRatingForRedirect = 4,
+) {
+  return normalizePublicSurveyRating(rating) >= minRatingForRedirect;
+}
+
 export function getPublicSurveyReviewDestinationUrl(
   googleReviewUrl: string | null | undefined,
 ) {
@@ -132,6 +149,7 @@ export default function SurveyClient({
     getPublicSurveyReviewDestinationUrl(initialData?.googleReviewUrl),
   );
   const [reviews, setReviews] = useState<string[]>([]);
+  const [rating, setRating] = useState(5);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -153,6 +171,7 @@ export default function SurveyClient({
       }),
     [schoolId, surveyItems, surveyTextRange.max, surveyTextRange.min, surveyTitle],
   );
+  const isGoogleReviewGuideVisible = reviews.length > 0;
 
   useEffect(() => {
     if (initialData) {
@@ -348,18 +367,49 @@ export default function SurveyClient({
     setError("");
     setResponseNotice("");
     setCopiedIndex(null);
+    setCopyNotice("");
+    const normalizedRating = normalizePublicSurveyRating(rating);
 
     try {
       const promptInput = buildReviewGenerationInputFromSurveyAnswers({
         questions: surveyItems,
         answers,
       });
+
+      if (!shouldShowGoogleReviewGuide(normalizedRating)) {
+        const saveResponse = await fetch("/api/survey-responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolId,
+            surveyId,
+            schoolName,
+            rating: normalizedRating,
+            selectedReasons: promptInput.selectedReasons,
+            freeText: promptInput.freeText,
+            questionAnswers: promptInput.questionAnswers,
+            generatedReviews: [],
+          }),
+        });
+        const saveData = (await saveResponse.json()) as { message?: string };
+
+        if (!saveResponse.ok) {
+          throw new Error(saveData.message || "アンケート回答を保存できませんでした。");
+        }
+
+        setReviews([]);
+        setResponseNotice(
+          "アンケート回答を保存しました。ご意見は教室改善のために確認します。",
+        );
+        return;
+      }
+
       const response = await fetch("/api/generate-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schoolName,
-          rating: 5,
+          rating: normalizedRating,
           selectedReasons: promptInput.selectedReasons,
           freeText: promptInput.freeText,
           keywords: surveyKeywords,
@@ -384,7 +434,7 @@ export default function SurveyClient({
           schoolId,
           surveyId,
           schoolName,
-          rating: 5,
+          rating: normalizedRating,
           selectedReasons: promptInput.selectedReasons,
           freeText: promptInput.freeText,
           questionAnswers: promptInput.questionAnswers,
@@ -397,7 +447,7 @@ export default function SurveyClient({
         throw new Error(saveData.message || "アンケート回答を保存できませんでした。");
       }
 
-      setResponseNotice("アンケート回答をDBへ保存しました。");
+      setResponseNotice("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
     } catch {
       setError("口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
     } finally {
@@ -499,6 +549,27 @@ export default function SurveyClient({
             </div>
           )}
 
+          <section className={styles.previewStep}>
+            <span className={styles.questionNumber}>評価</span>
+            <h2>今回の通塾体験はいかがでしたか？</h2>
+            <p>4以上を選んだ方には、Google口コミ投稿用の文章をご案内します。</p>
+            <div className={styles.ratingGrid} aria-label="満足度">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRating(value)}
+                  className={`${styles.ratingButton} ${
+                    rating === value ? styles.ratingButtonActive : ""
+                  }`}
+                  aria-pressed={rating === value}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </section>
+
           <button
             type="button"
             onClick={generateReviews}
@@ -506,7 +577,7 @@ export default function SurveyClient({
             className={styles.primaryButton}
           >
             <SparkIcon />
-            {isLoading ? "生成中..." : "AIで口コミを生成"}
+            {isLoading ? "送信中..." : "回答を送信する"}
           </button>
 
           {error ? <p className={styles.error}>{error}</p> : null}
@@ -519,12 +590,16 @@ export default function SurveyClient({
       <section className={styles.resultPanel}>
         <div>
           <div className={styles.resultKicker}>Review</div>
-          <h2 className={styles.resultTitle}>コピーして Google 口コミ投稿へ</h2>
+          <h2 className={styles.resultTitle}>
+            {isGoogleReviewGuideVisible
+              ? "コピーして Google 口コミ投稿へ"
+              : "回答送信後のご案内"}
+          </h2>
         </div>
 
         {reviews.length === 0 ? (
           <div className={styles.emptyState}>
-            アンケート入力後に生成された口コミ候補がここに表示されます。
+            ★4以上の回答を送信すると、Google口コミ投稿用の文章と投稿ボタンがここに表示されます。
           </div>
         ) : (
           <>
