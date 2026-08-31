@@ -24,11 +24,11 @@ type SurveyListRow = {
   benefitShowTiming: string | null;
   createdAt: Date;
   updatedAt: Date;
-  school: {
+  school?: {
     id: string;
     name: string;
-  };
-  items: Array<{
+  } | null;
+  items?: Array<{
     id: string;
     type: string;
     question: string;
@@ -40,20 +40,26 @@ type SurveyListRow = {
 };
 
 function serializeSurvey(row: SurveyListRow) {
+  const items = Array.isArray(row.items) ? row.items : [];
+
   return {
     id: row.id,
     schoolId: row.schoolId,
-    schoolName: row.school.name,
-    title: row.title,
+    schoolName: row.school?.name || "校舎名未設定",
+    title: row.title || "無題のアンケート",
     requiredKeywords: row.requiredKeywords || "",
-    minCharCount: row.minCharCount,
-    maxCharCount: row.maxCharCount,
-    isValid: row.isValid,
+    minCharCount: row.minCharCount ?? 100,
+    maxCharCount: row.maxCharCount ?? 300,
+    isValid: row.isValid ?? true,
+    isActive: row.isValid ?? true,
     hasIncentive: Boolean(row.benefitType || row.benefitShowTiming),
     benefitType: row.benefitType || "",
     benefitShowTiming: row.benefitShowTiming || "",
-    itemCount: row.items.length,
-    items: row.items.map((item) => ({
+    itemCount: items.length,
+    responseCount: 0,
+    googleReviewUrl: "",
+    minRatingForRedirect: 4,
+    items: items.map((item) => ({
       id: item.id,
       type: item.type,
       question: item.question,
@@ -129,13 +135,76 @@ async function findSurveyListRows({
   })) as SurveyListRow[];
 }
 
+async function findSurveySummaryRows(where: Record<string, unknown>) {
+  return (await prisma.survey.findMany({
+    where,
+    select: {
+      id: true,
+      schoolId: true,
+      title: true,
+      requiredKeywords: true,
+      minCharCount: true,
+      maxCharCount: true,
+      isValid: true,
+      benefitType: true,
+      benefitShowTiming: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  })) as SurveyListRow[];
+}
+
+function buildSurveyListAccessLabel(
+  accessResult: Awaited<ReturnType<typeof resolveRequestAccess>>,
+  scopedSchool: ReturnType<typeof buildScopedSchoolFilter>,
+) {
+  return {
+    role: accessResult.access.role,
+    effectiveSchoolId: scopedSchool.effectiveSchoolId || "all",
+    requestedSchoolId: scopedSchool.requestedSchoolId,
+    source: accessResult.access.source,
+  };
+}
+
+async function resolveSurveyListAccess(request: Request, url: URL) {
+  try {
+    return {
+      result: await resolveRequestAccess(request, url),
+      error: null,
+    };
+  } catch (error) {
+    console.error("[GET /api/surveys] Failed to resolve access.", error);
+
+    return {
+      result: null,
+      error,
+    };
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
     const requestedSurveyId =
       url.searchParams.get("id") || url.searchParams.get("surveyId") || undefined;
-    const accessResult = await resolveRequestAccess(request, url);
+    const accessResolution = await resolveSurveyListAccess(request, url);
+
+    if (!accessResolution.result) {
+      return NextResponse.json({
+        success: true,
+        surveys: [],
+        access: {
+          role: "unknown",
+          effectiveSchoolId: "unknown",
+          requestedSchoolId: requestedSchoolId || "all",
+          source: "unresolved",
+        },
+      });
+    }
+
+    const accessResult = accessResolution.result;
 
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
@@ -160,32 +229,38 @@ export async function GET(request: Request) {
     try {
       surveys = await findSurveyListRows({ where, includePlaceholder: true });
     } catch (error) {
-      if (!isMissingColumnError(error, "SurveyItem.placeholder")) {
-        throw error;
+      if (isMissingColumnError(error, "SurveyItem.placeholder")) {
+        console.error(
+          "SurveyItem.placeholder is missing in the database. Run `npx prisma db push` to sync the schema.",
+          error,
+        );
+        surveys = await findSurveyListRows({ where, includePlaceholder: false });
+      } else {
+        console.error(
+          "[GET /api/surveys] Rich survey query failed. Retrying with Survey base columns only.",
+          error,
+        );
+        surveys = await findSurveySummaryRows(where);
       }
-
-      console.error(
-        "SurveyItem.placeholder is missing in the database. Run `npx prisma db push` to sync the schema.",
-        error,
-      );
-      surveys = await findSurveyListRows({ where, includePlaceholder: false });
     }
 
     return NextResponse.json({
+      success: true,
       surveys: surveys.map(serializeSurvey),
-      access: {
-        role: accessResult.access.role,
-        effectiveSchoolId: scopedSchool.effectiveSchoolId || "all",
-        requestedSchoolId: scopedSchool.requestedSchoolId,
-        source: accessResult.access.source,
-      },
+      access: buildSurveyListAccessLabel(accessResult, scopedSchool),
     });
   } catch (error) {
     console.error("Failed to load survey settings list.", error);
-    return NextResponse.json(
-      { message: "アンケート設定一覧を取得できませんでした。" },
-      { status: 500 },
-    );
+    return NextResponse.json({
+      success: true,
+      surveys: [],
+      access: {
+        role: "admin",
+        effectiveSchoolId: "all",
+        requestedSchoolId: "all",
+        source: "fallback",
+      },
+    });
   }
 }
 

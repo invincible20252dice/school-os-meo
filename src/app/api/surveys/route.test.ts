@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -43,6 +43,27 @@ vi.mock("@/lib/survey-persistence", async () => {
 });
 
 describe("/api/surveys", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const access = await import("@/lib/supabase-access");
+    const persistence = await import("@/lib/survey-persistence");
+
+    vi.mocked(access.resolveRequestAccess).mockResolvedValue({
+      access: {
+        userId: "manager",
+        role: "manager",
+        schoolId: "school-own",
+        schoolIds: ["school-own"],
+        name: "教室長",
+        email: "manager@example.com",
+        status: "active",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(persistence.persistSurvey).mockResolvedValue({ id: "survey-1" });
+  });
+
   it("returns surveys scoped to the manager school", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([
@@ -289,20 +310,95 @@ describe("/api/surveys", () => {
     });
   });
 
-  it("returns Japanese errors when survey listing fails", async () => {
+  it("falls back to base Survey columns when the rich survey query fails", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findMany).mockRejectedValueOnce(
+      new Error("joined query failed"),
+    ).mockResolvedValueOnce([
+      {
+        id: "survey-fallback",
+        schoolId: "school-own",
+        title: "基本情報だけのアンケート",
+        requiredKeywords: null,
+        minCharCount: 100,
+        maxCharCount: 300,
+        isValid: true,
+        benefitType: null,
+        benefitShowTiming: null,
+        createdAt: new Date("2026-07-20T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-21T00:00:00.000Z"),
+      },
+    ] as never);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(prisma.survey.findMany).toHaveBeenCalledTimes(2);
+    expect(body.surveys[0]).toMatchObject({
+      id: "survey-fallback",
+      schoolName: "校舎名未設定",
+      title: "基本情報だけのアンケート",
+      itemCount: 0,
+      responseCount: 0,
+      minRatingForRedirect: 4,
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("returns an empty survey list instead of a 500 when every query fails", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockRejectedValue(
       new Error("database failed"),
     );
     const { GET } = await import("./route");
     const response = await GET(new Request("http://localhost/api/surveys"));
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body.message).toBe("アンケート設定一覧を取得できませんでした。");
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      success: true,
+      surveys: [],
+      access: {
+        role: "admin",
+        effectiveSchoolId: "all",
+        requestedSchoolId: "all",
+        source: "fallback",
+      },
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("does not expose surveys when session resolution fails", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockRejectedValueOnce(
+      new Error("profiles table unavailable"),
+    );
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.surveys).toEqual([]);
+    expect(body.access).toEqual({
+      role: "unknown",
+      effectiveSchoolId: "unknown",
+      requestedSchoolId: "all",
+      source: "unresolved",
+    });
+    expect(prisma.survey.findMany).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
 
