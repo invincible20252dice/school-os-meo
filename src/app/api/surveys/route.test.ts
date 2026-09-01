@@ -5,6 +5,9 @@ vi.mock("@/lib/prisma", () => ({
     survey: {
       findMany: vi.fn(),
     },
+    surveySetting: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -62,6 +65,9 @@ describe("/api/surveys", () => {
       isAuthenticated: true,
     });
     vi.mocked(persistence.persistSurvey).mockResolvedValue({ id: "survey-1" });
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.survey.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.surveySetting.findMany).mockResolvedValue([] as never);
   });
 
   it("returns surveys scoped to the manager school", async () => {
@@ -251,6 +257,106 @@ describe("/api/surveys", () => {
       id: "survey-actual",
       schoolName: "大学受験専門塾 iスクール予備校",
       title: "予備校下通り校",
+    });
+  });
+
+  it("restores grouped survey cards from SurveySetting rows", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "admin",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "本部",
+        email: "admin@example.com",
+        status: "active",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+    vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([] as never);
+    vi.mocked(prisma.surveySetting.findMany).mockResolvedValueOnce([
+      {
+        id: "setting-q1",
+        schoolId: "school-real",
+        title: "予備校下通り校",
+        description: "下通り, 大学受験",
+        question: "通塾のきっかけを教えてください",
+        type: "SINGLE_CHOICE",
+        options: ["大学受験対策", "苦手克服"],
+        isRequired: true,
+        sortOrder: 1,
+        isActive: true,
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+        school: { id: "school-real", name: "大学受験専門塾 iスクール予備校" },
+      },
+      {
+        id: "setting-q2",
+        schoolId: "school-real",
+        title: "予備校下通り校",
+        description: "下通り, 大学受験",
+        question: "高校はどこですか？",
+        type: "TEXT",
+        options: null,
+        isRequired: false,
+        sortOrder: 2,
+        isActive: true,
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-03T00:00:00.000Z"),
+        school: { id: "school-real", name: "大学受験専門塾 iスクール予備校" },
+      },
+      {
+        id: "setting-summer-q1",
+        schoolId: "school-real",
+        title: "夏用",
+        description: null,
+        question: "夏期講習はいかがでしたか？",
+        type: "TEXT",
+        options: null,
+        isRequired: false,
+        sortOrder: 1,
+        isActive: false,
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-02T00:00:00.000Z"),
+        school: { id: "school-real", name: "大学受験専門塾 iスクール予備校" },
+      },
+    ] as never);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/surveys"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.surveys).toHaveLength(2);
+    expect(body.surveys[0]).toMatchObject({
+      id: "setting-q1",
+      schoolId: "school-real",
+      schoolName: "大学受験専門塾 iスクール予備校",
+      title: "予備校下通り校",
+      requiredKeywords: "下通り, 大学受験",
+      itemCount: 2,
+      questionCount: 2,
+      isValid: true,
+      status: "有効",
+    });
+    expect(body.surveys[0].items).toEqual([
+      expect.objectContaining({
+        id: "setting-q1",
+        order: 1,
+        options: ["大学受験対策", "苦手克服"],
+      }),
+      expect.objectContaining({
+        id: "setting-q2",
+        order: 2,
+      }),
+    ]);
+    expect(body.surveys[1]).toMatchObject({
+      title: "夏用",
+      itemCount: 1,
+      isValid: false,
+      status: "停止中",
     });
   });
 

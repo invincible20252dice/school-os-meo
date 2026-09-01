@@ -15,10 +15,15 @@ type SurveyListItem = {
   requiredKeywords: string;
   minCharCount: number;
   maxCharCount: number;
-  isValid: boolean;
+  isValid?: boolean;
+  isActive?: boolean;
+  status?: string;
   hasIncentive: boolean;
   benefitType: string;
-  itemCount: number;
+  itemCount?: number;
+  questionCount?: number;
+  characterRange?: string;
+  reward?: string;
   updatedAt: string;
 };
 
@@ -87,6 +92,34 @@ function formatDate(value: string) {
   })
     .format(date)
     .replaceAll("/", "-");
+}
+
+function isSurveyActive(survey: SurveyListItem) {
+  if (typeof survey.isValid === "boolean") {
+    return survey.isValid;
+  }
+
+  if (typeof survey.isActive === "boolean") {
+    return survey.isActive;
+  }
+
+  return survey.status !== "停止中";
+}
+
+function getQuestionCount(survey: SurveyListItem) {
+  return survey.itemCount ?? survey.questionCount ?? 0;
+}
+
+function getCharacterRange(survey: SurveyListItem) {
+  return survey.characterRange || `${survey.minCharCount}-${survey.maxCharCount}`;
+}
+
+function getRewardLabel(survey: SurveyListItem) {
+  if (survey.hasIncentive) {
+    return survey.benefitType || survey.reward || "あり";
+  }
+
+  return survey.reward || "なし";
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -239,16 +272,20 @@ export default function SurveysListClient() {
         <div className={styles.list}>
           {surveys.map((survey) => (
             <section className={styles.panel} key={survey.id}>
+              {(() => {
+                const active = isSurveyActive(survey);
+
+                return (
               <div className={styles.panelHeader}>
                 <div>
                   <div className={styles.titleRow}>
                     <h2>{survey.title}</h2>
                     <span
                       className={
-                        survey.isValid ? styles.statusActive : styles.statusPaused
+                        active ? styles.statusActive : styles.statusPaused
                       }
                     >
-                      {survey.isValid ? "有効" : "停止中"}
+                      {active ? "有効" : "停止中"}
                     </span>
                   </div>
                   <p>{survey.requiredKeywords || "必須キーワード未設定"}</p>
@@ -278,6 +315,8 @@ export default function SurveysListClient() {
                   </a>
                 </div>
               </div>
+                );
+              })()}
               <dl className={styles.meta}>
                 <div>
                   <dt>校舎</dt>
@@ -285,17 +324,15 @@ export default function SurveysListClient() {
                 </div>
                 <div>
                   <dt>設問数</dt>
-                  <dd>{survey.itemCount}</dd>
+                  <dd>{getQuestionCount(survey)}</dd>
                 </div>
                 <div>
                   <dt>文字数</dt>
-                  <dd>
-                    {survey.minCharCount}-{survey.maxCharCount}
-                  </dd>
+                  <dd>{getCharacterRange(survey)}</dd>
                 </div>
                 <div>
                   <dt>特典</dt>
-                  <dd>{survey.hasIncentive ? survey.benefitType : "なし"}</dd>
+                  <dd>{getRewardLabel(survey)}</dd>
                 </div>
                 <div>
                   <dt>最終更新</dt>
