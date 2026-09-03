@@ -23,6 +23,8 @@ export type SchoolSettingState = {
   promptReviewTone: PromptReviewTone | string;
   promptForbiddenWords: string[];
   promptMustKeywords: string[];
+  promptTargetLength: string;
+  promptAutoReplyApproval: boolean;
   updatedAt: string;
 };
 
@@ -35,6 +37,12 @@ export type NullableSchoolSettingState = {
   targetId?: string | null;
   groupId?: string | null;
   enabled?: boolean | null;
+  systemPrompt?: string | null;
+  tone?: string | null;
+  includeKeywords?: string | string[] | null;
+  ngKeywords?: string | string[] | null;
+  targetLength?: string | null;
+  autoReplyApproval?: boolean | null;
 };
 
 export function buildSettingsTabs() {
@@ -87,6 +95,8 @@ export function buildMockSchoolSetting(): SchoolSettingState {
     promptReviewTone: "FRIENDLY",
     promptForbiddenWords: ["絶対合格", "成績保証", "必ず上がる"],
     promptMustKeywords: ["個別指導", "自習室", "定期テスト対策"],
+    promptTargetLength: "150-250文字",
+    promptAutoReplyApproval: false,
     updatedAt: "2026-07-22 16:45",
   };
 }
@@ -115,6 +125,8 @@ export function buildEmptySchoolSetting(schoolId: string): SchoolSettingState {
     promptReviewTone: "FRIENDLY",
     promptForbiddenWords: [],
     promptMustKeywords: [],
+    promptTargetLength: "150-250文字",
+    promptAutoReplyApproval: false,
     updatedAt: "",
   };
 }
@@ -127,8 +139,19 @@ function normalizeFirstString(...values: Array<string | null | undefined>) {
   return values.map(normalizeString).find(Boolean) || "";
 }
 
-function normalizeStringList(value: string[] | null | undefined) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
+function normalizeStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }
 
 export function normalizeSchoolSetting(
@@ -174,10 +197,25 @@ export function normalizeSchoolSetting(
     ),
     instagramAccountName: normalizeString(setting.instagramAccountName),
     instagramAccessToken: normalizeString(setting.instagramAccessToken),
-    promptSystemRole: normalizeString(setting.promptSystemRole),
-    promptReviewTone: setting.promptReviewTone ?? fallback.promptReviewTone,
-    promptForbiddenWords: normalizeStringList(setting.promptForbiddenWords),
-    promptMustKeywords: normalizeStringList(setting.promptMustKeywords),
+    promptSystemRole: normalizeFirstString(
+      setting.promptSystemRole,
+      setting.systemPrompt,
+    ),
+    promptReviewTone:
+      setting.promptReviewTone ?? setting.tone ?? fallback.promptReviewTone,
+    promptForbiddenWords: normalizeStringList(
+      setting.promptForbiddenWords ?? setting.ngKeywords,
+    ),
+    promptMustKeywords: normalizeStringList(
+      setting.promptMustKeywords ?? setting.includeKeywords,
+    ),
+    promptTargetLength:
+      normalizeFirstString(setting.promptTargetLength, setting.targetLength) ||
+      fallback.promptTargetLength,
+    promptAutoReplyApproval:
+      setting.promptAutoReplyApproval ??
+      setting.autoReplyApproval ??
+      fallback.promptAutoReplyApproval,
     updatedAt: normalizeString(setting.updatedAt) || fallback.updatedAt,
   };
 }
@@ -221,10 +259,8 @@ export function validateSchoolSetting(setting: SchoolSettingState) {
     errors.push("Instagram連携時はMeta App Secretを入力してください。");
   }
 
-  if (!["FRIENDLY", "FORMAL", "CASUAL"].includes(setting.promptReviewTone)) {
-    errors.push(
-      "返信トーンは FRIENDLY / FORMAL / CASUAL のいずれかを選択してください。",
-    );
+  if (!setting.promptReviewTone.trim()) {
+    errors.push("返信トーンを入力してください。");
   }
 
   return errors;

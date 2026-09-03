@@ -69,6 +69,47 @@ describe("gbp-webhook", () => {
     );
   });
 
+  it("injects school prompt settings into OpenAI reply generation", async () => {
+    process.env.OPENAI_API_KEY = "openai-key";
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ output_text: "設定を反映した返信案です。" }), {
+        status: 200,
+      }),
+    );
+
+    await generateGbpReviewReply(
+      {
+        schoolName: "iスクール予備校",
+        rating: 5,
+        reviewText: "先生が親切でした。",
+        promptSetting: {
+          promptSystemRole: "校舎責任者として返信してください。",
+          promptReviewTone: "丁寧・誠実・保護者目線",
+          promptMustKeywords: ["自習室", "大学受験"],
+          promptForbiddenWords: ["絶対合格"],
+          promptTargetLength: "160-220文字",
+          promptAutoReplyApproval: false,
+        },
+      },
+      fetchMock,
+    );
+
+    const payload = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as {
+      input: Array<{ role: string; content: string }>;
+    };
+    const systemPrompt = payload.input.find(
+      (item) => item.role === "system",
+    )?.content;
+
+    expect(systemPrompt).toContain("校舎責任者として返信してください。");
+    expect(systemPrompt).toContain("丁寧・誠実・保護者目線");
+    expect(systemPrompt).toContain("自習室, 大学受験");
+    expect(systemPrompt).toContain("絶対合格");
+    expect(systemPrompt).toContain("160-220文字");
+  });
+
   it("falls back when OpenAI returns an empty reply", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
     const fetchMock = vi.fn(async () =>

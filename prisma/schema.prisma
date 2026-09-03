@@ -250,6 +250,8 @@ model SchoolSetting {
   promptReviewTone       String   @default("FRIENDLY")
   promptForbiddenWords   String[]
   promptMustKeywords     String[]
+  promptTargetLength     String   @default("150-250文字")
+  promptAutoReplyApproval Boolean @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

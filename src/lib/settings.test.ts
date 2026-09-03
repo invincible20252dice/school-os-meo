@@ -56,7 +56,7 @@ describe("settings", () => {
         instagramConnected: true,
         instagramMetaAppId: "",
         instagramMetaAppSecret: "",
-        promptReviewTone: "UNKNOWN",
+        promptReviewTone: "",
       }),
     ).toEqual([
       "Google連携時はGoogleアカウントIDを入力してください。",
@@ -65,7 +65,7 @@ describe("settings", () => {
       "LINE通知有効時は送信先IDを入力してください。",
       "Instagram連携時はMeta App IDを入力してください。",
       "Instagram連携時はMeta App Secretを入力してください。",
-      "返信トーンは FRIENDLY / FORMAL / CASUAL のいずれかを選択してください。",
+      "返信トーンを入力してください。",
     ]);
   });
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildGbpReviewsListEndpoint,
   normalizeGbpReviewsApiItem,
@@ -18,6 +18,10 @@ afterEach(() => {
 });
 
 describe("gbp-reviews-sync", () => {
+  beforeEach(() => {
+    delete process.env.OPENAI_API_KEY;
+  });
+
   it("builds the GBP reviews endpoint from formal SchoolSetting columns", () => {
     expect(
       buildGbpReviewsListEndpoint({

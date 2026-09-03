@@ -61,9 +61,25 @@ const legacyGoogleSettingSelect = {
 };
 
 function isMissingColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : "";
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : error instanceof Error
+        ? error.message
+        : String(error);
 
   return (
+    code === "P2022" ||
     message.includes("does not exist") ||
     message.includes("Unknown column") ||
     message.includes("P2022")

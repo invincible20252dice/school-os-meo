@@ -1,4 +1,5 @@
 import { sendLineReviewNotification } from "./line";
+import { buildGbpReplySystemPrompt } from "./prompt-settings";
 
 type FetchLike = typeof fetch;
 
@@ -48,6 +49,12 @@ type SchoolRecord = {
     lineDestinationId?: string | null;
     notifyOnNewReview?: boolean | null;
     notifyOnLowRating?: boolean | null;
+    promptSystemRole?: string | null;
+    promptReviewTone?: string | null;
+    promptMustKeywords?: string[] | null;
+    promptForbiddenWords?: string[] | null;
+    promptTargetLength?: string | null;
+    promptAutoReplyApproval?: boolean | null;
   } | null;
 };
 
@@ -76,6 +83,7 @@ type GbpReplyInput = {
   schoolName: string;
   rating: number;
   reviewText: string;
+  promptSetting?: SchoolRecord["schoolSetting"];
 };
 
 export async function buildFallbackGbpReply(input: GbpReplyInput) {
@@ -105,8 +113,7 @@ export async function generateGbpReviewReply(
       input: [
         {
           role: "system",
-          content:
-            "あなたは学習塾のGoogle口コミ返信担当です。保護者に向けて、丁寧で自然、誇張のない返信文を1案だけ作成してください。",
+          content: buildGbpReplySystemPrompt(input.promptSetting),
         },
         {
           role: "user",
@@ -275,6 +282,7 @@ export async function processGbpReviews({
         schoolName: school.name,
         rating: review.rating,
         reviewText: review.reviewText,
+        promptSetting: school.schoolSetting,
       },
       fetchImpl,
     );

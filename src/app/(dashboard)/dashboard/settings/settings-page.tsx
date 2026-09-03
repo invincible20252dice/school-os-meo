@@ -180,6 +180,8 @@ export default function SettingsPage({
           ? "/api/settings/google"
           : activeTab === "line"
             ? "/api/dashboard/settings/line"
+            : activeTab === "prompts"
+              ? "/api/dashboard/settings/prompt"
             : "/api/settings/school";
       const response = await fetch(
         `${endpoint}?schoolId=${encodeURIComponent(schoolId)}`,
@@ -265,21 +267,38 @@ export default function SettingsPage({
         return;
       }
 
-      const response = await fetch("/api/settings/school", {
+      const isPromptTab = activeTab === "prompts";
+      const response = await fetch(
+        isPromptTab ? "/api/dashboard/settings/prompt" : "/api/settings/school",
+        {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
           ...headers,
         },
-        body: JSON.stringify({
-          ...setting,
-          schoolId,
-          googleRefreshToken: undefined,
-          instagramAccessToken: undefined,
-          lineChannelAccessTokenTouched: lineFieldsTouched.channelAccessToken,
-          lineDestinationIdTouched: lineFieldsTouched.destinationId,
-        }),
-      });
+        body: JSON.stringify(
+          isPromptTab
+            ? {
+                schoolId,
+                systemPrompt: setting.promptSystemRole,
+                tone: setting.promptReviewTone,
+                includeKeywords: setting.promptMustKeywords,
+                ngKeywords: setting.promptForbiddenWords,
+                targetLength: setting.promptTargetLength,
+                autoReplyApproval: setting.promptAutoReplyApproval,
+              }
+            : {
+                ...setting,
+                schoolId,
+                googleRefreshToken: undefined,
+                instagramAccessToken: undefined,
+                lineChannelAccessTokenTouched:
+                  lineFieldsTouched.channelAccessToken,
+                lineDestinationIdTouched: lineFieldsTouched.destinationId,
+              },
+        ),
+        },
+      );
       const data = (await response.json()) as {
         message?: string;
         setting?: NullableSchoolSettingState;
@@ -917,16 +936,33 @@ export default function SettingsPage({
               </label>
               <label>
                 <span>返信トーン</span>
-                <select
+                <input
                   value={setting.promptReviewTone}
                   onChange={(event) =>
                     update("promptReviewTone", event.target.value)
                   }
-                >
-                  <option value="FRIENDLY">FRIENDLY</option>
-                  <option value="FORMAL">FORMAL</option>
-                  <option value="CASUAL">CASUAL</option>
-                </select>
+                  placeholder="丁寧・誠実・保護者目線"
+                />
+              </label>
+              <label>
+                <span>文字数</span>
+                <input
+                  value={setting.promptTargetLength}
+                  onChange={(event) =>
+                    update("promptTargetLength", event.target.value)
+                  }
+                  placeholder="150-250文字"
+                />
+              </label>
+              <label className={styles.toggle}>
+                <input
+                  type="checkbox"
+                  checked={setting.promptAutoReplyApproval}
+                  onChange={(event) =>
+                    update("promptAutoReplyApproval", event.target.checked)
+                  }
+                />
+                <span>AI返信案を自動承認する</span>
               </label>
               <label className={styles.full}>
                 <span>NGワード（改行区切り）</span>

@@ -64,6 +64,8 @@ const schoolSettingSelect = {
   promptReviewTone: true,
   promptForbiddenWords: true,
   promptMustKeywords: true,
+  promptTargetLength: true,
+  promptAutoReplyApproval: true,
   updatedAt: true,
 };
 
@@ -92,6 +94,8 @@ type SchoolSettingRow = {
   promptReviewTone: string;
   promptForbiddenWords: string[];
   promptMustKeywords: string[];
+  promptTargetLength: string;
+  promptAutoReplyApproval: boolean;
   updatedAt: Date;
 };
 
@@ -186,6 +190,11 @@ function serializeSetting({
     promptReviewTone: schoolSetting?.promptReviewTone || fallback.promptReviewTone,
     promptForbiddenWords: schoolSetting?.promptForbiddenWords || [],
     promptMustKeywords: schoolSetting?.promptMustKeywords || [],
+    promptTargetLength:
+      schoolSetting?.promptTargetLength || fallback.promptTargetLength,
+    promptAutoReplyApproval:
+      schoolSetting?.promptAutoReplyApproval ??
+      fallback.promptAutoReplyApproval,
     updatedAt: toUpdatedAt(
       schoolSetting?.updatedAt || instagramSetting?.updatedAt || undefined,
     ),
@@ -367,6 +376,9 @@ export async function PATCH(request: Request) {
         promptReviewTone: normalizeString(body.promptReviewTone) || "FRIENDLY",
         promptForbiddenWords: normalizeStringList(body.promptForbiddenWords),
         promptMustKeywords: normalizeStringList(body.promptMustKeywords),
+        promptTargetLength:
+          normalizeString(body.promptTargetLength) || "150-250文字",
+        promptAutoReplyApproval: Boolean(body.promptAutoReplyApproval),
       },
       update: {
         googleConnected: Boolean(body.googleConnected),
@@ -385,6 +397,9 @@ export async function PATCH(request: Request) {
         promptReviewTone: normalizeString(body.promptReviewTone) || "FRIENDLY",
         promptForbiddenWords: normalizeStringList(body.promptForbiddenWords),
         promptMustKeywords: normalizeStringList(body.promptMustKeywords),
+        promptTargetLength:
+          normalizeString(body.promptTargetLength) || "150-250文字",
+        promptAutoReplyApproval: Boolean(body.promptAutoReplyApproval),
       },
     });
     const instagramSetting = await prisma.instagramSetting.findUnique({

@@ -1,4 +1,4 @@
-import { buildFallbackGbpReply } from "./gbp-webhook";
+import { generateGbpReviewReply } from "./gbp-webhook";
 import { resolveGbpAccessToken } from "./gbp-reply";
 
 type FetchLike = typeof fetch;
@@ -8,6 +8,12 @@ type SchoolSettingRecord = {
   googleAccountId: string | null;
   googleRefreshToken: string | null;
   selectedGbpLocationId: string | null;
+  promptSystemRole?: string | null;
+  promptReviewTone?: string | null;
+  promptMustKeywords?: string[] | null;
+  promptForbiddenWords?: string[] | null;
+  promptTargetLength?: string | null;
+  promptAutoReplyApproval?: boolean | null;
   school?: {
     name: string;
   } | null;
@@ -290,6 +296,12 @@ export async function syncGbpReviewsForSchool({
       googleAccountId: true,
       googleRefreshToken: true,
       selectedGbpLocationId: true,
+      promptSystemRole: true,
+      promptReviewTone: true,
+      promptMustKeywords: true,
+      promptForbiddenWords: true,
+      promptTargetLength: true,
+      promptAutoReplyApproval: true,
       school: {
         select: {
           name: true,
@@ -339,11 +351,15 @@ export async function syncGbpReviewsForSchool({
     const schoolName = setting.school?.name || "大学受験専門塾 iスクール予備校";
     const aiReplyText =
       review.status === "PENDING"
-        ? await buildFallbackGbpReply({
+        ? await generateGbpReviewReply(
+          {
             schoolName,
             rating: review.rating,
             reviewText: review.originalText,
-          })
+            promptSetting: setting,
+          },
+          fetchImpl,
+        )
         : "";
     const existing = await prisma.review.findFirst({
       where: {
