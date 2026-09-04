@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDashboardReportPayload,
+  buildReportFromAggregates,
   getCurrentReportMonth,
   normalizeQueryLogs,
 } from "./dashboard-reports";
@@ -35,7 +36,7 @@ describe("dashboard-reports", () => {
     expect(payload.school.name).toBe("iスクール予備校");
     expect(payload.targetMonth).toBe("2026-08");
     expect(payload.report.period).toBe("2026年8月度");
-    expect(payload.report.score).toBe(82);
+    expect(payload.report.score).toBe(85);
     expect(payload.report.metrics[0]).toMatchObject({
       label: "口コミ獲得・返信率",
       value: "2件 / 5.0",
@@ -96,6 +97,7 @@ describe("dashboard-reports", () => {
       month: "2026-08",
       report: {
         targetMonth: "2026-08",
+        averageRating: 5,
         top3RankingRate: 64,
         aioScore: 64,
       },
@@ -118,5 +120,43 @@ describe("dashboard-reports", () => {
     expect(middle.report.rank).toBe("B");
     expect(low.report.rank).toBe("C");
     expect(low.report.period).toBe("2026/08");
+  });
+
+  it("builds a report record from operational aggregate values", () => {
+    expect(
+      buildReportFromAggregates({
+        month: "2026-08",
+        totalReviews: 2,
+        averageRating: 5,
+        top3KeywordCount: 3,
+        totalKeywordCount: 4,
+        aioScores: [80, 76],
+        searchImpression: 2386,
+        actionCount: 348,
+      }),
+    ).toMatchObject({
+      targetMonth: "2026-08",
+      totalReviews: 2,
+      averageRating: 5,
+      top3RankingRate: 75,
+      aioScore: 78,
+      searchImpression: 2386,
+      actionCount: 348,
+    });
+  });
+
+  it("returns null when there is no aggregate data to report", () => {
+    expect(
+      buildReportFromAggregates({
+        month: "2026-08",
+        totalReviews: 0,
+        averageRating: 0,
+        top3KeywordCount: 0,
+        totalKeywordCount: 0,
+        aioScores: [],
+        searchImpression: 0,
+        actionCount: 0,
+      }),
+    ).toBeNull();
   });
 });

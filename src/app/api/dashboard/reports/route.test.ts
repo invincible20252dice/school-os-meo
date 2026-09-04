@@ -7,8 +7,21 @@ vi.mock("@/lib/prisma", () => ({
     },
     monthlyReport: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     searchQueryLog: {
+      findMany: vi.fn(),
+    },
+    review: {
+      findMany: vi.fn(),
+    },
+    targetKeyword: {
+      findMany: vi.fn(),
+    },
+    aioScoreHistory: {
+      findMany: vi.fn(),
+    },
+    gbpMetric: {
       findMany: vi.fn(),
     },
   },
@@ -59,6 +72,7 @@ describe("GET /api/dashboard/reports", () => {
       createdAt: new Date("2026-08-31T00:00:00.000Z"),
       updatedAt: new Date("2026-08-31T00:00:00.000Z"),
     } as never);
+    vi.mocked(prisma.monthlyReport.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.searchQueryLog.findMany).mockResolvedValue([
       {
         id: "query-1",
@@ -73,6 +87,10 @@ describe("GET /api/dashboard/reports", () => {
         updatedAt: new Date("2026-08-31T00:00:00.000Z"),
       },
     ] as never);
+    vi.mocked(prisma.review.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.targetKeyword.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.aioScoreHistory.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.gbpMetric.findMany).mockResolvedValue([]);
   });
 
   it("returns DB-backed monthly report and search query logs scoped to the selected school", async () => {
@@ -90,6 +108,7 @@ describe("GET /api/dashboard/reports", () => {
     expect(body.success).toBe(true);
     expect(body.school.name).toBe("大学受験専門塾 iスクール予備校");
     expect(body.report.raw.totalReviews).toBe(2);
+    expect(body.report.score).toBe(85);
     expect(body.queries[0]).toMatchObject({
       query: "熊本 大学受験 塾",
       impressionCount: 420,
@@ -105,7 +124,42 @@ describe("GET /api/dashboard/reports", () => {
     });
     expect(prisma.searchQueryLog.findMany).toHaveBeenCalledWith({
       where: { schoolId: "school-1", targetMonth: "2026-08" },
-      orderBy: { impressionCount: "desc" },
+      orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
+      take: 50,
+    });
+  });
+
+  it("uses the latest MonthlyReport when a month is not explicitly selected", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.monthlyReport.findUnique).mockClear();
+    vi.mocked(prisma.monthlyReport.findFirst).mockResolvedValueOnce({
+      id: "report-latest",
+      schoolId: "school-1",
+      targetMonth: "2026-08",
+      totalReviews: 2,
+      averageRating: 5,
+      top3RankingRate: 85,
+      aioScore: 78,
+      searchImpression: 2386,
+      actionCount: 348,
+      aiAnalysisSummary: "最新月の実績です。",
+      createdAt: new Date("2026-08-31T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-31T00:00:00.000Z"),
+    } as never);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request("https://app.example.com/api/dashboard/reports?schoolId=school-1"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.targetMonth).toBe("2026-08");
+    expect(body.report.raw.searchImpression).toBe(2386);
+    expect(prisma.monthlyReport.findUnique).not.toHaveBeenCalled();
+    expect(prisma.monthlyReport.findFirst).toHaveBeenCalledWith({
+      where: { schoolId: "school-1" },
+      orderBy: { targetMonth: "desc" },
     });
   });
 
@@ -154,6 +208,51 @@ describe("GET /api/dashboard/reports", () => {
     expect(body.queries).toEqual([]);
   });
 
+  it("aggregates report KPI from existing operational tables when MonthlyReport is missing", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.monthlyReport.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.monthlyReport.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      { rating: 5 },
+      { rating: 5 },
+    ] as never);
+    vi.mocked(prisma.targetKeyword.findMany).mockResolvedValueOnce([
+      { id: "kw-1", rankHistories: [{ rank: 1 }] },
+      { id: "kw-2", rankHistories: [{ rank: 4 }] },
+    ] as never);
+    vi.mocked(prisma.aioScoreHistory.findMany).mockResolvedValueOnce([
+      { totalScore: 80 },
+      { totalScore: 76 },
+    ] as never);
+    vi.mocked(prisma.gbpMetric.findMany).mockResolvedValueOnce([
+      {
+        views: 1000,
+        searches: 386,
+        websiteClicks: 100,
+        phoneCalls: 20,
+        routeRequests: 30,
+      },
+    ] as never);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/reports?schoolId=school-1&month=2026-08",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.report.raw).toMatchObject({
+      totalReviews: 2,
+      averageRating: 5,
+      top3RankingRate: 50,
+      aioScore: 78,
+      searchImpression: 1386,
+      actionCount: 150,
+    });
+  });
+
   it("uses the default report school and current month when query parameters are omitted", async () => {
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockImplementationOnce((_access, schoolId) => ({
@@ -174,13 +273,9 @@ describe("GET /api/dashboard/reports", () => {
       where: { id: "cms5tnzlr0001jt04qh0lluva" },
       select: { id: true, name: true },
     });
-    expect(prisma.monthlyReport.findUnique).toHaveBeenCalledWith({
-      where: {
-        schoolId_targetMonth: {
-          schoolId: "cms5tnzlr0001jt04qh0lluva",
-          targetMonth: expect.stringMatching(/^20\d{2}-\d{2}$/),
-        },
-      },
+    expect(prisma.monthlyReport.findFirst).toHaveBeenCalledWith({
+      where: { schoolId: "cms5tnzlr0001jt04qh0lluva" },
+      orderBy: { targetMonth: "desc" },
     });
   });
 

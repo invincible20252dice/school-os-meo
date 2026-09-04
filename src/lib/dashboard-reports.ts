@@ -29,6 +29,29 @@ export type DashboardReportSchoolRecord = {
   name?: string | null;
 };
 
+export type DashboardReportAggregateInput = {
+  month: string;
+  totalReviews?: number | null;
+  averageRating?: number | null;
+  top3KeywordCount?: number | null;
+  totalKeywordCount?: number | null;
+  aioScores?: number[] | null;
+  searchImpression?: number | null;
+  actionCount?: number | null;
+};
+
+export const ISCHOOL_REPORT_BASELINE: DashboardReportRecord = {
+  targetMonth: "2026-08",
+  totalReviews: 2,
+  averageRating: 5,
+  top3RankingRate: 85,
+  aioScore: 78,
+  searchImpression: 2386,
+  actionCount: 348,
+  aiAnalysisSummary:
+    "「大学受験」「個別指導」関連の検索露出が先月比+92.4%と急拡大。下通エリアでの上位表示と高評価口コミ（★5.0）が成果に直結しています。",
+};
+
 function trim(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -66,6 +89,40 @@ function rankFromScore(score: number) {
   return "C" as const;
 }
 
+function percent(part: number, total: number) {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+function average(values: number[]) {
+  const validValues = values.filter((value) => Number.isFinite(value));
+
+  if (validValues.length === 0) {
+    return 0;
+  }
+
+  return Math.round(
+    validValues.reduce((sum, value) => sum + value, 0) / validValues.length,
+  );
+}
+
+function calculateOverallScore({
+  top3RankingRate,
+  aioScore,
+  averageRating,
+}: {
+  top3RankingRate: number;
+  aioScore: number;
+  averageRating: number;
+}) {
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(top3RankingRate * 0.4 + aioScore * 0.4 + averageRating * 4),
+    ),
+  );
+}
+
 export function getCurrentReportMonth(now = new Date()) {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -83,6 +140,43 @@ export function normalizeQueryLogs(logs: DashboardQueryLogRecord[] = []) {
     intent: trim(log.intent) || "検索",
     count: numberValue(log.impressionCount),
   }));
+}
+
+export function buildReportFromAggregates(
+  input: DashboardReportAggregateInput,
+): DashboardReportRecord | null {
+  const totalReviews = numberValue(input.totalReviews);
+  const averageRating = numberValue(input.averageRating);
+  const totalKeywordCount = numberValue(input.totalKeywordCount);
+  const top3RankingRate = percent(
+    numberValue(input.top3KeywordCount),
+    totalKeywordCount,
+  );
+  const aioScore = average(input.aioScores ?? []);
+  const searchImpression = numberValue(input.searchImpression);
+  const actionCount = numberValue(input.actionCount);
+  const hasAggregatedData =
+    totalReviews > 0 ||
+    totalKeywordCount > 0 ||
+    aioScore > 0 ||
+    searchImpression > 0 ||
+    actionCount > 0;
+
+  if (!hasAggregatedData) {
+    return null;
+  }
+
+  return {
+    targetMonth: input.month,
+    totalReviews,
+    averageRating,
+    top3RankingRate,
+    aioScore,
+    searchImpression,
+    actionCount,
+    aiAnalysisSummary:
+      "DB内の口コミ・順位・AIO・GBP指標から月次KPIを自動集計しています。",
+  };
 }
 
 export function buildDashboardReportPayload({
@@ -104,7 +198,11 @@ export function buildDashboardReportPayload({
   const aioScore = numberValue(report?.aioScore, 0);
   const searchImpression = numberValue(report?.searchImpression, 0);
   const actionCount = numberValue(report?.actionCount, 0);
-  const score = Math.round((top3RankingRate + aioScore) / 2);
+  const score = calculateOverallScore({
+    top3RankingRate,
+    aioScore,
+    averageRating,
+  });
   const normalizedQueries = normalizeQueryLogs(queries ?? []);
   const aiAnalysisSummary =
     trim(report?.aiAnalysisSummary) ||
