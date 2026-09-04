@@ -166,6 +166,8 @@ model School {
   syncedPosts       SyncedPost[]
   targetKeywords    TargetKeyword[]
   aioScoreHistories AioScoreHistory[]
+  monthlyReports    MonthlyReport[]
+  searchQueryLogs   SearchQueryLog[]
 
   @@index([ownerId])
   @@index([status])
@@ -441,4 +443,43 @@ model AioScoreHistory {
   @@index([schoolId, checkedAt])
   @@index([keywordId, checkedAt])
   @@index([totalScore])
+}
+
+model MonthlyReport {
+  id                String   @id @default(cuid())
+  schoolId          String
+  targetMonth       String
+  totalReviews      Int      @default(0)
+  averageRating     Float    @default(0)
+  top3RankingRate   Float    @default(0)
+  aioScore          Int      @default(0)
+  searchImpression  Int      @default(0)
+  actionCount       Int      @default(0)
+  aiAnalysisSummary String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, targetMonth])
+  @@index([schoolId, targetMonth])
+  @@index([targetMonth])
+}
+
+model SearchQueryLog {
+  id              String   @id @default(cuid())
+  schoolId        String
+  targetMonth     String
+  query           String
+  impressionCount Int      @default(0)
+  clickCount      Int      @default(0)
+  growthRate      String?
+  intent          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, targetMonth, impressionCount])
+  @@index([query])
 }
