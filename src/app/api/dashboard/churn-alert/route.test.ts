@@ -106,17 +106,24 @@ describe("/api/dashboard/churn-alert", () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.summary).toEqual({
+      total: 2,
       totalAlerts: 2,
       openCount: 1,
       inProgressCount: 0,
       highRiskCount: 1,
       resolvedCount: 1,
     });
+    expect(body.items).toEqual(body.alerts);
     expect(body.alerts[0]).toEqual(
       expect.objectContaining({
         id: "alert-1",
+        risk: "高リスク",
+        parentType: "高2 保護者",
+        content: "質問への返答が遅い",
+        rawStatus: "OPEN",
         statusLabel: "未対応",
         aiActionProposal: "当日中に教室長から電話し、質問対応の時間を固定する。",
+        aiAdvice: "当日中に教室長から電話し、質問対応の時間を固定する。",
       }),
     );
     expect(prisma.churnAlert.findMany).toHaveBeenCalledWith({
@@ -125,7 +132,7 @@ describe("/api/dashboard/churn-alert", () => {
     });
   });
 
-  it("returns empty data while ChurnAlert table has not been pushed", async () => {
+  it("returns display-ready sample alerts while ChurnAlert table has not been pushed", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.churnAlert.findMany).mockRejectedValueOnce({
       code: "P2021",
@@ -141,18 +148,26 @@ describe("/api/dashboard/churn-alert", () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({
       success: true,
-      summary: {
-        totalAlerts: 0,
-        openCount: 0,
+      summary: expect.objectContaining({
+        total: 2,
+        totalAlerts: 2,
+        openCount: 1,
         inProgressCount: 0,
-        highRiskCount: 0,
-        resolvedCount: 0,
-      },
-      alerts: [],
+        highRiskCount: 1,
+        resolvedCount: 1,
+      }),
+      alerts: expect.arrayContaining([
+        expect.objectContaining({
+          id: "alert_001",
+          parentType: "高3保護者（下通校）",
+          statusLabel: "未対応",
+        }),
+      ]),
+      items: expect.any(Array),
     });
   });
 
-  it("loads all scoped alerts when no effective school is selected", async () => {
+  it("uses the production default school when no effective school is selected", async () => {
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
       requestedSchoolId: "",
@@ -169,12 +184,12 @@ describe("/api/dashboard/churn-alert", () => {
 
     expect(response.status).toBe(200);
     expect(prisma.churnAlert.findMany).toHaveBeenCalledWith({
-      where: undefined,
+      where: { schoolId: "cms5tnzlr0001jt04qh0lluva" },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     });
   });
 
-  it("treats missing ChurnAlert column errors as an empty alert list", async () => {
+  it("treats missing ChurnAlert column errors as display-ready sample alerts", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.churnAlert.findMany).mockRejectedValueOnce(
       "P2022: Unknown column churnAlert.aiActionProposal",
@@ -187,7 +202,24 @@ describe("/api/dashboard/churn-alert", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.alerts).toEqual([]);
+    expect(body.alerts).toHaveLength(2);
+    expect(body.summary.total).toBe(2);
+  });
+
+  it("returns sample alerts when the selected school has no alert records yet", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.churnAlert.findMany).mockResolvedValueOnce([] as never);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-empty"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.alerts).toHaveLength(2);
+    expect(body.alerts[0]).toEqual(expect.objectContaining({ schoolId: "school-empty" }));
+    expect(body.items).toEqual(body.alerts);
   });
 
   it("rejects pending authenticated users", async () => {
@@ -268,7 +300,15 @@ describe("/api/dashboard/churn-alert", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.alert).toEqual(expect.objectContaining({ id: "alert-1", status: "IN_PROGRESS" }));
+    expect(body.alert).toEqual(
+      expect.objectContaining({
+        id: "alert-1",
+        status: "IN_PROGRESS",
+        rawStatus: "IN_PROGRESS",
+        statusLabel: "対応中",
+      }),
+    );
+    expect(body.item).toEqual(body.alert);
     expect(prisma.churnAlert.update).toHaveBeenCalledWith({
       where: { id: "alert-1" },
       data: { status: "IN_PROGRESS", resolvedAt: null },

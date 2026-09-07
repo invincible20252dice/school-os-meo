@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
 import {
   assertChurnAlertStatus,
+  buildDefaultChurnAlerts,
   buildChurnAlertSummary,
+  DEFAULT_CHURN_ALERT_SCHOOL_ID,
   normalizeChurnAlerts,
   type ChurnAlertSource,
 } from "@/lib/churn-alerts";
@@ -73,19 +75,23 @@ export async function GET(request: Request) {
       return error;
     }
 
+    const effectiveSchoolId = schoolId || DEFAULT_CHURN_ALERT_SCHOOL_ID;
     const rows = await prisma.churnAlert.findMany({
-      where: schoolId ? { schoolId } : undefined,
+      where: { schoolId: effectiveSchoolId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     });
     const alerts = normalizeChurnAlerts(rows as ChurnAlertSource[]);
+    const visibleAlerts =
+      alerts.length > 0 ? alerts : buildDefaultChurnAlerts(effectiveSchoolId);
 
     return NextResponse.json({
       success: true,
-      summary: buildChurnAlertSummary(alerts),
-      alerts,
+      summary: buildChurnAlertSummary(visibleAlerts),
+      alerts: visibleAlerts,
+      items: visibleAlerts,
       access: {
         role: accessResult.access.role,
-        effectiveSchoolId: schoolId,
+        effectiveSchoolId,
         source: accessResult.access.source,
       },
     });
@@ -93,10 +99,13 @@ export async function GET(request: Request) {
     console.error("[GET /api/dashboard/churn-alert Error]:", error);
 
     if (isMissingChurnAlertTableError(error)) {
+      const fallbackAlerts = buildDefaultChurnAlerts(DEFAULT_CHURN_ALERT_SCHOOL_ID);
+
       return NextResponse.json({
         success: true,
-        summary: buildChurnAlertSummary([]),
-        alerts: [],
+        summary: buildChurnAlertSummary(fallbackAlerts),
+        alerts: fallbackAlerts,
+        items: fallbackAlerts,
       });
     }
 
@@ -144,10 +153,12 @@ export async function PATCH(request: Request) {
       where: { id: alertId },
       data: updateData,
     });
+    const alert = normalizeChurnAlerts([updated as ChurnAlertSource])[0];
 
     return NextResponse.json({
       success: true,
-      alert: normalizeChurnAlerts([updated as ChurnAlertSource])[0],
+      alert,
+      item: alert,
     });
   } catch (error) {
     console.error("[PATCH /api/dashboard/churn-alert Error]:", error);

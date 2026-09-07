@@ -10,19 +10,26 @@ type ChurnAlert = {
   id: string;
   source: string;
   guardianSegment: string;
+  parentType?: string;
   studentGrade: string;
   rating: number | null;
   riskLevel: string;
+  risk?: string;
   category: string;
   status: ChurnAlertStatus;
   statusLabel: string;
+  rawStatus?: ChurnAlertStatus;
   reason: string;
+  content?: string;
   aiActionProposal: string;
+  aiAdvice?: string;
   assignedTo: string;
+  detectedAt?: string;
   createdAt: string;
 };
 
 type ChurnAlertSummary = {
+  total?: number;
   totalAlerts: number;
   openCount: number;
   inProgressCount: number;
@@ -35,6 +42,7 @@ type ChurnAlertResponse = {
   error?: string;
   summary?: ChurnAlertSummary;
   alerts?: ChurnAlert[];
+  items?: ChurnAlert[];
 };
 
 const EMPTY_SUMMARY: ChurnAlertSummary = {
@@ -73,16 +81,32 @@ function statusClass(status: ChurnAlertStatus) {
   return `${styles.status} ${styles.todo}`;
 }
 
-function riskLabel(riskLevel: string) {
-  if (riskLevel === "HIGH") {
-    return "高";
+function normalizeStatus(value: string | undefined): ChurnAlertStatus {
+  if (value === "RESOLVED" || value === "解決済") {
+    return "RESOLVED";
   }
 
-  if (riskLevel === "LOW") {
-    return "低";
+  if (value === "IN_PROGRESS" || value === "対応中") {
+    return "IN_PROGRESS";
   }
 
-  return "中";
+  return "OPEN";
+}
+
+function riskLabel(alert: ChurnAlert) {
+  if (alert.risk) {
+    return alert.risk;
+  }
+
+  if (alert.riskLevel === "HIGH") {
+    return "高リスク";
+  }
+
+  if (alert.riskLevel === "LOW") {
+    return "低リスク";
+  }
+
+  return "中リスク";
 }
 
 function formatDate(value: string) {
@@ -103,6 +127,37 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function buildSummaryFromAlerts(alerts: ChurnAlert[]): ChurnAlertSummary {
+  return {
+    total: alerts.length,
+    totalAlerts: alerts.length,
+    openCount: alerts.filter((alert) => normalizeStatus(alert.rawStatus || alert.status) === "OPEN").length,
+    inProgressCount: alerts.filter(
+      (alert) => normalizeStatus(alert.rawStatus || alert.status) === "IN_PROGRESS",
+    ).length,
+    highRiskCount: alerts.filter((alert) => alert.riskLevel === "HIGH").length,
+    resolvedCount: alerts.filter(
+      (alert) => normalizeStatus(alert.rawStatus || alert.status) === "RESOLVED",
+    ).length,
+  };
+}
+
+function normalizeSummary(
+  summary: ChurnAlertSummary | undefined,
+  alerts: ChurnAlert[],
+): ChurnAlertSummary {
+  const computed = buildSummaryFromAlerts(alerts);
+
+  return {
+    total: summary?.total ?? summary?.totalAlerts ?? computed.total,
+    totalAlerts: summary?.totalAlerts ?? summary?.total ?? computed.totalAlerts,
+    openCount: summary?.openCount ?? computed.openCount,
+    inProgressCount: summary?.inProgressCount ?? computed.inProgressCount,
+    highRiskCount: summary?.highRiskCount ?? computed.highRiskCount,
+    resolvedCount: summary?.resolvedCount ?? computed.resolvedCount,
+  };
 }
 
 export default function RetentionAlertsPage() {
@@ -136,8 +191,14 @@ export default function RetentionAlertsPage() {
           throw new Error(body.error || "退塾防止アラートを取得できませんでした。");
         }
 
-        setSummary(body.summary ?? EMPTY_SUMMARY);
-        setAlerts(Array.isArray(body.alerts) ? body.alerts : []);
+        const nextAlerts = Array.isArray(body.alerts)
+          ? body.alerts
+          : Array.isArray(body.items)
+            ? body.items
+            : [];
+
+        setSummary(normalizeSummary(body.summary, nextAlerts));
+        setAlerts(nextAlerts);
       })
       .catch((error) => {
         if (error instanceof Error && error.name === "AbortError") {
@@ -179,20 +240,13 @@ export default function RetentionAlertsPage() {
         throw new Error(body.error || "ステータスを更新できませんでした。");
       }
 
-      setAlerts((current) =>
-        current.map((alert) => (alert.id === alertId ? body.alert as ChurnAlert : alert)),
-      );
-      setSummary((current) => {
-        const nextAlerts = alerts.map((alert) =>
+      setAlerts((current) => {
+        const nextAlerts = current.map((alert) =>
           alert.id === alertId ? body.alert as ChurnAlert : alert,
         );
+        setSummary(buildSummaryFromAlerts(nextAlerts));
 
-        return {
-          ...current,
-          openCount: nextAlerts.filter((alert) => alert.status === "OPEN").length,
-          inProgressCount: nextAlerts.filter((alert) => alert.status === "IN_PROGRESS").length,
-          resolvedCount: nextAlerts.filter((alert) => alert.status === "RESOLVED").length,
-        };
+        return nextAlerts;
       });
     } catch (error) {
       setErrorMessage(
@@ -215,7 +269,7 @@ export default function RetentionAlertsPage() {
         <article>
           <AlertIcon />
           <span>改善要請</span>
-          <strong>{summary.totalAlerts.toLocaleString("ja-JP")}件</strong>
+          <strong>{(summary.totalAlerts ?? summary.total ?? 0).toLocaleString("ja-JP")}件</strong>
         </article>
         <article>
           <AlertIcon />
@@ -265,27 +319,30 @@ export default function RetentionAlertsPage() {
             <tbody>
               {alerts.length > 0 ? alerts.map((alert) => (
                 <tr key={alert.id}>
-                  <td>{riskLabel(alert.riskLevel)}</td>
+                  <td>{riskLabel(alert)}</td>
                   <td>{alert.rating ? `★${alert.rating}` : "-"}</td>
                   <td>
-                    <strong>{alert.guardianSegment}</strong>
+                    <strong>{alert.parentType || alert.guardianSegment}</strong>
                     <span>{alert.studentGrade}</span>
                   </td>
                   <td>
                     <strong>{alert.category}</strong>
-                    <span>{alert.reason || "詳細理由は未入力です。"}</span>
+                    <span>{alert.content || alert.reason || "詳細理由は未入力です。"}</span>
                   </td>
-                  <td>{formatDate(alert.createdAt)}</td>
+                  <td>{formatDate(alert.detectedAt || alert.createdAt)}</td>
                   <td>
-                    <span className={statusClass(alert.status)}>
-                      {alert.statusLabel}
+                    <span className={statusClass(normalizeStatus(alert.rawStatus || alert.status))}>
+                      {alert.statusLabel || alert.status}
                     </span>
                     <div className={styles.actions}>
                       {STATUS_OPTIONS.map((option) => (
                         <button
                           key={option.value}
                           type="button"
-                          disabled={updatingId === alert.id || alert.status === option.value}
+                          disabled={
+                            updatingId === alert.id ||
+                            normalizeStatus(alert.rawStatus || alert.status) === option.value
+                          }
                           onClick={() => updateStatus(alert.id, option.value)}
                         >
                           {option.label}
@@ -293,7 +350,7 @@ export default function RetentionAlertsPage() {
                       ))}
                     </div>
                   </td>
-                  <td>{alert.aiActionProposal}</td>
+                  <td>{alert.aiAdvice || alert.aiActionProposal}</td>
                 </tr>
               )) : (
                 <tr>
