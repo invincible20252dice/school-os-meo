@@ -25,17 +25,30 @@ type QueryWord = {
 
 type QueryCategory = {
   intent: string;
+  name?: string;
   queryCount: number;
+  count?: number;
+  percentage?: number;
   impressionCount: number;
   clickCount: number;
   ctr: string;
 };
 
 type QuerySummary = {
+  queryCount?: number;
   totalQueries: number;
   totalImpressions: number;
   totalClicks: number;
   avgCtr: string;
+};
+
+type QueryApiData = {
+  summary?: QuerySummary;
+  logs?: QueryApiItem[];
+  queries?: QueryApiItem[];
+  categories?: QueryCategory[];
+  words?: QueryWord[];
+  suggestions?: string[];
 };
 
 type QueryApiResponse = {
@@ -47,6 +60,7 @@ type QueryApiResponse = {
   advice?: string[];
   queries?: QueryApiItem[];
   words?: QueryWord[];
+  data?: QueryApiData;
 };
 
 function normalizeIntent(value: unknown): QueryCloudItem["intent"] {
@@ -72,6 +86,26 @@ function normalizeWords(words: QueryWord[] = []): QueryCloudItem[] {
     query: word.text?.trim() || "未設定キーワード",
     count: word.value ?? 0,
     intent: "地域",
+  }));
+}
+
+function normalizeSummary(summary?: QuerySummary): QuerySummary {
+  return {
+    totalQueries: summary?.totalQueries ?? summary?.queryCount ?? 0,
+    totalImpressions: summary?.totalImpressions ?? 0,
+    totalClicks: summary?.totalClicks ?? 0,
+    avgCtr: summary?.avgCtr ?? "0.0%",
+  };
+}
+
+function normalizeCategories(categories: QueryCategory[] = []): QueryCategory[] {
+  return categories.map((category) => ({
+    ...category,
+    intent: category.intent || category.name || "未分類",
+    queryCount: category.queryCount ?? 0,
+    impressionCount: category.impressionCount ?? category.count ?? 0,
+    clickCount: category.clickCount ?? 0,
+    ctr: category.ctr ?? "0.0%",
   }));
 }
 
@@ -128,25 +162,25 @@ export default function QueryAnalyticsPage() {
           throw new Error(body.error || "流入語句を取得できませんでした。");
         }
 
-        if (body.targetMonth) {
+        const responseData = body.data ?? {};
+        const responseQueries = body.queries ?? responseData.logs ?? responseData.queries ?? [];
+        const responseWords = body.words ?? responseData.words ?? [];
+        const responseSummary = body.summary ?? responseData.summary;
+        const responseCategories = body.categories ?? responseData.categories ?? [];
+        const responseAdvice = body.advice ?? responseData.suggestions ?? [];
+
+        if (body.targetMonth && body.targetMonth !== month) {
           setMonth(body.targetMonth);
         }
         setQueries(
-          Array.isArray(body.words) && body.words.length > 0
-            ? normalizeWords(body.words)
-            : normalizeQueries(body.queries ?? []),
+          Array.isArray(responseWords) && responseWords.length > 0
+            ? normalizeWords(responseWords)
+            : normalizeQueries(responseQueries),
         );
-        setRankingRows(body.queries ?? []);
-        setSummary(
-          body.summary ?? {
-            totalQueries: 0,
-            totalImpressions: 0,
-            totalClicks: 0,
-            avgCtr: "0.0%",
-          },
-        );
-        setCategories(body.categories ?? []);
-        setAdvice(body.advice ?? []);
+        setRankingRows(responseQueries);
+        setSummary(normalizeSummary(responseSummary));
+        setCategories(normalizeCategories(responseCategories));
+        setAdvice(responseAdvice);
       })
       .catch((error) => {
         if (error instanceof Error && error.name === "AbortError") {

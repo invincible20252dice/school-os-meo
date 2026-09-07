@@ -183,6 +183,7 @@ describe("dashboard-query-analytics", () => {
       ctr: "0.0%",
       growthRate: "0%",
       intent: "指名",
+      actionSuggestion: "",
     });
   });
 

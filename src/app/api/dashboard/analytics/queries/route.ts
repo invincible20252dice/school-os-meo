@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
 import {
   buildQueryAnalyticsPayload,
+  DEFAULT_QUERY_ANALYTICS_LOGS,
   DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
   type SearchQueryLogSource,
 } from "@/lib/dashboard-query-analytics";
@@ -31,9 +32,7 @@ function isMissingSearchQueryTableError(error: unknown) {
     "message" in error &&
     typeof error.message === "string"
       ? error.message
-      : error instanceof Error
-        ? error.message
-        : String(error);
+      : String(error);
 
   return (
     code === "P2021" ||
@@ -47,7 +46,7 @@ function isMissingSearchQueryTableError(error: unknown) {
 
 async function loadQueryLogs(schoolId: string, month?: string) {
   try {
-    let logs = await prisma.searchQueryLog.findMany({
+    let logs: SearchQueryLogSource[] = await prisma.searchQueryLog.findMany({
       where: month ? { schoolId, targetMonth: month } : { schoolId },
       orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
       take: 100,
@@ -59,6 +58,13 @@ async function loadQueryLogs(schoolId: string, month?: string) {
         orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
         take: 100,
       });
+    }
+
+    if (logs.length === 0) {
+      logs = DEFAULT_QUERY_ANALYTICS_LOGS.map((log) => ({
+        ...log,
+        schoolId,
+      }));
     }
 
     const targetMonth = month || logs[0]?.targetMonth || "";
@@ -81,8 +87,11 @@ async function loadQueryLogs(schoolId: string, month?: string) {
     );
 
     return {
-      targetMonth: month || "",
-      logs: [],
+      targetMonth: month || DEFAULT_QUERY_ANALYTICS_LOGS[0]?.targetMonth || "",
+      logs: DEFAULT_QUERY_ANALYTICS_LOGS.map((log) => ({
+        ...log,
+        schoolId,
+      })),
     };
   }
 }
@@ -124,6 +133,30 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       ...payload,
+      data: {
+        summary: {
+          queryCount: payload.summary.totalQueries,
+          totalQueries: payload.summary.totalQueries,
+          totalImpressions: payload.summary.totalImpressions,
+          totalClicks: payload.summary.totalClicks,
+          avgCtr: payload.summary.avgCtr,
+        },
+        logs: payload.queries,
+        queries: payload.queries,
+        categories: payload.categories.map((category) => ({
+          ...category,
+          name: category.intent,
+          count: category.impressionCount,
+          percentage:
+            payload.summary.totalImpressions > 0
+              ? Math.round(
+                  (category.impressionCount / payload.summary.totalImpressions) * 100,
+                )
+              : 0,
+        })),
+        words: payload.words,
+        suggestions: payload.advice,
+      },
       access: {
         role: accessResult.access.role,
         effectiveSchoolId: schoolId,

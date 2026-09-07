@@ -215,7 +215,7 @@ describe("GET /api/dashboard/analytics/queries", () => {
     });
   });
 
-  it("uses an empty target month when no logs exist and month is omitted", async () => {
+  it("returns baseline query analytics when no logs exist and month is omitted", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.searchQueryLog.findMany).mockResolvedValueOnce([]);
     const { GET } = await import("./route");
@@ -226,8 +226,11 @@ describe("GET /api/dashboard/analytics/queries", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.targetMonth).toBe("");
-    expect(body.summary.totalQueries).toBe(0);
+    expect(body.targetMonth).toBe("2026-08");
+    expect(body.summary.totalQueries).toBe(5);
+    expect(body.summary.totalImpressions).toBe(1280);
+    expect(body.data.summary.queryCount).toBe(5);
+    expect(body.data.logs[0].query).toBe("熊本 大学受験 塾");
   });
 
   it("rejects pending authenticated users", async () => {
@@ -270,8 +273,10 @@ describe("GET /api/dashboard/analytics/queries", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.summary.totalQueries).toBe(0);
-    expect(body.queries).toEqual([]);
+    expect(body.summary.totalQueries).toBe(5);
+    expect(body.queries[0]).toEqual(
+      expect.objectContaining({ query: "熊本 大学受験 塾" }),
+    );
   });
 
   it("handles missing SearchQueryLog column errors reported as plain text", async () => {
@@ -290,7 +295,60 @@ describe("GET /api/dashboard/analytics/queries", () => {
 
     expect(response.status).toBe(200);
     expect(body.targetMonth).toBe("2026-08");
-    expect(body.queries).toEqual([]);
+    expect(body.queries).toHaveLength(5);
+    expect(body.data.suggestions).toEqual(expect.arrayContaining([
+      expect.stringContaining("逆転合格"),
+      expect.stringContaining("自習室の利便性"),
+    ]));
+  });
+
+  it("handles missing SearchQueryLog column errors reported as Error objects", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.searchQueryLog.findMany).mockRejectedValueOnce(
+      new Error("Unknown column SearchQueryLog.category"),
+    );
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/analytics/queries?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.summary.queryCount).toBe(5);
+    expect(body.data.words[0]).toEqual(
+      expect.objectContaining({ text: "熊本", value: 820 }),
+    );
+  });
+
+  it("returns zero category percentage when all impressions are zero", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.searchQueryLog.findMany).mockResolvedValueOnce([
+      {
+        id: "query-zero",
+        schoolId: "school-1",
+        targetMonth: "2026-08",
+        query: "未計測 キーワード",
+        impressionCount: 0,
+        clickCount: 0,
+        growthRate: "0%",
+        intent: "地域",
+      },
+    ] as never);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/analytics/queries?schoolId=school-1&month=2026-08",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories[0].percentage).toBe(0);
+    expect(body.summary.totalImpressions).toBe(0);
   });
 
   it("returns server errors for non-schema database failures", async () => {

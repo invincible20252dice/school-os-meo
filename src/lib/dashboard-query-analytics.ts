@@ -9,8 +9,11 @@ export type SearchQueryLogSource = {
   query?: string | null;
   impressionCount?: number | null;
   clickCount?: number | null;
+  ctr?: number | string | null;
   growthRate?: string | null;
+  category?: string | null;
   intent?: string | null;
+  actionSuggestion?: string | null;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
 };
@@ -25,7 +28,71 @@ export type QueryAnalyticsItem = {
   ctr: string;
   growthRate: string;
   intent: string;
+  actionSuggestion: string;
 };
+
+export const DEFAULT_QUERY_ANALYTICS_LOGS: SearchQueryLogSource[] = [
+  {
+    id: "default-query-1",
+    schoolId: DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
+    targetMonth: "2026-08",
+    query: "熊本 大学受験 塾",
+    category: "地域・目的",
+    impressionCount: 420,
+    clickCount: 58,
+    growthRate: "+24%",
+    actionSuggestion:
+      "下通・熊本駅周辺での露出拡大中。GBP投稿に「逆転合格のカリキュラム」を定期追加してください。",
+  },
+  {
+    id: "default-query-2",
+    schoolId: DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
+    targetMonth: "2026-08",
+    query: "通町筋 予備校",
+    category: "最寄り駅・立地",
+    impressionCount: 310,
+    clickCount: 42,
+    growthRate: "+15%",
+    actionSuggestion:
+      "自習室の利便性やアクセス面の写真を強調してCTR向上を図ってください。",
+  },
+  {
+    id: "default-query-3",
+    schoolId: DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
+    targetMonth: "2026-08",
+    query: "熊本 個別指導 おすすめ",
+    category: "比較・検討",
+    impressionCount: 280,
+    clickCount: 31,
+    growthRate: "+8%",
+    actionSuggestion:
+      "保護者アンケートでの個別フォロー満足度の声をGBP口コミ・投稿に引用してください。",
+  },
+  {
+    id: "default-query-4",
+    schoolId: DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
+    targetMonth: "2026-08",
+    query: "iスクール 予備校 評判",
+    category: "ブランド・指名",
+    impressionCount: 150,
+    clickCount: 26,
+    growthRate: "+30%",
+    actionSuggestion:
+      "指名検索のCTRが高水準です。合格実績を継続投稿して安心感を担保してください。",
+  },
+  {
+    id: "default-query-5",
+    schoolId: DEFAULT_QUERY_ANALYTICS_SCHOOL_ID,
+    targetMonth: "2026-08",
+    query: "熊本 予備校 自習室 使える",
+    category: "設備・環境",
+    impressionCount: 120,
+    clickCount: 19,
+    growthRate: "+42%",
+    actionSuggestion:
+      "自習室需要が伸びています。利用可能時間やブース席の特徴をFAQへ追記してください。",
+  },
+];
 
 export type QueryWordCloudItem = {
   text: string;
@@ -104,7 +171,8 @@ export function normalizeSearchQueryLogs(
       clickCount,
       ctr: formatPercent(ctr),
       growthRate: trim(log.growthRate) || "0%",
-      intent: inferIntent(query, log.intent),
+      intent: inferIntent(query, log.intent || log.category),
+      actionSuggestion: trim(log.actionSuggestion),
     };
   });
 }
@@ -172,6 +240,12 @@ export function buildQueryAdvice(queries: QueryAnalyticsItem[] = []) {
   const advice = [
     `最も露出が多い「${topQuery.query}」を、GBP投稿・口コミ依頼文・校舎ページ見出しに自然に反映してください。`,
   ];
+
+  for (const query of queries) {
+    if (query.actionSuggestion) {
+      advice.push(query.actionSuggestion);
+    }
+  }
 
   if (topCategory) {
     advice.push(
