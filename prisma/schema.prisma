@@ -168,6 +168,7 @@ model School {
   aioScoreHistories AioScoreHistory[]
   monthlyReports    MonthlyReport[]
   searchQueryLogs   SearchQueryLog[]
+  churnAlerts       ChurnAlert[]
 
   @@index([ownerId])
   @@index([status])
@@ -233,29 +234,29 @@ model SurveyItem {
 }
 
 model SchoolSetting {
-  id                     String   @id @default(cuid())
-  schoolId               String   @unique
-  googleConnected        Boolean  @default(false)
-  googleAccountId        String?
-  googleRefreshToken     String?
-  selectedGbpLocationId  String?
-  googleReviewUrl        String?
-  lineNotifyEnabled      Boolean  @default(true)
-  lineChannelAccessToken String?
-  lineDestinationId      String?
-  notifyOnNewReview      Boolean  @default(true)
-  notifyOnLowRating      Boolean  @default(true)
-  instagramConnected     Boolean  @default(false)
-  instagramMetaAppId     String?
-  instagramMetaAppSecret String?
-  promptSystemRole       String?  @db.Text
-  promptReviewTone       String   @default("FRIENDLY")
-  promptForbiddenWords   String[]
-  promptMustKeywords     String[]
-  promptTargetLength     String   @default("150-250文字")
-  promptAutoReplyApproval Boolean @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  schoolId                String   @unique
+  googleConnected         Boolean  @default(false)
+  googleAccountId         String?
+  googleRefreshToken      String?
+  selectedGbpLocationId   String?
+  googleReviewUrl         String?
+  lineNotifyEnabled       Boolean  @default(true)
+  lineChannelAccessToken  String?
+  lineDestinationId       String?
+  notifyOnNewReview       Boolean  @default(true)
+  notifyOnLowRating       Boolean  @default(true)
+  instagramConnected      Boolean  @default(false)
+  instagramMetaAppId      String?
+  instagramMetaAppSecret  String?
+  promptSystemRole        String?  @db.Text
+  promptReviewTone        String   @default("FRIENDLY")
+  promptForbiddenWords    String[]
+  promptMustKeywords      String[]
+  promptTargetLength      String   @default("150-250文字")
+  promptAutoReplyApproval Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
@@ -482,4 +483,30 @@ model SearchQueryLog {
 
   @@index([schoolId, targetMonth, impressionCount])
   @@index([query])
+}
+
+model ChurnAlert {
+  id               String    @id @default(cuid())
+  schoolId         String
+  source           String    @default("SURVEY")
+  sourceRecordId   String?
+  guardianSegment  String?
+  studentGrade     String?
+  rating           Int?
+  riskLevel        String    @default("MEDIUM")
+  category         String
+  status           String    @default("OPEN")
+  reason           String?   @db.Text
+  aiActionProposal String?   @db.Text
+  assignedTo       String?
+  resolvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, status])
+  @@index([schoolId, riskLevel])
+  @@index([source, sourceRecordId])
+  @@index([createdAt])
 }

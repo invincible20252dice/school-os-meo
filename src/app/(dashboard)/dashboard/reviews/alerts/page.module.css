@@ -38,7 +38,7 @@
 
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-top: 28px;
 }
@@ -121,6 +121,22 @@
   line-height: 1.7;
 }
 
+.tableWrap td strong,
+.tableWrap td span {
+  display: block;
+}
+
+.tableWrap td strong {
+  color: #17202a;
+  font-size: 14px;
+}
+
+.tableWrap td span {
+  margin-top: 4px;
+  color: #66737d;
+  font-size: 12px;
+}
+
 .status {
   display: inline-flex;
   border-radius: 999px;
@@ -143,6 +159,45 @@
 .done {
   background: #eef8f4;
   color: #147d68;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.actions button {
+  border: 1px solid #d5ded9;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #34414b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 9px;
+}
+
+.actions button:disabled {
+  background: #f3f6f5;
+  color: #9aa5ad;
+  cursor: not-allowed;
+}
+
+.error {
+  border-radius: 8px;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  background: #fff0ee;
+  color: #b84d3e;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.empty {
+  color: #66737d;
+  text-align: center;
 }
 
 .icon {
