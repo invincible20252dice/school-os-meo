@@ -86,9 +86,67 @@ describe("GET /api/dashboard/analytics/queries", () => {
       expect.objectContaining({ intent: "学年", impressionCount: 420 }),
       expect.objectContaining({ intent: "地域", impressionCount: 310 }),
     ]);
+    expect(body.words).toEqual([
+      expect.objectContaining({ text: "熊本", value: 420 }),
+      expect.objectContaining({ text: "大学受験", value: 420 }),
+      expect.objectContaining({ text: "塾", value: 420 }),
+      expect.objectContaining({ text: "通町筋", value: 310 }),
+      expect.objectContaining({ text: "予備校", value: 310 }),
+    ]);
     expect(body.advice[0]).toContain("熊本 大学受験 塾");
     expect(prisma.searchQueryLog.findMany).toHaveBeenCalledWith({
       where: { schoolId: "school-1", targetMonth: "2026-08" },
+      orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
+      take: 100,
+    });
+  });
+
+  it("falls back to the latest stored month when the requested month has no rows", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.searchQueryLog.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "query-new",
+          schoolId: "school-1",
+          targetMonth: "2026-08",
+          query: "熊本 大学受験 塾",
+          impressionCount: 420,
+          clickCount: 58,
+          growthRate: "+24%",
+          intent: "学年",
+        },
+        {
+          id: "query-old",
+          schoolId: "school-1",
+          targetMonth: "2026-07",
+          query: "熊本 塾",
+          impressionCount: 900,
+          clickCount: 40,
+          growthRate: "+2%",
+          intent: "地域",
+        },
+      ] as never);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/dashboard/analytics/queries?schoolId=school-1&month=2026-09",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.targetMonth).toBe("2026-08");
+    expect(body.queries).toHaveLength(1);
+    expect(body.summary.totalImpressions).toBe(420);
+    expect(prisma.searchQueryLog.findMany).toHaveBeenNthCalledWith(1, {
+      where: { schoolId: "school-1", targetMonth: "2026-09" },
+      orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
+      take: 100,
+    });
+    expect(prisma.searchQueryLog.findMany).toHaveBeenNthCalledWith(2, {
+      where: { schoolId: "school-1" },
       orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
       take: 100,
     });

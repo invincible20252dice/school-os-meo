@@ -4,6 +4,7 @@ import {
   buildQueryAnalyticsPayload,
   buildQueryAnalyticsSummary,
   buildQueryCategorySummary,
+  buildQueryWordCloud,
   normalizeSearchQueryLogs,
 } from "./dashboard-query-analytics";
 
@@ -208,6 +209,29 @@ describe("dashboard-query-analytics", () => {
         clickCount: 0,
         ctr: "0.0%",
       },
+    ]);
+  });
+
+  it("builds word cloud terms from query text weighted by impressions", () => {
+    const queries = normalizeSearchQueryLogs([
+      {
+        query: "熊本 大学受験 塾",
+        impressionCount: 420,
+        clickCount: 58,
+      },
+      {
+        query: "熊本 個別指導 おすすめ",
+        impressionCount: 280,
+        clickCount: 31,
+      },
+    ]);
+
+    expect(buildQueryWordCloud(queries)).toEqual([
+      expect.objectContaining({ text: "熊本", value: 700 }),
+      expect.objectContaining({ text: "大学受験", value: 420 }),
+      expect.objectContaining({ text: "塾", value: 420 }),
+      expect.objectContaining({ text: "個別指導", value: 280 }),
+      expect.objectContaining({ text: "おすすめ", value: 280 }),
     ]);
   });
 });

@@ -17,6 +17,12 @@ type QueryApiItem = {
   count?: number;
 };
 
+type QueryWord = {
+  text?: string;
+  value?: number;
+  color?: string;
+};
+
 type QueryCategory = {
   intent: string;
   queryCount: number;
@@ -40,12 +46,8 @@ type QueryApiResponse = {
   categories?: QueryCategory[];
   advice?: string[];
   queries?: QueryApiItem[];
+  words?: QueryWord[];
 };
-
-function getDefaultMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function normalizeIntent(value: unknown): QueryCloudItem["intent"] {
   return value === "地域" ||
@@ -65,6 +67,14 @@ function normalizeQueries(queries: QueryApiItem[] = []): QueryCloudItem[] {
   }));
 }
 
+function normalizeWords(words: QueryWord[] = []): QueryCloudItem[] {
+  return words.map((word) => ({
+    query: word.text?.trim() || "未設定キーワード",
+    count: word.value ?? 0,
+    intent: "地域",
+  }));
+}
+
 function QueryIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.icon}>
@@ -77,7 +87,7 @@ function QueryIcon() {
 export default function QueryAnalyticsPage() {
   const searchParams = useSearchParams();
   const selectedSchoolId = searchParams.get("schoolId") || "";
-  const [month, setMonth] = useState(searchParams.get("month") || getDefaultMonth());
+  const [month, setMonth] = useState(searchParams.get("month") || "");
   const [queries, setQueries] = useState<QueryCloudItem[]>([]);
   const [rankingRows, setRankingRows] = useState<QueryApiItem[]>([]);
   const [summary, setSummary] = useState<QuerySummary>({
@@ -91,11 +101,16 @@ export default function QueryAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const cloud = getQueryCloudScale(queries);
+  const monthOptions = Array.from(
+    new Set([month, "2026-08", "2026-07", "2026-06"].filter(Boolean)),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
-    params.set("month", month);
+    if (month) {
+      params.set("month", month);
+    }
     if (selectedSchoolId) {
       params.set("schoolId", selectedSchoolId);
     }
@@ -116,7 +131,11 @@ export default function QueryAnalyticsPage() {
         if (body.targetMonth) {
           setMonth(body.targetMonth);
         }
-        setQueries(normalizeQueries(body.queries ?? []));
+        setQueries(
+          Array.isArray(body.words) && body.words.length > 0
+            ? normalizeWords(body.words)
+            : normalizeQueries(body.queries ?? []),
+        );
         setRankingRows(body.queries ?? []);
         setSummary(
           body.summary ?? {
@@ -184,10 +203,12 @@ export default function QueryAnalyticsPage() {
             aria-label="対象月"
             onChange={(event) => setMonth(event.target.value)}
           >
-            <option value={month}>{month}</option>
-            <option value="2026-08">2026-08</option>
-            <option value="2026-07">2026-07</option>
-            <option value="2026-06">2026-06</option>
+            <option value="">最新月</option>
+            {monthOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
           </select>
         </label>
         <button type="button">CSVエクスポート</button>

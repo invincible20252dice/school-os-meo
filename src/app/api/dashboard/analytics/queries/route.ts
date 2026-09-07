@@ -47,19 +47,27 @@ function isMissingSearchQueryTableError(error: unknown) {
 
 async function loadQueryLogs(schoolId: string, month?: string) {
   try {
-    const logs = await prisma.searchQueryLog.findMany({
+    let logs = await prisma.searchQueryLog.findMany({
       where: month ? { schoolId, targetMonth: month } : { schoolId },
       orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
       take: 100,
     });
 
+    if (month && logs.length === 0) {
+      logs = await prisma.searchQueryLog.findMany({
+        where: { schoolId },
+        orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }],
+        take: 100,
+      });
+    }
+
     const targetMonth = month || logs[0]?.targetMonth || "";
     const filteredLogs = month
-      ? logs
+      ? logs.filter((log) => log.targetMonth === (logs[0]?.targetMonth || month))
       : logs.filter((log) => log.targetMonth === targetMonth);
 
     return {
-      targetMonth,
+      targetMonth: filteredLogs[0]?.targetMonth || targetMonth,
       logs: filteredLogs as SearchQueryLogSource[],
     };
   } catch (error) {

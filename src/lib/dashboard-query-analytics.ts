@@ -27,6 +27,25 @@ export type QueryAnalyticsItem = {
   intent: string;
 };
 
+export type QueryWordCloudItem = {
+  text: string;
+  value: number;
+  color: string;
+};
+
+const WORD_CLOUD_COLORS = [
+  "#16a34a",
+  "#2563eb",
+  "#0d9488",
+  "#4f46e5",
+  "#ea580c",
+  "#7c3aed",
+  "#059669",
+  "#6b7280",
+  "#db2777",
+  "#475569",
+];
+
 function trim(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -173,6 +192,40 @@ export function buildQueryAdvice(queries: QueryAnalyticsItem[] = []) {
   return advice;
 }
 
+function splitQueryTerms(query: string) {
+  return query
+    .split(/[\s　,、/／｜|・]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
+}
+
+export function buildQueryWordCloud(queries: QueryAnalyticsItem[] = []) {
+  const words = new Map<string, number>();
+
+  for (const query of queries) {
+    const terms = splitQueryTerms(query.query);
+    const weight = query.impressionCount || 1;
+
+    if (terms.length === 0) {
+      words.set(query.query, (words.get(query.query) || 0) + weight);
+      continue;
+    }
+
+    for (const term of terms) {
+      words.set(term, (words.get(term) || 0) + weight);
+    }
+  }
+
+  return Array.from(words.entries())
+    .map(([text, value], index) => ({
+      text,
+      value,
+      color: WORD_CLOUD_COLORS[index % WORD_CLOUD_COLORS.length],
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 20);
+}
+
 export function buildQueryAnalyticsPayload({
   schoolId,
   month,
@@ -191,5 +244,6 @@ export function buildQueryAnalyticsPayload({
     categories: buildQueryCategorySummary(queries),
     advice: buildQueryAdvice(queries),
     queries,
+    words: buildQueryWordCloud(queries),
   };
 }
