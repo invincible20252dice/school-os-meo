@@ -180,6 +180,8 @@ export default function SettingsPage({
           ? "/api/settings/google"
           : activeTab === "line"
             ? "/api/dashboard/settings/line"
+            : activeTab === "instagram"
+              ? "/api/dashboard/settings/instagram"
             : activeTab === "prompts"
               ? "/api/dashboard/settings/prompt"
             : "/api/settings/school";
@@ -268,10 +270,15 @@ export default function SettingsPage({
       }
 
       const isPromptTab = activeTab === "prompts";
+      const isInstagramTab = activeTab === "instagram";
       const response = await fetch(
-        isPromptTab ? "/api/dashboard/settings/prompt" : "/api/settings/school",
+        isPromptTab
+          ? "/api/dashboard/settings/prompt"
+          : isInstagramTab
+            ? "/api/dashboard/settings/instagram"
+            : "/api/settings/school",
         {
-        method: "PATCH",
+        method: isInstagramTab ? "POST" : "PATCH",
         headers: {
           "content-type": "application/json",
           ...headers,
@@ -287,6 +294,15 @@ export default function SettingsPage({
                 targetLength: setting.promptTargetLength,
                 autoReplyApproval: setting.promptAutoReplyApproval,
               }
+            : isInstagramTab
+              ? {
+                  schoolId,
+                  instagramConnected: setting.instagramConnected,
+                  metaAppId: setting.instagramMetaAppId,
+                  metaAppSecret: setting.instagramMetaAppSecret,
+                  instagramBusinessAccountId:
+                    setting.instagramBusinessAccountId,
+                }
             : {
                 ...setting,
                 schoolId,

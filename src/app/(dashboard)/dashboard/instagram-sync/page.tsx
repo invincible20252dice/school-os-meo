@@ -1,10 +1,17 @@
-import { buildMockInstagramSyncPreview } from "@/lib/mock-instagram-sync";
+import {
+  buildMockInstagramSyncPreview,
+  DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL,
+  DEFAULT_INSTAGRAM_LOCATION,
+} from "@/lib/mock-instagram-sync";
 import InstagramRealSyncButton from "@/components/dashboard/InstagramRealSyncButton";
 import {
   buildRankSearchLabel,
   normalizeLocationParams,
 } from "@/lib/location-params";
+import { prisma } from "@/lib/prisma";
 import styles from "./page.module.css";
+
+export const dynamic = "force-dynamic";
 
 function InstagramIcon() {
   return (
@@ -35,33 +42,111 @@ function PinIcon() {
   );
 }
 
+function toNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function loadInstagramDashboardData(schoolId: string) {
+  try {
+    const [school, keyword, instagramSetting] = await Promise.all([
+      prisma.school.findUnique({
+        where: { id: schoolId },
+        select: {
+          id: true,
+          name: true,
+          prefecture: true,
+          city: true,
+          addressLine: true,
+          gbpLocationId: true,
+        },
+      }),
+      prisma.targetKeyword.findFirst({
+        where: {
+          schoolId,
+          isActive: true,
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          keyword: true,
+          nearestStation: true,
+          municipality: true,
+          latitude: true,
+          longitude: true,
+          radiusMeters: true,
+        },
+      }),
+      prisma.instagramSetting.findUnique({
+        where: { schoolId },
+        select: {
+          instagramBusinessAccountId: true,
+          lastSyncedAt: true,
+        },
+      }),
+    ]);
+
+    return {
+      school: {
+        id: school?.id || DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL.id,
+        name: school?.name || DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL.name,
+        gbpLocationId:
+          school?.gbpLocationId || DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL.gbpLocationId,
+      },
+      location: {
+        keyword: keyword?.keyword || DEFAULT_INSTAGRAM_LOCATION.keyword,
+        nearestStation:
+          keyword?.nearestStation || DEFAULT_INSTAGRAM_LOCATION.nearestStation,
+        municipality:
+          keyword?.municipality ||
+          school?.city ||
+          DEFAULT_INSTAGRAM_LOCATION.municipality,
+        latitude: toNumber(keyword?.latitude) ?? DEFAULT_INSTAGRAM_LOCATION.latitude,
+        longitude:
+          toNumber(keyword?.longitude) ?? DEFAULT_INSTAGRAM_LOCATION.longitude,
+        radiusMeters: keyword?.radiusMeters || DEFAULT_INSTAGRAM_LOCATION.radiusMeters,
+      },
+      instagramSetting,
+    };
+  } catch (error) {
+    console.error("[Instagram dashboard data lookup failed]:", error);
+
+    return {
+      school: DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL,
+      location: DEFAULT_INSTAGRAM_LOCATION,
+      instagramSetting: null,
+    };
+  }
+}
+
 export default async function InstagramSyncPage({
   searchParams,
 }: {
   searchParams?: Promise<{ schoolId?: string }>;
 }) {
   const params = await searchParams;
-  const selectedSchoolId = params?.schoolId || "";
-  const preview = await buildMockInstagramSyncPreview();
-  const location = normalizeLocationParams({
-    nearestStation: "横浜駅",
-    municipality: "横浜市西区",
-    latitude: 35.4658,
-    longitude: 139.6223,
-    radiusMeters: 1500,
+  const selectedSchoolId = params?.schoolId || DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL.id;
+  const dashboardData = await loadInstagramDashboardData(selectedSchoolId);
+  const preview = await buildMockInstagramSyncPreview({
+    school: dashboardData.school,
   });
+  const location = normalizeLocationParams(dashboardData.location);
   const searchLabel = buildRankSearchLabel({
-    keyword: "個別指導 塾",
+    keyword: dashboardData.location.keyword,
     location,
   });
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <p className={styles.kicker}>Instagram Mock Sync</p>
-        <h1>Instagram連携のMock実行プレビュー</h1>
+        <p className={styles.kicker}>Instagram Sync</p>
+        <h1>Instagram実績マルチ投稿プレビュー</h1>
         <p>
-          実APIやDB書き込みを使わずに、Instagram投稿取得、AIリライト、GBP投稿payload生成までの流れを確認します。
+          選択中の校舎データをもとに、Instagram投稿取得、AIリライト、GBP投稿payload生成までの流れを確認します。
         </p>
         <InstagramRealSyncButton schoolId={selectedSchoolId} />
       </header>
@@ -83,7 +168,13 @@ export default async function InstagramSyncPage({
             <InstagramIcon />
             <div>
               <h2>Mock Instagram投稿</h2>
-              <p>{preview.instagram.postedAt.toISOString().slice(0, 10)}</p>
+              <p>
+                {dashboardData.instagramSetting?.lastSyncedAt
+                  ? `最終同期 ${dashboardData.instagramSetting.lastSyncedAt
+                      .toISOString()
+                      .slice(0, 10)}`
+                  : preview.instagram.postedAt.toISOString().slice(0, 10)}
+              </p>
             </div>
           </div>
           <p className={styles.caption}>{preview.instagram.caption}</p>
