@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
 
 type ReviewRow = {
@@ -19,9 +20,21 @@ type ReviewRow = {
 };
 
 type ReviewsResponse = {
+  success?: boolean;
   reviews?: ReviewRow[];
   message?: string;
 };
+
+async function buildAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data } = await createBrowserSupabaseClient().auth.getSession();
+    const token = data.session?.access_token;
+
+    return token ? { authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 function SendIcon() {
   return (
@@ -87,9 +100,11 @@ export default function ReviewsClient() {
         params.set("schoolId", selectedSchoolId);
       }
 
+      const headers = await buildAuthHeaders();
+
       const response = await fetch(
-        `/api/reviews${params.size ? `?${params.toString()}` : ""}`,
-        { cache: "no-store" },
+        `/api/dashboard/reviews${params.size ? `?${params.toString()}` : ""}`,
+        { cache: "no-store", headers },
       );
       const body = (await response.json()) as ReviewsResponse;
 
@@ -116,9 +131,10 @@ export default function ReviewsClient() {
     setMessage("");
 
     try {
+      const headers = await buildAuthHeaders();
       const response = await fetch("/api/reviews/reply", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({
           reviewId,
           replyText: drafts[reviewId] || "",
@@ -146,9 +162,10 @@ export default function ReviewsClient() {
     setMessage("");
 
     try {
+      const headers = await buildAuthHeaders();
       const response = await fetch("/api/dashboard/reviews/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({
           schoolId: selectedSchoolId || undefined,
         }),
@@ -222,7 +239,7 @@ export default function ReviewsClient() {
 
       {status !== "loading" && reviews.length === 0 ? (
         <p className={styles.muted}>
-          未返信の口コミはまだありません。テスト通知またはcron取得後にここへ表示されます。
+          この校舎の口コミはまだありません。「GBP口コミを同期」で最新データを取得できます。
         </p>
       ) : null}
 

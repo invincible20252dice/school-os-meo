@@ -83,7 +83,7 @@ export async function POST(request: Request) {
         create: {
           schoolId: requestedSchoolId,
           googleConnected: true,
-          googleAccountId: accountName || "手動入力",
+          googleAccountId: accountName || null,
           selectedGbpLocationId: locationName,
           promptForbiddenWords: [],
           promptMustKeywords: [],
@@ -98,6 +98,7 @@ export async function POST(request: Request) {
           schoolId: true,
           googleConnected: true,
           googleAccountId: true,
+          googleRefreshToken: true,
           selectedGbpLocationId: true,
           updatedAt: true,
         },
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
       school,
       setting: {
         ...setting,
-        googleRefreshToken: "********",
+        googleRefreshToken: setting.googleRefreshToken ? "********" : "",
         updatedAt: setting.updatedAt.toISOString().slice(0, 16).replace("T", " "),
       },
     });

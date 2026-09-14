@@ -7,6 +7,50 @@ import {
   resolveRequestAccess,
 } from "@/lib/supabase-access";
 
+type GoogleSettingPayload = {
+  schoolId?: string;
+  accountName?: string;
+  googleAccountId?: string;
+  email?: string;
+  locationName?: string;
+  locationId?: string;
+  selectedGbpLocationId?: string;
+  reviewUrl?: string;
+  googleReviewUrl?: string;
+};
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeLocationId(value: unknown) {
+  const locationId = normalizeString(value).replace(/^\/+|\/+$/g, "");
+
+  if (!locationId) {
+    return "";
+  }
+
+  if (locationId.startsWith("accounts/") && locationId.includes("/locations/")) {
+    return `locations/${locationId.split("/locations/").pop()}`;
+  }
+
+  return locationId.startsWith("locations/")
+    ? locationId
+    : `locations/${locationId}`;
+}
+
+function toAccountResponse(setting: ReturnType<typeof toSettingResponse>) {
+  return {
+    schoolId: setting.schoolId,
+    email: setting.googleAccountId,
+    googleAccountId: setting.googleAccountId,
+    locationId: setting.selectedGbpLocationId,
+    reviewUrl: setting.googleReviewUrl,
+    status: setting.googleConnected ? "CONNECTED" : "DISCONNECTED",
+    updatedAt: setting.updatedAt,
+  };
+}
+
 function toSettingResponse(setting: {
   id: string;
   schoolId: string;
@@ -153,9 +197,13 @@ export async function GET(request: Request) {
       );
     }
 
+    const serializedSetting = toSettingResponse(setting, schoolId);
+
     return NextResponse.json({
+      success: true,
       school,
-      setting: toSettingResponse(setting, schoolId),
+      setting: serializedSetting,
+      account: toAccountResponse(serializedSetting),
       access: {
         role: accessResult.access.role,
         effectiveSchoolId: schoolId,
@@ -166,6 +214,110 @@ export async function GET(request: Request) {
     console.error(error);
     return NextResponse.json(
       { message: "Google連携設定を取得できませんでした。" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const accessResult = await resolveRequestAccess(request, url);
+
+    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+      return NextResponse.json(
+        { message: "アカウント承認後にGoogle連携設定を保存できます。" },
+        { status: 403 },
+      );
+    }
+
+    const body = (await request.json()) as GoogleSettingPayload;
+    const requestedSchoolId = normalizeString(body.schoolId);
+    const selectedGbpLocationId = normalizeLocationId(
+      body.selectedGbpLocationId || body.locationId || body.locationName,
+    );
+    const googleAccountId = normalizeString(
+      body.googleAccountId || body.accountName || body.email,
+    );
+    const hasReviewUrl = "googleReviewUrl" in body || "reviewUrl" in body;
+    const googleReviewUrl = normalizeString(
+      body.googleReviewUrl ?? body.reviewUrl,
+    );
+
+    if (!requestedSchoolId || !selectedGbpLocationId) {
+      return NextResponse.json(
+        { message: "校舎とGBPロケーションIDを入力してください。" },
+        { status: 400 },
+      );
+    }
+
+    if (googleReviewUrl && !/^https:\/\//i.test(googleReviewUrl)) {
+      return NextResponse.json(
+        { message: "Google口コミ投稿リンクは https:// から入力してください。" },
+        { status: 400 },
+      );
+    }
+
+    const scopedSchool = buildScopedSchoolFilter(
+      accessResult.access,
+      requestedSchoolId,
+    );
+
+    if (scopedSchool.effectiveSchoolId !== requestedSchoolId) {
+      return NextResponse.json(
+        { message: "この校舎のGoogle連携設定は変更できません。" },
+        { status: 403 },
+      );
+    }
+
+    const [school, setting] = await prisma.$transaction([
+      prisma.school.update({
+        where: { id: requestedSchoolId },
+        data: {
+          gbpLocationId: selectedGbpLocationId,
+          ...(googleAccountId.startsWith("accounts/")
+            ? { gbpAccountId: googleAccountId }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          gbpAccountId: true,
+          gbpLocationId: true,
+        },
+      }),
+      prisma.schoolSetting.upsert({
+        where: { schoolId: requestedSchoolId },
+        create: {
+          schoolId: requestedSchoolId,
+          googleConnected: true,
+          googleAccountId: googleAccountId || null,
+          selectedGbpLocationId,
+          ...(hasReviewUrl ? { googleReviewUrl: googleReviewUrl || null } : {}),
+          promptForbiddenWords: [],
+          promptMustKeywords: [],
+        },
+        update: {
+          googleConnected: true,
+          selectedGbpLocationId,
+          ...(googleAccountId ? { googleAccountId } : {}),
+          ...(hasReviewUrl ? { googleReviewUrl: googleReviewUrl || null } : {}),
+        },
+        select: googleSettingSelect,
+      }),
+    ]);
+    const serializedSetting = toSettingResponse(setting, requestedSchoolId);
+
+    return NextResponse.json({
+      success: true,
+      school,
+      setting: serializedSetting,
+      account: toAccountResponse(serializedSetting),
+    });
+  } catch (error) {
+    console.error("[POST /api/settings/google]", error);
+    return NextResponse.json(
+      { message: "Google連携設定を保存できませんでした。" },
       { status: 500 },
     );
   }

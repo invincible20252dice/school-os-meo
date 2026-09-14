@@ -104,6 +104,9 @@ describe("POST /api/google/gbp-location-selection", () => {
     );
     expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
+        create: expect.objectContaining({
+          googleAccountId: null,
+        }),
         update: {
           googleConnected: true,
           selectedGbpLocationId: "locations/1234567890",

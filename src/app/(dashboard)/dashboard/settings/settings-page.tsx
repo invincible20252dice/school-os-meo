@@ -399,7 +399,7 @@ export default function SettingsPage({
 
     try {
       const headers = await buildAuthHeaders();
-      const response = await fetch("/api/google/gbp-location-selection", {
+      const response = await fetch("/api/settings/google", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -472,7 +472,7 @@ export default function SettingsPage({
         },
         body: JSON.stringify({
           schoolId: getActiveSchoolId(),
-          locationName,
+          selectedGbpLocationId: locationName,
         }),
       });
       const data = (await response.json()) as {
