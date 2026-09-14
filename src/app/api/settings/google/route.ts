@@ -19,6 +19,17 @@ type GoogleSettingPayload = {
   googleReviewUrl?: string;
 };
 
+type GoogleAccountRecord = {
+  id: string;
+  schoolId: string;
+  email: string | null;
+  refreshToken: string | null;
+  locationId: string | null;
+  reviewUrl: string | null;
+  status: string | null;
+  updatedAt: Date | null;
+};
+
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -60,8 +71,8 @@ function toSettingResponse(setting: {
   selectedGbpLocationId: string | null;
   googleReviewUrl: string | null;
   updatedAt: Date;
-} | null, schoolId: string) {
-  if (!setting) {
+} | null, googleAccount: GoogleAccountRecord | null, schoolId: string) {
+  if (!setting && !googleAccount) {
     const emptySetting = buildEmptySchoolSetting(schoolId);
 
     return {
@@ -76,15 +87,27 @@ function toSettingResponse(setting: {
     };
   }
 
+  const googleAccountId = setting?.googleAccountId || googleAccount?.email || "";
+  const googleRefreshToken = setting?.googleRefreshToken || googleAccount?.refreshToken || "";
+  const selectedGbpLocationId =
+    setting?.selectedGbpLocationId || googleAccount?.locationId || "";
+  const googleReviewUrl = setting?.googleReviewUrl || googleAccount?.reviewUrl || "";
+  const updatedAt = setting?.updatedAt || googleAccount?.updatedAt;
+
   return {
-    id: setting.id,
-    schoolId: setting.schoolId,
-    googleConnected: setting.googleConnected,
-    googleAccountId: setting.googleAccountId || "",
-    googleRefreshToken: setting.googleRefreshToken ? "********" : "",
-    selectedGbpLocationId: setting.selectedGbpLocationId || "",
-    googleReviewUrl: setting.googleReviewUrl || "",
-    updatedAt: setting.updatedAt.toISOString().slice(0, 16).replace("T", " "),
+    id: setting?.id || googleAccount?.id || "",
+    schoolId: setting?.schoolId || googleAccount?.schoolId || schoolId,
+    googleConnected:
+      Boolean(setting?.googleConnected) ||
+      googleAccount?.status === "CONNECTED" ||
+      Boolean(selectedGbpLocationId),
+    googleAccountId,
+    googleRefreshToken: googleRefreshToken ? "********" : "",
+    selectedGbpLocationId,
+    googleReviewUrl,
+    updatedAt: updatedAt
+      ? updatedAt.toISOString().slice(0, 16).replace("T", " ")
+      : "",
   };
 }
 
@@ -99,56 +122,11 @@ const googleSettingSelect = {
   updatedAt: true,
 };
 
-const legacyGoogleSettingSelect = {
-  ...googleSettingSelect,
-  googleReviewUrl: false,
-};
-
-function isMissingColumnError(error: unknown) {
-  const code =
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof error.code === "string"
-      ? error.code
-      : "";
-  const message =
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-      ? error.message
-      : error instanceof Error
-        ? error.message
-        : String(error);
-
-  return (
-    code === "P2022" ||
-    message.includes("does not exist") ||
-    message.includes("Unknown column") ||
-    message.includes("P2022")
-  );
-}
-
 async function findGoogleSetting(schoolId: string) {
-  try {
-    return await prisma.schoolSetting.findUnique({
-      where: { schoolId },
-      select: googleSettingSelect,
-    });
-  } catch (error) {
-    if (!isMissingColumnError(error)) {
-      throw error;
-    }
-
-    console.error("Google setting column lookup failed. Retrying without new optional columns.", error);
-    const legacySetting = await prisma.schoolSetting.findUnique({
-      where: { schoolId },
-      select: legacyGoogleSettingSelect,
-    });
-
-    return legacySetting ? { ...legacySetting, googleReviewUrl: null } : null;
-  }
+  return prisma.schoolSetting.findUnique({
+    where: { schoolId },
+    select: googleSettingSelect,
+  });
 }
 
 export async function GET(request: Request) {
@@ -177,7 +155,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const [school, setting] = await Promise.all([
+    const [school, setting, googleAccount] = await Promise.all([
       prisma.school.findUnique({
         where: { id: schoolId },
         select: {
@@ -188,6 +166,7 @@ export async function GET(request: Request) {
         },
       }),
       findGoogleSetting(schoolId),
+      prisma.googleAccount.findUnique({ where: { schoolId } }),
     ]);
 
     if (!school) {
@@ -197,7 +176,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const serializedSetting = toSettingResponse(setting, schoolId);
+    const serializedSetting = toSettingResponse(setting, googleAccount, schoolId);
 
     return NextResponse.json({
       success: true,
@@ -305,8 +284,26 @@ export async function POST(request: Request) {
         },
         select: googleSettingSelect,
       }),
+      prisma.googleAccount.upsert({
+        where: { schoolId: requestedSchoolId },
+        create: {
+          schoolId: requestedSchoolId,
+          email: googleAccountId.includes("@") ? googleAccountId : null,
+          locationId: selectedGbpLocationId,
+          reviewUrl: hasReviewUrl ? googleReviewUrl || null : null,
+          status: "CONNECTED",
+          updatedAt: new Date(),
+        },
+        update: {
+          ...(googleAccountId.includes("@") ? { email: googleAccountId } : {}),
+          locationId: selectedGbpLocationId,
+          ...(hasReviewUrl ? { reviewUrl: googleReviewUrl || null } : {}),
+          status: "CONNECTED",
+          updatedAt: new Date(),
+        },
+      }),
     ]);
-    const serializedSetting = toSettingResponse(setting, requestedSchoolId);
+    const serializedSetting = toSettingResponse(setting, null, requestedSchoolId);
 
     return NextResponse.json({
       success: true,

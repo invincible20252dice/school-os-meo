@@ -163,6 +163,7 @@ model School {
   gbpMetrics        GbpMetric[]
   instagramSetting  InstagramSetting?
   schoolSetting     SchoolSetting?
+  googleAccount     GoogleAccount?
   syncedPosts       SyncedPost[]
   targetKeywords    TargetKeyword[]
   aioScoreHistories AioScoreHistory[]
@@ -263,6 +264,19 @@ model SchoolSetting {
   @@index([googleConnected])
   @@index([lineNotifyEnabled])
   @@index([instagramConnected])
+}
+
+model GoogleAccount {
+  id           String    @id @default(cuid())
+  schoolId     String    @unique
+  email        String?
+  refreshToken String?   @db.Text
+  locationId   String?
+  reviewUrl    String?
+  status       String?
+  updatedAt    DateTime?
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 }
 
 model Review {

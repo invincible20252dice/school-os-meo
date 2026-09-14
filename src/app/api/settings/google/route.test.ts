@@ -68,6 +68,19 @@ vi.mock("@/lib/prisma", () => ({
         updatedAt: new Date("2026-07-30T10:00:00.000Z"),
       })),
     },
+    googleAccount: {
+      findUnique: vi.fn(async () => null),
+      upsert: vi.fn(async ({ create, update }) => ({
+        id: "google-account-1",
+        schoolId: "school-1",
+        email: update.email || create.email || null,
+        refreshToken: null,
+        locationId: update.locationId || create.locationId,
+        reviewUrl: update.reviewUrl || create.reviewUrl || null,
+        status: "CONNECTED",
+        updatedAt: update.updatedAt || create.updatedAt,
+      })),
+    },
   },
 }));
 
@@ -163,19 +176,19 @@ describe("GET /api/settings/google", () => {
     });
   });
 
-  it("keeps loading saved GBP location when the review URL column is not available yet", async () => {
+  it("hydrates Google settings from the persisted GoogleAccount record", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique)
-      .mockRejectedValueOnce(new Error("P2022: The column `googleReviewUrl` does not exist"))
-      .mockResolvedValueOnce({
-        id: "setting-1",
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+        id: "google-account-1",
         schoolId: "school-1",
-        googleConnected: true,
-        googleAccountId: "owner@example.com",
-        googleRefreshToken: "refresh-token",
-        selectedGbpLocationId: "locations/100",
+        email: "ischool.yobiko@gmail.com",
+        refreshToken: "refresh-token",
+        locationId: "locations/6467241578381534467",
+        reviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
+        status: "CONNECTED",
         updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-      } as never);
+      });
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
@@ -184,87 +197,27 @@ describe("GET /api/settings/google", () => {
 
     expect(response.status).toBe(200);
     expect(body.setting).toMatchObject({
-      googleAccountId: "owner@example.com",
-      selectedGbpLocationId: "locations/100",
-      googleReviewUrl: "",
-    });
-  });
-
-  it("keeps loading saved GBP location when Prisma reports P2022 as an object", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique)
-      .mockRejectedValueOnce({
-        code: "P2022",
-        message: "The column SchoolSetting.googleReviewUrl does not exist",
-      } as never)
-      .mockResolvedValueOnce({
-        id: "setting-legacy",
-        schoolId: "school-1",
-        googleConnected: true,
-        googleAccountId: "owner@example.com",
-        googleRefreshToken: null,
-        selectedGbpLocationId: "locations/200",
-        updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-      } as never);
-
-    const response = await GET(
-      new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.setting).toMatchObject({
-      id: "setting-legacy",
-      googleAccountId: "owner@example.com",
-      googleRefreshToken: "",
-      selectedGbpLocationId: "locations/200",
-      googleReviewUrl: "",
-    });
-  });
-
-  it("keeps loading saved GBP location when Prisma reports an unknown column message object", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique)
-      .mockRejectedValueOnce({
-        code: "UNKNOWN",
-        message: "Unknown column SchoolSetting.googleReviewUrl",
-      } as never)
-      .mockResolvedValueOnce({
-        id: "setting-legacy",
-        schoolId: "school-1",
-        googleConnected: true,
-        googleAccountId: "owner@example.com",
-        googleRefreshToken: "refresh-token",
-        selectedGbpLocationId: "locations/300",
-        updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-      } as never);
-
-    const response = await GET(
-      new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.setting).toMatchObject({
+      googleConnected: true,
+      googleAccountId: "ischool.yobiko@gmail.com",
       googleRefreshToken: "********",
-      selectedGbpLocationId: "locations/300",
-      googleReviewUrl: "",
+      selectedGbpLocationId: "locations/6467241578381534467",
+      googleReviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
     });
   });
 
-  it("keeps loading saved GBP location when Prisma reports P2022 as text", async () => {
+  it("recognizes a legacy account with a saved location even without status or timestamp", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique)
-      .mockRejectedValueOnce("P2022: SchoolSetting.googleReviewUrl missing")
-      .mockResolvedValueOnce({
-        id: "setting-legacy",
-        schoolId: "school-1",
-        googleConnected: true,
-        googleAccountId: "owner@example.com",
-        googleRefreshToken: null,
-        selectedGbpLocationId: "locations/400",
-        updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-      } as never);
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+      id: "google-account-legacy",
+      schoolId: "school-1",
+      email: null,
+      refreshToken: null,
+      locationId: "locations/6467241578381534467",
+      reviewUrl: null,
+      status: null,
+      updatedAt: null,
+    });
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
@@ -272,7 +225,14 @@ describe("GET /api/settings/google", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.setting.selectedGbpLocationId).toBe("locations/400");
+    expect(body.setting).toMatchObject({
+      id: "google-account-legacy",
+      googleConnected: true,
+      googleAccountId: "",
+      selectedGbpLocationId: "locations/6467241578381534467",
+      googleReviewUrl: "",
+      updatedAt: "",
+    });
   });
 
   it("serializes empty Google fields for a newly created setting", async () => {
@@ -349,6 +309,18 @@ describe("GET /api/settings/google", () => {
           googleConnected: true,
           selectedGbpLocationId: "locations/6467241578381534467",
         },
+      }),
+    );
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          locationId: "locations/6467241578381534467",
+          status: "CONNECTED",
+        }),
+        update: expect.objectContaining({
+          locationId: "locations/6467241578381534467",
+          status: "CONNECTED",
+        }),
       }),
     );
   });
