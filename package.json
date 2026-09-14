@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev -H 127.0.0.1 -p 3030",
     "build": "npm run prisma:generate && next build",
-    "vercel-build": "prisma db execute --file prisma/production-schema.sql --schema prisma/schema.prisma && npm run build",
+    "vercel-build": "npm run build",
+    "db:deploy": "prisma db execute --file prisma/production-schema.sql --schema prisma/schema.prisma",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
