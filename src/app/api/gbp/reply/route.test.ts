@@ -62,6 +62,7 @@ vi.mock("@/lib/prisma", () => ({
 describe("/api/gbp/reply", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
   it("redirects GET requests from LINE to the dashboard review screen", async () => {
@@ -108,6 +109,11 @@ describe("/api/gbp/reply", () => {
 
     expect(response.status).toBe(200);
     expect(body.message).toBe("Google口コミへ返信を投稿しました。");
+    expect(body).toMatchObject({
+      success: true,
+      googlePosted: true,
+      deliveryStatus: "GOOGLE_POSTED",
+    });
     expect(gbpReply.resolveGbpAccessToken).toHaveBeenCalledWith({
       googleRefreshToken: "refresh-token",
     });
@@ -136,6 +142,7 @@ describe("/api/gbp/reply", () => {
           id: true,
           status: true,
           aiReplyText: true,
+          replyText: true,
         }),
       }),
     );
@@ -210,7 +217,7 @@ describe("/api/gbp/reply", () => {
     expect(body.message).toBe("対象の口コミが見つかりませんでした。");
   });
 
-  it("returns not found when the review is missing its Google review id", async () => {
+  it("saves the reply locally when the review is missing its Google review id", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
       id: "review-1",
@@ -241,9 +248,22 @@ describe("/api/gbp/reply", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(404);
-    expect(body.message).toBe("対象の口コミが見つかりませんでした。");
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      googlePosted: false,
+      deliveryStatus: "LOCAL_SAVED",
+      message: "返信を保存しました。Googleへの反映は連携復旧後に再同期してください。",
+    });
     expect(gbpReply.postGbpReviewReply).not.toHaveBeenCalled();
+    expect(prisma.review.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          replyText: "ありがとうございます。",
+          status: "REPLIED",
+        }),
+      }),
+    );
   });
 
   it("rejects users outside the review school scope", async () => {
@@ -409,10 +429,8 @@ describe("/api/gbp/reply", () => {
     );
   });
 
-  it("returns a Google integration error when GBP posting fails", async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+  it("saves the reply locally when GBP posting is rejected", async () => {
+    const { prisma } = await import("@/lib/prisma");
     const gbpReply = await import("@/lib/gbp-reply");
     vi.mocked(gbpReply.postGbpReviewReply).mockRejectedValueOnce(
       new gbpReply.GbpReplyError(403, "forbidden"),
@@ -430,10 +448,74 @@ describe("/api/gbp/reply", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(502);
-    expect(body.message).toBe(
-      "Google Business Profileへの返信投稿に失敗しました。Google連携設定を確認してください。",
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      googlePosted: false,
+      deliveryStatus: "LOCAL_SAVED",
+      review: {
+        id: "review-1",
+        status: "REPLIED",
+        replyText: "ありがとうございます。",
+      },
+    });
+    expect(prisma.review.update).toHaveBeenCalled();
+  });
+
+  it("saves the reply locally when the access token cannot be refreshed", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const gbpReply = await import("@/lib/gbp-reply");
+    vi.mocked(gbpReply.resolveGbpAccessToken).mockRejectedValueOnce(
+      new Error("Google OAuth refresh failed: 400"),
     );
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "ローカル保存する返信です。",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.googlePosted).toBe(false);
+    expect(gbpReply.postGbpReviewReply).not.toHaveBeenCalled();
+    expect(prisma.review.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          aiReplyText: "ローカル保存する返信です。",
+          replyText: "ローカル保存する返信です。",
+          status: "REPLIED",
+        }),
+      }),
+    );
+  });
+
+  it("returns an error when the local reply cannot be persisted", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.update).mockRejectedValueOnce(new Error("DB down"));
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/gbp/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "ありがとうございます。",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.message).toBe("口コミ返信を投稿できませんでした。");
     consoleErrorSpy.mockRestore();
   });
 });

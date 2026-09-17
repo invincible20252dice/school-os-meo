@@ -3,7 +3,6 @@ import { isApprovedAccess } from "@/lib/access-control";
 import {
   postGbpReviewReply,
   resolveGbpAccessToken,
-  GbpReplyError,
 } from "@/lib/gbp-reply";
 import { prisma } from "@/lib/prisma";
 import {
@@ -95,9 +94,7 @@ function errorResponse(error: unknown) {
         ? 403
         : message === "REVIEW_NOT_FOUND"
           ? 404
-          : error instanceof GbpReplyError
-            ? 502
-            : 500;
+          : 500;
 
   if (status >= 500) {
     console.error("GBP口コミ返信の投稿に失敗しました。", error);
@@ -112,9 +109,7 @@ function errorResponse(error: unknown) {
             ? "この口コミには返信できません。"
             : status === 404
               ? "対象の口コミが見つかりませんでした。"
-              : error instanceof GbpReplyError
-                ? "Google Business Profileへの返信投稿に失敗しました。Google連携設定を確認してください。"
-                : "口コミ返信を投稿できませんでした。",
+              : "口コミ返信を投稿できませんでした。",
     },
     { status },
   );
@@ -147,27 +142,38 @@ export async function POST(request: Request) {
 
     const { review } = await assertCanAccessReview(request, reviewId);
 
-    const googleReviewId = review.googleReviewId || review.gbpReviewId;
+    const googleReviewId = review.googleReviewId || review.gbpReviewId || "";
+    let googlePosted = false;
 
-    if (!googleReviewId) {
-      throw new Error("REVIEW_NOT_FOUND");
+    if (googleReviewId) {
+      try {
+        const accessToken = await resolveGbpAccessToken({
+          googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
+        });
+
+        await postGbpReviewReply({
+          gbpAccountId:
+            toGbpAccountResource(review.school.gbpAccountId) ||
+            toGbpAccountResource(review.school.schoolSetting?.googleAccountId),
+          gbpLocationId:
+            review.school.gbpLocationId ||
+            review.school.schoolSetting?.selectedGbpLocationId,
+          googleReviewId,
+          replyText,
+          accessToken,
+        });
+        googlePosted = true;
+      } catch (error) {
+        console.warn(
+          "Google Business Profile rejected the reply. Saving it locally for later synchronization.",
+          error,
+        );
+      }
+    } else {
+      console.warn(
+        "The review has no Google review identifier. Saving the reply locally.",
+      );
     }
-
-    const accessToken = await resolveGbpAccessToken({
-      googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
-    });
-
-    await postGbpReviewReply({
-      gbpAccountId:
-        toGbpAccountResource(review.school.gbpAccountId) ||
-        toGbpAccountResource(review.school.schoolSetting?.googleAccountId),
-      gbpLocationId:
-        review.school.gbpLocationId ||
-        review.school.schoolSetting?.selectedGbpLocationId,
-      googleReviewId,
-      replyText,
-      accessToken,
-    });
 
     const updatedReview = await prisma.review.update({
       where: { id: review.id },
@@ -181,16 +187,23 @@ export async function POST(request: Request) {
         id: true,
         status: true,
         aiReplyText: true,
+        replyText: true,
         repliedAt: true,
       },
     });
 
     return NextResponse.json({
-      message: "Google口コミへ返信を投稿しました。",
+      success: true,
+      googlePosted,
+      deliveryStatus: googlePosted ? "GOOGLE_POSTED" : "LOCAL_SAVED",
+      message: googlePosted
+        ? "Google口コミへ返信を投稿しました。"
+        : "返信を保存しました。Googleへの反映は連携復旧後に再同期してください。",
       review: {
         id: updatedReview.id,
         status: updatedReview.status,
         aiReplyText: updatedReview.aiReplyText,
+        replyText: updatedReview.replyText,
         repliedAt: updatedReview.repliedAt?.toISOString() || "",
       },
     });

@@ -23,6 +23,8 @@ type ReviewsResponse = {
   success?: boolean;
   reviews?: ReviewRow[];
   message?: string;
+  googlePosted?: boolean;
+  deliveryStatus?: "GOOGLE_POSTED" | "LOCAL_SAVED";
 };
 
 async function buildAuthHeaders(): Promise<Record<string, string>> {
@@ -147,7 +149,7 @@ export default function ReviewsClient() {
         throw new Error(body.message || "口コミ返信を投稿できませんでした。");
       }
 
-      setMessage("Google口コミへ返信を投稿しました。");
+      setMessage(body.message || "口コミ返信を保存しました。");
       await loadReviews();
     } catch (error) {
       setStatus("error");
