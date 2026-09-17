@@ -12,6 +12,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:ci": "npm run test:coverage && npm run build",
     "test:watch": "vitest",
     "check:env": "node scripts/check-env.mjs --strict",
     "build:production": "npm run check:env && npm run build",
