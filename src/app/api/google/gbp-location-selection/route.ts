@@ -10,6 +10,7 @@ type LocationSelectionPayload = {
   schoolId?: string;
   accountName?: string;
   locationName?: string;
+  selectedGbpLocationId?: string;
 };
 
 function normalizeString(value: unknown) {
@@ -43,7 +44,9 @@ export async function POST(request: Request) {
     const body = (await request.json()) as LocationSelectionPayload;
     const requestedSchoolId = normalizeString(body.schoolId);
     const accountName = normalizeString(body.accountName);
-    const locationName = normalizeLocationName(body.locationName);
+    const locationName = normalizeLocationName(
+      body.locationName || body.selectedGbpLocationId,
+    );
 
     if (!requestedSchoolId || !locationName) {
       return NextResponse.json(
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [school, setting] = await prisma.$transaction([
+    const [school, setting, googleAccount] = await prisma.$transaction([
       prisma.school.update({
         where: { id: requestedSchoolId },
         data: {
@@ -103,10 +106,25 @@ export async function POST(request: Request) {
           updatedAt: true,
         },
       }),
+      prisma.googleAccount.upsert({
+        where: { schoolId: requestedSchoolId },
+        create: {
+          schoolId: requestedSchoolId,
+          locationId: locationName,
+          status: "CONNECTED",
+          updatedAt: new Date(),
+        },
+        update: {
+          locationId: locationName,
+          status: "CONNECTED",
+          updatedAt: new Date(),
+        },
+      }),
     ]);
 
     return NextResponse.json({
       school,
+      account: googleAccount,
       setting: {
         ...setting,
         googleRefreshToken: setting.googleRefreshToken ? "********" : "",

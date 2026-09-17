@@ -44,6 +44,14 @@ vi.mock("@/lib/prisma", () => ({
         updatedAt: new Date("2026-07-30T10:00:00.000Z"),
       })),
     },
+    googleAccount: {
+      upsert: vi.fn(async () => ({
+        id: "google-account-1",
+        schoolId: "school-1",
+        locationId: "locations/100",
+        status: "CONNECTED",
+      })),
+    },
   },
 }));
 
@@ -53,7 +61,7 @@ describe("POST /api/google/gbp-location-selection", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
-  it("saves selected GBP location to School and SchoolSetting", async () => {
+  it("saves selected GBP location to every Google integration record", async () => {
     const { prisma } = await import("@/lib/prisma");
 
     const response = await POST(
@@ -79,6 +87,23 @@ describe("POST /api/google/gbp-location-selection", () => {
         }),
       }),
     );
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { schoolId: "school-1" },
+        create: expect.objectContaining({
+          locationId: "locations/100",
+          status: "CONNECTED",
+        }),
+        update: expect.objectContaining({
+          locationId: "locations/100",
+          status: "CONNECTED",
+        }),
+      }),
+    );
+    expect(body.account).toMatchObject({
+      schoolId: "school-1",
+      status: "CONNECTED",
+    });
   });
 
   it("normalizes manually entered location id without overwriting Google account", async () => {
@@ -111,6 +136,39 @@ describe("POST /api/google/gbp-location-selection", () => {
           googleConnected: true,
           selectedGbpLocationId: "locations/1234567890",
         },
+      }),
+    );
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          locationId: "locations/1234567890",
+        }),
+        update: expect.objectContaining({
+          locationId: "locations/1234567890",
+        }),
+      }),
+    );
+  });
+
+  it("accepts the manual-entry selectedGbpLocationId payload key", async () => {
+    const { prisma } = await import("@/lib/prisma");
+
+    const response = await POST(
+      new Request("https://app.example.com/api/google/gbp-location-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          schoolId: "school-1",
+          selectedGbpLocationId: "6467241578381534467",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          locationId: "locations/6467241578381534467",
+        }),
       }),
     );
   });

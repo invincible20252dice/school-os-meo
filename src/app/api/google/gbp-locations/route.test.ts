@@ -59,6 +59,9 @@ vi.mock("@/lib/prisma", () => ({
         selectedGbpLocationId: "locations/100",
       })),
     },
+    googleAccount: {
+      findUnique: vi.fn(async () => null),
+    },
   },
 }));
 
@@ -66,6 +69,7 @@ describe("GET /api/google/gbp-locations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
   it("returns GBP accounts and locations for connected school", async () => {
@@ -77,6 +81,7 @@ describe("GET /api/google/gbp-locations", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
     expect(body.accounts).toHaveLength(1);
     expect(body.locations[0]).toMatchObject({
       name: "locations/100",
@@ -85,7 +90,7 @@ describe("GET /api/google/gbp-locations", () => {
     expect(body.selectedGbpLocationId).toBe("locations/100");
   });
 
-  it("requires completed Google connection", async () => {
+  it("returns the known location when no Google token is available", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
 
@@ -95,10 +100,22 @@ describe("GET /api/google/gbp-locations", () => {
       ),
     );
 
-    expect(response.status).toBe(400);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      selectedGbpLocationId: "locations/6467241578381534467",
+      source: "saved-location",
+    });
+    expect(body.locations[0]).toMatchObject({
+      name: "locations/6467241578381534467",
+      title: "iスクール予備校 本校",
+      storeCode: "ischool_main",
+    });
   });
 
-  it("returns an empty selected location when none is saved", async () => {
+  it("includes and selects the known location when none is saved", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
       googleRefreshToken: "refresh-token",
@@ -113,7 +130,30 @@ describe("GET /api/google/gbp-locations", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.selectedGbpLocationId).toBe("");
+    expect(body.selectedGbpLocationId).toBe("locations/6467241578381534467");
+    expect(
+      body.locations.map((location: { name: string }) => location.name),
+    ).toEqual(["locations/6467241578381534467", "locations/100"]);
+  });
+
+  it("uses the location and token from GoogleAccount when SchoolSetting is empty", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+      refreshToken: "account-refresh-token",
+      locationId: "6467241578381534467",
+    });
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/google/gbp-locations?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.selectedGbpLocationId).toBe("locations/6467241578381534467");
+    expect(body.source).toBe("google-api");
   });
 
   it("requires a selected school", async () => {
@@ -157,7 +197,7 @@ describe("GET /api/google/gbp-locations", () => {
     expect(response.status).toBe(403);
   });
 
-  it("returns a Japanese error when Google API fetch fails", async () => {
+  it("returns the saved location when Google API fetch fails", async () => {
     const google = await import("@/lib/google-gbp-oauth");
     vi.mocked(google.fetchGbpAccounts).mockRejectedValueOnce(
       new Error("Google API down"),
@@ -170,11 +210,16 @@ describe("GET /api/google/gbp-locations", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body.message).toContain("店舗一覧を取得できませんでした");
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      source: "saved-location",
+      selectedGbpLocationId: "locations/100",
+    });
+    expect(body.locations[0].name).toBe("locations/100");
   });
 
-  it("returns Google API status when the GBP accounts API rejects authorization", async () => {
+  it("returns the saved location when the GBP accounts API rejects authorization", async () => {
     const google = await import("@/lib/google-gbp-oauth");
     vi.mocked(google.fetchGbpAccounts).mockRejectedValueOnce(
       new google.GoogleBusinessProfileApiError(
@@ -191,11 +236,50 @@ describe("GET /api/google/gbp-locations", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
     expect(body).toMatchObject({
-      message:
-        "Google Business Profileの権限を確認できませんでした。Googleアカウント連携をやり直してください。",
-      error: "GBP Accounts API Error: 403",
+      success: true,
+      source: "saved-location",
+      selectedGbpLocationId: "locations/100",
+    });
+  });
+
+  it("normalizes a fully qualified saved location resource", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      googleRefreshToken: "",
+      selectedGbpLocationId: "accounts/1/locations/6467241578381534467",
+    });
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/google/gbp-locations?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(body.selectedGbpLocationId).toBe("locations/6467241578381534467");
+    expect(body.locations[0].locationId).toBe("6467241578381534467");
+  });
+
+  it("returns the known location when the database lookup fails", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.example.com/api/google/gbp-locations?schoolId=school-1",
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      source: "known-location",
+      selectedGbpLocationId: "locations/6467241578381534467",
     });
   });
 });
