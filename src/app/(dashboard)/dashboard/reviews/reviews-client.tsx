@@ -77,6 +77,24 @@ function ratingLabel(rating: number | null) {
   return `${"★".repeat(Math.round(rating))}${"☆".repeat(5 - Math.round(rating))}`;
 }
 
+function copyTextWithDocument(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("COPY_COMMAND_FAILED");
+    }
+  } finally {
+    textarea.remove();
+  }
+}
+
 export default function ReviewsClient() {
   const searchParams = useSearchParams();
   const selectedSchoolId = searchParams.get("schoolId") || "";
@@ -145,6 +163,7 @@ export default function ReviewsClient() {
     try {
       await copyReviewReplyAndOpenGbp(drafts[reviewId] || "", {
         writeText: (text) => navigator.clipboard.writeText(text),
+        writeTextFallback: copyTextWithDocument,
         openWindow: (url, target) => window.open(url, target),
       });
       setStatus("idle");

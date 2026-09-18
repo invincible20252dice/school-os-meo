@@ -7,6 +7,7 @@ type OpenedWindow = {
 
 type CopyReviewReplyDependencies = {
   writeText: (text: string) => Promise<void>;
+  writeTextFallback?: (text: string) => void;
   openWindow: (
     url: string,
     target: string,
@@ -34,9 +35,17 @@ export async function copyReviewReplyAndOpenGbp(
 
   try {
     await dependencies.writeText(normalizedReply);
-  } catch (error) {
-    openedWindow?.close?.();
-    throw error;
+  } catch (clipboardError) {
+    try {
+      dependencies.writeTextFallback?.(normalizedReply);
+
+      if (!dependencies.writeTextFallback) {
+        throw clipboardError;
+      }
+    } catch (fallbackError) {
+      openedWindow?.close?.();
+      throw fallbackError;
+    }
   }
 
   if (!openedWindow) {

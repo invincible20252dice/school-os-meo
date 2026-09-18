@@ -36,7 +36,22 @@ describe("copyReviewReplyAndOpenGbp", () => {
     expect(openWindow).not.toHaveBeenCalled();
   });
 
-  it("closes the opened tab when clipboard writing fails", async () => {
+  it("uses the browser copy fallback when clipboard permission is denied", async () => {
+    const writeTextFallback = vi.fn();
+
+    const result = await copyReviewReplyAndOpenGbp("返信案", {
+      writeText: vi.fn(async () => {
+        throw new Error("clipboard denied");
+      }),
+      writeTextFallback,
+      openWindow: vi.fn(() => ({ opener: null })),
+    });
+
+    expect(writeTextFallback).toHaveBeenCalledWith("返信案");
+    expect(result.replyText).toBe("返信案");
+  });
+
+  it("closes the opened tab when both copy methods fail", async () => {
     const close = vi.fn();
 
     await expect(
@@ -44,9 +59,12 @@ describe("copyReviewReplyAndOpenGbp", () => {
         writeText: vi.fn(async () => {
           throw new Error("clipboard denied");
         }),
+        writeTextFallback: vi.fn(() => {
+          throw new Error("fallback denied");
+        }),
         openWindow: vi.fn(() => ({ opener: null, close })),
       }),
-    ).rejects.toThrow("clipboard denied");
+    ).rejects.toThrow("fallback denied");
     expect(close).toHaveBeenCalledOnce();
   });
 
