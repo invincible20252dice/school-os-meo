@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { copyReviewReplyAndOpenGbp } from "@/lib/review-reply-assist";
+import {
+  GBP_REVIEWS_MANAGEMENT_URL,
+  copyReviewReply,
+} from "@/lib/review-reply-assist";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
 
@@ -157,14 +160,13 @@ export default function ReviewsClient() {
     }
   }
 
-  async function copyReplyAndOpenGoogle(reviewId: string) {
+  async function copyReplyForGoogle(reviewId: string) {
     setMessage("");
 
     try {
-      await copyReviewReplyAndOpenGbp(drafts[reviewId] || "", {
+      await copyReviewReply(drafts[reviewId] || "", {
         writeText: (text) => navigator.clipboard.writeText(text),
         writeTextFallback: copyTextWithDocument,
-        openWindow: (url, target) => window.open(url, target),
       });
       setStatus("idle");
       setMessage(
@@ -175,9 +177,7 @@ export default function ReviewsClient() {
       setMessage(
         error instanceof Error && error.message === "REPLY_REQUIRED"
           ? "コピーするAI返信案を入力してください。"
-          : error instanceof Error && error.message === "POPUP_BLOCKED"
-            ? "返信文はコピーされました。ポップアップを許可して、もう一度お試しください。"
-            : "返信文をコピーできませんでした。ブラウザの権限を確認してください。",
+          : "返信文をコピーできませんでした。ブラウザの権限を確認してください。",
       );
     }
   }
@@ -342,15 +342,16 @@ export default function ReviewsClient() {
                 {review.repliedAt ? "返信済" : "未返信"}
               </span>
               <div className={styles.actionButtons}>
-                <button
-                  type="button"
+                <a
                   className={styles.primaryButton}
-                  onClick={() => void copyReplyAndOpenGoogle(review.id)}
-                  disabled={status === "saving"}
+                  href={GBP_REVIEWS_MANAGEMENT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => void copyReplyForGoogle(review.id)}
                 >
                   <CopyIcon />
                   AI返信案をコピーしてGoogleで返信
-                </button>
+                </a>
                 <button
                   type="button"
                   className={styles.secondaryButton}

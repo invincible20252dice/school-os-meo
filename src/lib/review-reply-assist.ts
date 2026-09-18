@@ -1,20 +1,11 @@
 export const GBP_REVIEWS_MANAGEMENT_URL = "https://business.google.com/locations";
 
-type OpenedWindow = {
-  close?: () => void;
-  opener?: unknown;
-};
-
 type CopyReviewReplyDependencies = {
   writeText: (text: string) => Promise<void>;
   writeTextFallback?: (text: string) => void;
-  openWindow: (
-    url: string,
-    target: string,
-  ) => OpenedWindow | null;
 };
 
-export async function copyReviewReplyAndOpenGbp(
+export async function copyReviewReply(
   replyText: string,
   dependencies: CopyReviewReplyDependencies,
 ) {
@@ -22,15 +13,6 @@ export async function copyReviewReplyAndOpenGbp(
 
   if (!normalizedReply) {
     throw new Error("REPLY_REQUIRED");
-  }
-
-  const openedWindow = dependencies.openWindow(
-    GBP_REVIEWS_MANAGEMENT_URL,
-    "_blank",
-  );
-
-  if (openedWindow) {
-    openedWindow.opener = null;
   }
 
   try {
@@ -43,17 +25,9 @@ export async function copyReviewReplyAndOpenGbp(
         throw clipboardError;
       }
     } catch (fallbackError) {
-      openedWindow?.close?.();
       throw fallbackError;
     }
   }
 
-  if (!openedWindow) {
-    throw new Error("POPUP_BLOCKED");
-  }
-
-  return {
-    replyText: normalizedReply,
-    targetUrl: GBP_REVIEWS_MANAGEMENT_URL,
-  };
+  return normalizedReply;
 }
