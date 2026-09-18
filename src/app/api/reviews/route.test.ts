@@ -48,6 +48,17 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     review: {
       findMany: vi.fn(async () => [reviewRow]),
+      findUnique: vi.fn(async () => ({
+        id: reviewRow.id,
+        schoolId: reviewRow.schoolId,
+        source: reviewRow.source,
+      })),
+      update: vi.fn(async () => ({
+        id: reviewRow.id,
+        status: "REPLIED",
+        replyText: reviewRow.aiReplyDraft,
+        repliedAt: new Date("2026-08-01T12:00:00.000Z"),
+      })),
     },
   },
 }));
@@ -212,6 +223,188 @@ describe("GET /api/reviews", () => {
 
     expect(response.status).toBe(500);
     expect(body.message).toBe("口コミ一覧を取得できませんでした。");
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("PATCH /api/reviews", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("marks a Google review as replied with the edited draft", async () => {
+    const { PATCH } = await import("./route");
+    const { prisma } = await import("@/lib/prisma");
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewId: "review-1",
+          replyText: "  Googleで投稿した返信です。  ",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      message: "Googleでの返信完了を記録しました。",
+      review: {
+        id: "review-1",
+        status: "REPLIED",
+        repliedAt: "2026-08-01T12:00:00.000Z",
+      },
+    });
+    expect(prisma.review.update).toHaveBeenCalledWith({
+      where: { id: "review-1" },
+      data: expect.objectContaining({
+        aiReplyText: "Googleで投稿した返信です。",
+        aiReplyDraft: "Googleで投稿した返信です。",
+        replyText: "Googleで投稿した返信です。",
+        status: "REPLIED",
+        repliedAt: expect.any(Date),
+      }),
+      select: {
+        id: true,
+        status: true,
+        replyText: true,
+        repliedAt: true,
+      },
+    });
+  });
+
+  it.each([
+    [{ replyText: "返信です。" }],
+    [{ reviewId: "review-1", replyText: "   " }],
+  ])("rejects incomplete update payloads", async (payload) => {
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects pending users", async () => {
+    const { PATCH } = await import("./route");
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "pending-1",
+        role: "manager",
+        schoolId: "school-1",
+        schoolIds: ["school-1"],
+        name: "承認待ち",
+        email: "pending@example.com",
+        status: "pending",
+        source: "profiles",
+      },
+      isAuthenticated: true,
+    });
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify({ reviewId: "review-1", replyText: "返信です。" }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("requires authentication before changing reply status", async () => {
+    const { PATCH } = await import("./route");
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      access: {
+        userId: "demo-user",
+        role: "admin",
+        schoolId: "",
+        schoolIds: [],
+        name: "Demo User",
+        email: "",
+        status: "active",
+        source: "fallback",
+      },
+      isAuthenticated: false,
+    });
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify({ reviewId: "review-1", replyText: "返信です。" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.message).toBe("ログイン後に口コミの状態を更新してください。");
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing review", async () => {
+    const { PATCH } = await import("./route");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce(null);
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify({ reviewId: "review-1", replyText: "返信です。" }),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("enforces the manager school scope", async () => {
+    const { PATCH } = await import("./route");
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
+      requestedSchoolId: "school-1",
+      effectiveSchoolId: "school-2",
+      role: "manager",
+      canSwitchSchool: false,
+    });
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify({ reviewId: "review-1", replyText: "返信です。" }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("returns a Japanese error when the update fails", async () => {
+    const { PATCH } = await import("./route");
+    const { prisma } = await import("@/lib/prisma");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(prisma.review.update).mockRejectedValueOnce(new Error("DB down"));
+
+    const response = await PATCH(
+      new Request("https://app.example.com/api/reviews", {
+        method: "PATCH",
+        body: JSON.stringify({ reviewId: "review-1", replyText: "返信です。" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.message).toBe("口コミの返信状態を更新できませんでした。");
     consoleErrorSpy.mockRestore();
   });
 });

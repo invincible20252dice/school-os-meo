@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { copyReviewReplyAndOpenGbp } from "@/lib/review-reply-assist";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
 
@@ -11,10 +12,12 @@ type ReviewRow = {
   schoolName: string;
   status: string;
   parentName: string;
+  authorName: string;
   rating: number | null;
   originalText: string;
   googleReviewId: string;
   aiReplyText: string;
+  replyText: string;
   repliedAt: string;
   createdAt: string;
 };
@@ -38,15 +41,6 @@ async function buildAuthHeaders(): Promise<Record<string, string>> {
   }
 }
 
-function SendIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.smallIcon}>
-      <path d="M22 2L11 13" />
-      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-    </svg>
-  );
-}
-
 function RefreshIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.smallIcon}>
@@ -54,6 +48,23 @@ function RefreshIcon() {
       <path d="M3 12a9 9 0 0 1 15.5-6.2" />
       <path d="M18.5 2.8v3.5H15" />
       <path d="M5.5 21.2v-3.5H9" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.smallIcon}>
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={styles.smallIcon}>
+      <path d="M20 6L9 17l-5-5" />
     </svg>
   );
 }
@@ -128,14 +139,38 @@ export default function ReviewsClient() {
     }
   }
 
-  async function postReply(reviewId: string) {
+  async function copyReplyAndOpenGoogle(reviewId: string) {
+    setMessage("");
+
+    try {
+      await copyReviewReplyAndOpenGbp(drafts[reviewId] || "", {
+        writeText: (text) => navigator.clipboard.writeText(text),
+        openWindow: (url, target) => window.open(url, target),
+      });
+      setStatus("idle");
+      setMessage(
+        "返信文をコピーしました。Googleビジネスプロフィールで貼り付けて返信してください。",
+      );
+    } catch (error) {
+      setStatus("error");
+      setMessage(
+        error instanceof Error && error.message === "REPLY_REQUIRED"
+          ? "コピーするAI返信案を入力してください。"
+          : error instanceof Error && error.message === "POPUP_BLOCKED"
+            ? "返信文はコピーされました。ポップアップを許可して、もう一度お試しください。"
+            : "返信文をコピーできませんでした。ブラウザの権限を確認してください。",
+      );
+    }
+  }
+
+  async function markAsReplied(reviewId: string) {
     setStatus("saving");
     setMessage("");
 
     try {
       const headers = await buildAuthHeaders();
-      const response = await fetch("/api/reviews/reply", {
-        method: "POST",
+      const response = await fetch("/api/dashboard/reviews", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({
           reviewId,
@@ -146,15 +181,15 @@ export default function ReviewsClient() {
       const body = (await response.json()) as ReviewsResponse;
 
       if (!response.ok) {
-        throw new Error(body.message || "口コミ返信を投稿できませんでした。");
+        throw new Error(body.message || "返信状態を更新できませんでした。");
       }
 
-      setMessage(body.message || "口コミ返信を保存しました。");
       await loadReviews();
+      setMessage(body.message || "Googleでの返信完了を記録しました。");
     } catch (error) {
       setStatus("error");
       setMessage(
-        error instanceof Error ? error.message : "口コミ返信を投稿できませんでした。",
+        error instanceof Error ? error.message : "返信状態を更新できませんでした。",
       );
     }
   }
@@ -214,7 +249,9 @@ export default function ReviewsClient() {
       <div className={styles.liveHeader}>
         <div>
           <h2>実データの口コミ返信</h2>
-          <p>GBPから取得した口コミのAI返信案を確認し、承認後にGoogleへ投稿します。</p>
+          <p>
+            口コミとAI返信案を確認し、返信文をコピーしてGoogleビジネスプロフィールから返信します。
+          </p>
         </div>
         <button type="button" className={styles.secondaryButton} onClick={loadReviews}>
           <RefreshIcon />
@@ -261,7 +298,7 @@ export default function ReviewsClient() {
             <div className={styles.reviewCardHeader}>
               <div>
                 <strong>{review.schoolName}</strong>
-                <span>{review.parentName}</span>
+                <span>{review.authorName || review.parentName}</span>
               </div>
               <b>{ratingLabel(review.rating)}</b>
             </div>
@@ -282,16 +319,29 @@ export default function ReviewsClient() {
               />
             </label>
             <div className={styles.reviewActions}>
-              <span>{review.repliedAt ? "返信済み" : "未返信"}</span>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() => void postReply(review.id)}
-                disabled={status === "saving" || Boolean(review.repliedAt)}
-              >
-                <SendIcon />
-                Googleに返信を投稿する
-              </button>
+              <span className={review.repliedAt ? styles.repliedBadge : styles.pendingBadge}>
+                {review.repliedAt ? "返信済" : "未返信"}
+              </span>
+              <div className={styles.actionButtons}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => void copyReplyAndOpenGoogle(review.id)}
+                  disabled={status === "saving"}
+                >
+                  <CopyIcon />
+                  AI返信案をコピーしてGoogleで返信
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => void markAsReplied(review.id)}
+                  disabled={status === "saving" || Boolean(review.repliedAt)}
+                >
+                  <CheckIcon />
+                  返信済みにする
+                </button>
+              </div>
             </div>
           </article>
         ))}

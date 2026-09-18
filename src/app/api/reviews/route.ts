@@ -27,6 +27,51 @@ type ReviewRow = {
   school: { name: string };
 };
 
+type UpdateReviewBody = {
+  reviewId?: string;
+  replyText?: string;
+};
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function resolveScopedReview(request: Request, reviewId: string) {
+  const url = new URL(request.url);
+  const accessResult = await resolveRequestAccess(request, url);
+
+  if (!accessResult.isAuthenticated) {
+    return { error: "UNAUTHENTICATED" as const };
+  }
+
+  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+    return { error: "PENDING" as const };
+  }
+
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+    select: { id: true, schoolId: true, source: true },
+  });
+
+  if (!review) {
+    return { error: "NOT_FOUND" as const };
+  }
+
+  const scopedSchool = buildScopedSchoolFilter(
+    accessResult.access,
+    review.schoolId,
+  );
+
+  if (
+    scopedSchool.effectiveSchoolId &&
+    scopedSchool.effectiveSchoolId !== review.schoolId
+  ) {
+    return { error: "FORBIDDEN" as const };
+  }
+
+  return { review };
+}
+
 function serializeReview(review: ReviewRow) {
   const authorName = review.authorName || review.parentName || "Googleユーザー";
   const originalText = review.originalText || review.comment || "";
@@ -118,6 +163,75 @@ export async function GET(request: Request) {
     console.error("[GET /api/dashboard/reviews]", error);
     return NextResponse.json(
       { message: "口コミ一覧を取得できませんでした。" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = (await request.json()) as UpdateReviewBody;
+    const reviewId = normalizeString(body.reviewId);
+    const replyText = normalizeString(body.replyText);
+
+    if (!reviewId || !replyText) {
+      return NextResponse.json(
+        { message: "口コミと実際に投稿した返信文を確認してください。" },
+        { status: 400 },
+      );
+    }
+
+    const scopedReview = await resolveScopedReview(request, reviewId);
+
+    if ("error" in scopedReview) {
+      const status =
+        scopedReview.error === "UNAUTHENTICATED"
+          ? 401
+          : scopedReview.error === "NOT_FOUND"
+            ? 404
+            : 403;
+      return NextResponse.json(
+        {
+          message:
+            status === 401
+              ? "ログイン後に口コミの状態を更新してください。"
+              : status === 404
+              ? "対象のGoogle口コミが見つかりませんでした。"
+              : "この口コミの状態は更新できません。",
+        },
+        { status },
+      );
+    }
+
+    const updatedReview = await prisma.review.update({
+      where: { id: scopedReview.review.id },
+      data: {
+        aiReplyText: replyText,
+        aiReplyDraft: replyText,
+        replyText,
+        status: "REPLIED",
+        repliedAt: new Date(),
+      },
+      select: {
+        id: true,
+        status: true,
+        replyText: true,
+        repliedAt: true,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Googleでの返信完了を記録しました。",
+      review: {
+        ...updatedReview,
+        repliedAt: updatedReview.repliedAt?.toISOString() || "",
+      },
+    });
+  } catch (error) {
+    console.error("[PATCH /api/dashboard/reviews]", error);
+    return NextResponse.json(
+      { message: "口コミの返信状態を更新できませんでした。" },
       { status: 500 },
     );
   }

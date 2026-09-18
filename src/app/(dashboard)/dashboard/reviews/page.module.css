@@ -207,6 +207,31 @@
 
 .reviewActions {
   margin-top: 14px;
+  align-items: flex-end;
+}
+
+.actionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.repliedBadge,
+.pendingBadge {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.repliedBadge {
+  background: #e5f6ef;
+  color: #147d68 !important;
+}
+
+.pendingBadge {
+  background: #fff2df;
+  color: #9a5b00 !important;
 }
 
 .primaryButton,
@@ -268,6 +293,27 @@
 .errorMessage {
   background: #fff0ee;
   color: #c43b2f;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 20px 16px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+
+  .liveHeader,
+  .reviewActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actionButtons,
+  .actionButtons button {
+    width: 100%;
+  }
 }
 
 .panel,
