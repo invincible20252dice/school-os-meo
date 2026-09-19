@@ -1,4 +1,5 @@
-export const GBP_REVIEWS_MANAGEMENT_URL = "https://business.google.com/locations";
+export const GOOGLE_REVIEW_MANAGEMENT_URL =
+  "https://www.google.com/search?q=i%E3%82%B9%E3%82%AF%E3%83%BC%E3%83%AB%E4%BA%88%E5%82%99%E6%A0%A1+%E6%9C%AC%E6%A0%A1";
 
 type CopyReviewReplyDependencies = {
   writeText: (text: string) => Promise<void>;

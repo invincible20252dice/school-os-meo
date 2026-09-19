@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  GBP_REVIEWS_MANAGEMENT_URL,
+  GOOGLE_REVIEW_MANAGEMENT_URL,
   copyReviewReply,
 } from "@/lib/review-reply-assist";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
@@ -344,7 +344,7 @@ export default function ReviewsClient() {
               <div className={styles.actionButtons}>
                 <a
                   className={styles.primaryButton}
-                  href={GBP_REVIEWS_MANAGEMENT_URL}
+                  href={GOOGLE_REVIEW_MANAGEMENT_URL}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => void copyReplyForGoogle(review.id)}

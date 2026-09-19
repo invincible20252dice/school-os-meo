@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  GOOGLE_REVIEW_MANAGEMENT_URL,
   copyReviewReply,
 } from "./review-reply-assist";
+
+describe("GOOGLE_REVIEW_MANAGEMENT_URL", () => {
+  it("targets the iSchool main campus Google search management surface", () => {
+    const url = new URL(GOOGLE_REVIEW_MANAGEMENT_URL);
+
+    expect(url.origin).toBe("https://www.google.com");
+    expect(url.pathname).toBe("/search");
+    expect(url.searchParams.get("q")).toBe("iスクール予備校 本校");
+  });
+});
 
 describe("copyReviewReply", () => {
   it("copies the normalized draft", async () => {
