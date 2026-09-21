@@ -1,5 +1,17 @@
-export const GOOGLE_REVIEW_MANAGEMENT_URL =
-  "https://www.google.com/search?q=i%E3%82%B9%E3%82%AF%E3%83%BC%E3%83%AB%E4%BA%88%E5%82%99%E6%A0%A1+%E6%9C%AC%E6%A0%A1";
+export function formatDraftText(text: string | null | undefined) {
+  return (text ?? "").replace(/\\r\\n|\\n|\r\n/g, "\n");
+}
+
+export function buildGoogleReviewManagementUrl(
+  locationId: string | null | undefined,
+) {
+  const match = /^(?:(?:accounts\/\d+\/)?locations\/)?(\d+)$/.exec(
+    locationId?.trim() ?? "",
+  );
+
+  // GBP location IDs identify the owner management page, not a Maps Place ID or CID.
+  return match ? `https://business.google.com/n/${match[1]}/reviews` : null;
+}
 
 type CopyReviewReplyDependencies = {
   writeText: (text: string) => Promise<void>;
@@ -10,7 +22,7 @@ export async function copyReviewReply(
   replyText: string,
   dependencies: CopyReviewReplyDependencies,
 ) {
-  const normalizedReply = replyText.trim();
+  const normalizedReply = formatDraftText(replyText).trim();
 
   if (!normalizedReply) {
     throw new Error("REPLY_REQUIRED");

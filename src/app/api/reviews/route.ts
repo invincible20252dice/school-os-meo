@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
+  buildGoogleReviewManagementUrl,
+  formatDraftText,
+} from "@/lib/review-reply-assist";
+import {
   buildScopedSchoolFilter,
   resolveRequestAccess,
 } from "@/lib/supabase-access";
@@ -24,7 +28,10 @@ type ReviewRow = {
   aiReplyGeneratedAt: Date | null;
   repliedAt: Date | null;
   createdAt: Date;
-  school: { name: string };
+  school: {
+    name: string;
+    schoolSetting: { selectedGbpLocationId: string | null } | null;
+  };
 };
 
 type UpdateReviewBody = {
@@ -75,13 +82,16 @@ async function resolveScopedReview(request: Request, reviewId: string) {
 function serializeReview(review: ReviewRow) {
   const authorName = review.authorName || review.parentName || "Googleユーザー";
   const originalText = review.originalText || review.comment || "";
-  const aiReplyText = review.aiReplyDraft || review.aiReplyText || "";
+  const aiReplyText = formatDraftText(review.aiReplyDraft || review.aiReplyText);
   const googleReviewId = review.googleReviewId || review.gbpReviewId || "";
 
   return {
     id: review.id,
     schoolId: review.schoolId,
     schoolName: review.school.name,
+    googleReviewManagementUrl: buildGoogleReviewManagementUrl(
+      review.school.schoolSetting?.selectedGbpLocationId,
+    ),
     source: review.source,
     status: review.status,
     parentName: authorName,
@@ -94,7 +104,7 @@ function serializeReview(review: ReviewRow) {
     gbpReviewId: review.gbpReviewId || "",
     aiReplyText,
     aiReplyDraft: aiReplyText,
-    replyText: review.replyText || "",
+    replyText: formatDraftText(review.replyText),
     aiReplyGeneratedAt: review.aiReplyGeneratedAt?.toISOString() || "",
     repliedAt: review.repliedAt?.toISOString() || "",
     createdAt: review.createdAt.toISOString(),
@@ -143,6 +153,7 @@ export async function GET(request: Request) {
         school: {
           select: {
             name: true,
+            schoolSetting: { select: { selectedGbpLocationId: true } },
           },
         },
       },
@@ -172,7 +183,7 @@ export async function PATCH(request: Request) {
   try {
     const body = (await request.json()) as UpdateReviewBody;
     const reviewId = normalizeString(body.reviewId);
-    const replyText = normalizeString(body.replyText);
+    const replyText = formatDraftText(normalizeString(body.replyText)).trim();
 
     if (!reviewId || !replyText) {
       return NextResponse.json(

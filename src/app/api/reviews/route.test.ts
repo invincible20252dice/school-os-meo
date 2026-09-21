@@ -41,7 +41,10 @@ const reviewRow = {
   aiReplyGeneratedAt: new Date("2026-08-01T10:00:00.000Z"),
   repliedAt: null,
   createdAt: new Date("2026-08-01T09:00:00.000Z"),
-  school: { name: "iスクール予備校" },
+  school: {
+    name: "iスクール予備校",
+    schoolSetting: { selectedGbpLocationId: "locations/6467241578381534467" },
+  },
 };
 
 vi.mock("@/lib/prisma", () => ({
@@ -79,6 +82,7 @@ describe("GET /api/reviews", () => {
     expect(body.reviews[0]).toMatchObject({
       id: "review-1",
       schoolName: "iスクール予備校",
+      googleReviewManagementUrl: "https://business.google.com/n/6467241578381534467/reviews",
       parentName: "佐藤英樹",
       rating: 5,
       originalText: "先生が丁寧でした。",
@@ -95,6 +99,10 @@ describe("GET /api/reviews", () => {
           gbpReviewId: true,
           aiReplyDraft: true,
           replyText: true,
+          school: { select: {
+            name: true,
+            schoolSetting: { select: { selectedGbpLocationId: true } },
+          } },
         }),
         orderBy: { createdAt: "desc" },
       }),
@@ -127,6 +135,44 @@ describe("GET /api/reviews", () => {
       replyText: "返信済みです。",
       repliedAt: "2026-08-01T11:00:00.000Z",
     });
+  });
+
+  it("returns actual line breaks for stored escaped drafts and replies", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      { ...reviewRow, aiReplyDraft: "佐藤様\\n\\nありがとうございます。", replyText: "冒頭\\r\\n本文" },
+      { ...reviewRow, id: "review-2", aiReplyDraft: null, aiReplyText: "一ノ瀬様\\n\\nありがとうございます。" },
+    ]);
+
+    const response = await GET(new Request("https://app.example.com/api/reviews"));
+    const body = await response.json();
+    expect(body.reviews[0]).toMatchObject({
+      aiReplyText: "佐藤様\n\nありがとうございます。",
+      aiReplyDraft: "佐藤様\n\nありがとうございます。",
+      replyText: "冒頭\n本文",
+    });
+    expect(body.reviews[1].aiReplyText).toBe("一ノ瀬様\n\nありがとうございます。");
+  });
+
+  it("binds each review link to its own school and leaves unconfigured schools unset", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      reviewRow,
+      { ...reviewRow, id: "review-2", schoolId: "school-2", school: {
+        name: "別校舎", schoolSetting: { selectedGbpLocationId: "locations/987" },
+      } },
+      { ...reviewRow, id: "review-3", schoolId: "school-3", school: {
+        name: "未設定校舎", schoolSetting: null,
+      } },
+    ]);
+
+    const response = await GET(new Request("https://app.example.com/api/reviews"));
+    const body = await response.json();
+    expect(body.reviews.map((row: { googleReviewManagementUrl: string | null }) => row.googleReviewManagementUrl)).toEqual([
+      "https://business.google.com/n/6467241578381534467/reviews",
+      "https://business.google.com/n/987/reviews",
+      null,
+    ]);
   });
 
   it("serializes nullable review data without inventing school data", async () => {
@@ -241,7 +287,7 @@ describe("PATCH /api/reviews", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reviewId: "review-1",
-          replyText: "  Googleで投稿した返信です。  ",
+          replyText: "  佐藤様\\n\\nGoogleで投稿した返信です。  ",
         }),
       }),
     );
@@ -260,9 +306,9 @@ describe("PATCH /api/reviews", () => {
     expect(prisma.review.update).toHaveBeenCalledWith({
       where: { id: "review-1" },
       data: expect.objectContaining({
-        aiReplyText: "Googleで投稿した返信です。",
-        aiReplyDraft: "Googleで投稿した返信です。",
-        replyText: "Googleで投稿した返信です。",
+        aiReplyText: "佐藤様\n\nGoogleで投稿した返信です。",
+        aiReplyDraft: "佐藤様\n\nGoogleで投稿した返信です。",
+        replyText: "佐藤様\n\nGoogleで投稿した返信です。",
         status: "REPLIED",
         repliedAt: expect.any(Date),
       }),

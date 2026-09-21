@@ -1,16 +1,41 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  GOOGLE_REVIEW_MANAGEMENT_URL,
+  buildGoogleReviewManagementUrl,
   copyReviewReply,
+  formatDraftText,
 } from "./review-reply-assist";
 
-describe("GOOGLE_REVIEW_MANAGEMENT_URL", () => {
-  it("targets the iSchool main campus Google search management surface", () => {
-    const url = new URL(GOOGLE_REVIEW_MANAGEMENT_URL);
+describe("buildGoogleReviewManagementUrl", () => {
+  it.each([
+    "6467241578381534467",
+    " locations/6467241578381534467 ",
+    "accounts/123/locations/6467241578381534467",
+  ])("opens the exact configured location's reviews: %s", (locationId) => {
+    expect(buildGoogleReviewManagementUrl(locationId)).toBe(
+      "https://business.google.com/n/6467241578381534467/reviews",
+    );
+  });
 
-    expect(url.origin).toBe("https://www.google.com");
-    expect(url.pathname).toBe("/search");
-    expect(url.searchParams.get("q")).toBe("iスクール予備校 本校");
+  it.each([
+    null, undefined, "", " ", "manual-123", "ChIJabc", "school-1",
+    "https://example.com", "locations/123?redirect=evil", "locations/../456",
+    "accounts/123/456", "accounts/123/locations/456/reviews/789",
+  ])("does not invent a destination for invalid identifiers: %s", (locationId) => {
+    expect(buildGoogleReviewManagementUrl(locationId)).toBeNull();
+  });
+});
+
+describe("formatDraftText", () => {
+  it.each([
+    [null, ""], [undefined, ""], ["", ""],
+    ["本文です。", "本文です。"],
+    ["佐藤様\\n\\nありがとうございます。", "佐藤様\n\nありがとうございます。"],
+    ["冒頭\\r\\n本文\r\n結び", "冒頭\n本文\n結び"],
+    ["既存の\n改行と\\n文字列", "既存の\n改行と\n文字列"],
+    ["引用 \\\"本文\\\" と \\t は変更しない", "引用 \\\"本文\\\" と \\t は変更しない"],
+  ])("normalizes only line breaks: %s", (input, expected) => {
+    expect(formatDraftText(input)).toBe(expected);
+    expect(formatDraftText(formatDraftText(input))).toBe(expected);
   });
 });
 
@@ -18,18 +43,18 @@ describe("copyReviewReply", () => {
   it("copies the normalized draft", async () => {
     const writeText = vi.fn(async () => undefined);
 
-    const result = await copyReviewReply("  返信案です。  ", {
+    const result = await copyReviewReply("  佐藤様\\n\\n返信案です。  ", {
       writeText,
     });
 
-    expect(writeText).toHaveBeenCalledWith("返信案です。");
-    expect(result).toBe("返信案です。");
+    expect(writeText).toHaveBeenCalledWith("佐藤様\n\n返信案です。");
+    expect(result).toBe("佐藤様\n\n返信案です。");
   });
 
   it("rejects empty drafts without touching the clipboard", async () => {
     const writeText = vi.fn(async () => undefined);
     await expect(
-      copyReviewReply("   ", {
+      copyReviewReply(" \\n\\r\\n  ", {
         writeText,
       }),
     ).rejects.toThrow("REPLY_REQUIRED");
@@ -61,5 +86,11 @@ describe("copyReviewReply", () => {
         }),
       }),
     ).rejects.toThrow("fallback denied");
+  });
+
+  it("preserves a clipboard failure when no fallback is available", async () => {
+    await expect(copyReviewReply("返信案", {
+      writeText: vi.fn().mockRejectedValue(new Error("clipboard denied")),
+    })).rejects.toThrow("clipboard denied");
   });
 });

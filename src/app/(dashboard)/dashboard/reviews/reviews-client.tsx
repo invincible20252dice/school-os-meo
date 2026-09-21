@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  GOOGLE_REVIEW_MANAGEMENT_URL,
   copyReviewReply,
+  formatDraftText,
 } from "@/lib/review-reply-assist";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
@@ -13,6 +13,7 @@ type ReviewRow = {
   id: string;
   schoolId: string;
   schoolName: string;
+  googleReviewManagementUrl: string | null;
   status: string;
   parentName: string;
   authorName: string;
@@ -149,7 +150,9 @@ export default function ReviewsClient() {
       const rows = body.reviews || [];
       setReviews(rows);
       setDrafts(
-        Object.fromEntries(rows.map((review) => [review.id, review.aiReplyText])),
+        Object.fromEntries(
+          rows.map((review) => [review.id, formatDraftText(review.aiReplyText)]),
+        ),
       );
       setStatus("idle");
     } catch (error) {
@@ -288,7 +291,10 @@ export default function ReviewsClient() {
       </div>
 
       {message ? (
-        <p className={status === "error" ? styles.errorMessage : styles.successMessage}>
+        <p
+          role="status"
+          className={status === "error" ? styles.errorMessage : styles.successMessage}
+        >
           {message}
         </p>
       ) : null}
@@ -342,16 +348,30 @@ export default function ReviewsClient() {
                 {review.repliedAt ? "返信済" : "未返信"}
               </span>
               <div className={styles.actionButtons}>
-                <a
-                  className={styles.primaryButton}
-                  href={GOOGLE_REVIEW_MANAGEMENT_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => void copyReplyForGoogle(review.id)}
-                >
-                  <CopyIcon />
-                  AI返信案をコピーしてGoogleで返信
-                </a>
+                {review.googleReviewManagementUrl ? (
+                  <a
+                    className={styles.primaryButton}
+                    href={review.googleReviewManagementUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      if (!formatDraftText(drafts[review.id]).trim()) {
+                        event.preventDefault();
+                      }
+                      void copyReplyForGoogle(review.id);
+                    }}
+                  >
+                    <CopyIcon />
+                    AI返信案をコピーしてGoogleで返信
+                  </a>
+                ) : (
+                  <a
+                    className={styles.secondaryButton}
+                    href={`/dashboard/settings/google?schoolId=${encodeURIComponent(review.schoolId)}`}
+                  >
+                    GBP店舗を設定
+                  </a>
+                )}
                 <button
                   type="button"
                   className={styles.secondaryButton}
