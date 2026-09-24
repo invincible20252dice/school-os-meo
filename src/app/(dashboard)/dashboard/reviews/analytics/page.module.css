@@ -94,11 +94,15 @@
 
 .sentimentPanel,
 .panel {
-  border: 1px solid #dde5e1;
-  border-radius: 8px;
+  border-top: 1px solid #dde5e1;
   background: #ffffff;
-  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
 }
+
+.scope { color: #52606a; font-size: 13px; line-height: 1.7; }
+.error { color: #a32c26; padding: 16px 0; }
+.tab:disabled { opacity: 0.55; cursor: wait; }
+.opinionItem blockquote { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.7; }
+.opinionItem a { display: inline-block; margin-top: 10px; color: #147d68; font-size: 13px; }
 
 .sentimentPanel {
   margin-top: 18px;

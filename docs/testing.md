@@ -6,8 +6,8 @@ Prisma Client generation and the Next.js production build.
 ## Measured scope
 
 `vitest.config.ts` measures the existing shared TypeScript libraries, API routes,
-dashboard navigation, the reviews and overview client components, and the survey
-editor component. It does not measure all
+dashboard navigation, the reviews, overview and review-analytics client components,
+and the survey editor component. It does not measure all
 other application pages or components. The database client bootstrap is excluded;
 tests replace external database and provider connections at their boundaries.
 Test files are not counted as application code.
@@ -27,6 +27,10 @@ cannot hide missing coverage in the covered workflows:
 - `src/lib/google-gbp-oauth.ts`
 - `src/lib/survey-builder.ts`
 - `src/app/(dashboard)/dashboard/surveys/[id]/edit/survey-editor.tsx`
+- `src/app/(dashboard)/dashboard/reviews/analytics/review-analytics-client.tsx`
+- `src/lib/review-analytics.ts`
+- `src/lib/review-analytics-ai.ts`
+- `src/app/api/dashboard/reviews/analytics/route.ts`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -68,6 +72,45 @@ credentials, or prove Google API approval/quota availability. A successful build
 and coverage report are not evidence of a successful production Google write.
 Production posting must be verified with an authorized account and an intended
 reply. Never replace a failed Google request with a fabricated success response.
+
+## Review AI analytics
+
+Both `/dashboard/reviews/analytics` and `/dashboard/reviews/ai` use the same client
+and authenticated `/api/dashboard/reviews/analytics` endpoint. The scope is
+non-archived Google reviews in the selected school (or active schools for an
+approved headquarters user); manager access is checked against school membership.
+No hard-coded school or count is used. The latest 50 records are analyzed, with
+the full count, sample size and number of textless reviews shown separately.
+`comment` is the synced Google text; `originalText` supports existing records that
+store the same source text there. Generated review drafts and replies are never
+used as source opinions.
+
+The existing `OPENAI_API_KEY` is required for nonempty text analysis. The Responses
+API uses the existing gpt-4o model, strict JSON schema, `store: false`, and a
+45-second deadline (route maximum 60 seconds). Only review IDs and source text
+are sent, not credentials, profile emails or separately stored author names.
+The implementation follows the official Structured Outputs documentation:
+https://developers.openai.com/api/docs/guides/structured-outputs
+No new database column or migration is needed. Results are computed on demand,
+not persisted; refreshing runs a new analysis and may incur provider charges.
+
+Returned IDs must match the input set exactly once. Each opinion must quote a
+nonempty, contiguous source passage (up to 500 characters), use an allowed
+category/sentiment, and have no duplicate category within a review. Counts and
+percentages are calculated in application code, not supplied by the model.
+Language tabs count text-bearing reviews; sentiment and category percentages use
+the extracted opinion count as denominator. A review can have multiple topics.
+AI classification is an interpretation, not an independently verified fact;
+source-review links let the user inspect the evidence.
+
+Tests cover real source extraction through the provider response parser and
+aggregation, duplicate/foreign IDs, invented quotes, all sentiments/languages,
+zero rows, textless reviews, scope isolation, auth failures, provider refusals,
+malformed responses, timeout, database failures, retries and stale requests after
+switching schools. All four new modules have independent 95% coverage gates.
+Mocks replace only external session, database and HTTP boundaries; passing these
+tests does not prove production credentials or provider availability. Failures
+return explicit errors, never demonstration metrics or successful empty results.
 
 ## Survey option editing
 

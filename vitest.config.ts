@@ -15,6 +15,7 @@ export default defineConfig({
         "src/app/**/reviews/reviews-client.tsx",
         "src/app/**/dashboard/overview-client.tsx",
         "src/app/**/surveys/**/survey-editor.tsx",
+        "src/app/**/review-analytics-client.tsx",
       ],
       exclude: [
         "src/**/*.test.ts",
@@ -38,6 +39,10 @@ export default defineConfig({
         "src/lib/google-gbp-oauth.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/survey-builder.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/surveys/**/survey-editor.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/**/review-analytics-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/review-analytics.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/review-analytics-ai.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/dashboard/reviews/analytics/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
       },
     },
   },
