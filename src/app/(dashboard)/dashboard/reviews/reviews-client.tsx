@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   copyReviewReply,
   formatDraftText,
+  submitDirectReviewReply,
 } from "@/lib/review-reply-assist";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
@@ -108,6 +109,9 @@ export default function ReviewsClient() {
     "loading",
   );
   const [message, setMessage] = useState("");
+  const [postingReviewId, setPostingReviewId] = useState<string | null>(null);
+  const postingRef = useRef(false);
+  const loadVersion = useRef(0);
   const reviewRefs = useRef<Record<string, HTMLElement | null>>({});
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
@@ -125,6 +129,7 @@ export default function ReviewsClient() {
   const highlightedReviewId = routeAction.reviewId;
 
   async function loadReviews() {
+    const version = ++loadVersion.current;
     setStatus("loading");
     setMessage("");
 
@@ -142,6 +147,7 @@ export default function ReviewsClient() {
         { cache: "no-store", headers },
       );
       const body = (await response.json()) as ReviewsResponse;
+      if (version !== loadVersion.current) return;
 
       if (!response.ok) {
         throw new Error(body.message || "口コミ一覧を取得できませんでした。");
@@ -155,11 +161,43 @@ export default function ReviewsClient() {
         ),
       );
       setStatus("idle");
+      return true;
     } catch (error) {
+      if (version !== loadVersion.current) return;
+      setReviews([]);
+      setDrafts({});
       setStatus("error");
       setMessage(
         error instanceof Error ? error.message : "口コミ一覧を取得できませんでした。",
       );
+    }
+  }
+
+  async function postReplyToGoogle(review: ReviewRow) {
+    if (postingRef.current) return;
+    postingRef.current = true;
+    setPostingReviewId(review.id);
+    setStatus("saving");
+    setMessage("");
+    const version = loadVersion.current;
+    try {
+      const headers = await buildAuthHeaders();
+      const successMessage = await submitDirectReviewReply({
+        reviewId: review.id,
+        schoolId: review.schoolId,
+        replyText: drafts[review.id] || "",
+        headers,
+      });
+      if (version !== loadVersion.current) return;
+      const loaded = await loadReviews();
+      if (loaded && loadVersion.current === version + 1) setMessage(successMessage);
+    } catch (error) {
+      if (version !== loadVersion.current) return;
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Googleへ返信を送信できませんでした。");
+    } finally {
+      postingRef.current = false;
+      setPostingReviewId(null);
     }
   }
 
@@ -251,6 +289,7 @@ export default function ReviewsClient() {
 
   useEffect(() => {
     void loadReviews();
+    return () => { loadVersion.current += 1; };
   }, [selectedSchoolId]);
 
   useEffect(() => {
@@ -271,11 +310,8 @@ export default function ReviewsClient() {
       <div className={styles.liveHeader}>
         <div>
           <h2>実データの口コミ返信</h2>
-          <p>
-            口コミとAI返信案を確認し、返信文をコピーしてGoogleビジネスプロフィールから返信します。
-          </p>
         </div>
-        <button type="button" className={styles.secondaryButton} onClick={loadReviews}>
+        <button type="button" className={styles.secondaryButton} onClick={loadReviews} disabled={Boolean(postingReviewId)}>
           <RefreshIcon />
           再読み込み
         </button>
@@ -283,7 +319,7 @@ export default function ReviewsClient() {
           type="button"
           className={styles.secondaryButton}
           onClick={() => void syncGbpReviews()}
-          disabled={status === "loading" || status === "saving"}
+          disabled={status === "loading" || status === "saving" || Boolean(postingReviewId)}
         >
           <RefreshIcon />
           GBP口コミを同期
@@ -301,7 +337,7 @@ export default function ReviewsClient() {
 
       {status === "loading" ? <p className={styles.muted}>口コミを読み込んでいます。</p> : null}
 
-      {status !== "loading" && reviews.length === 0 ? (
+      {status === "idle" && reviews.length === 0 ? (
         <p className={styles.muted}>
           この校舎の口コミはまだありません。「GBP口コミを同期」で最新データを取得できます。
         </p>
@@ -331,6 +367,7 @@ export default function ReviewsClient() {
             <label className={styles.replyEditor}>
               <span>AI返信案</span>
               <textarea
+                disabled={Boolean(postingReviewId)}
                 ref={(element) => {
                   textareaRefs.current[review.id] = element;
                 }}
@@ -348,9 +385,18 @@ export default function ReviewsClient() {
                 {review.repliedAt ? "返信済" : "未返信"}
               </span>
               <div className={styles.actionButtons}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  disabled={Boolean(postingReviewId) || status === "loading" || !formatDraftText(drafts[review.id]).trim()}
+                  onClick={() => void postReplyToGoogle(review)}
+                >
+                  <CheckIcon />
+                  {postingReviewId === review.id ? "Googleに送信中…" : "Googleに直接返信を送信"}
+                </button>
                 {review.googleReviewManagementUrl ? (
                   <a
-                    className={styles.primaryButton}
+                    className={styles.secondaryButton}
                     href={review.googleReviewManagementUrl}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -376,7 +422,7 @@ export default function ReviewsClient() {
                   type="button"
                   className={styles.secondaryButton}
                   onClick={() => void markAsReplied(review.id)}
-                  disabled={status === "saving" || Boolean(review.repliedAt)}
+                  disabled={status === "saving" || Boolean(postingReviewId) || Boolean(review.repliedAt)}
                 >
                   <CheckIcon />
                   返信済みにする

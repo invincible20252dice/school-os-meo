@@ -71,6 +71,16 @@ describe("GET /api/reviews", () => {
     vi.clearAllMocks();
   });
 
+  it("rejects unauthenticated listing before reading review data", async () => {
+    const { resolveRequestAccess } = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    const authenticated = await resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ ...authenticated, isAuthenticated: false });
+    const response = await GET(new Request("https://app.example.com/api/reviews?role=admin"));
+    expect(response.status).toBe(401);
+    expect(prisma.review.findMany).not.toHaveBeenCalled();
+  });
+
   it("returns real review fields scoped to the active school", async () => {
     const { prisma } = await import("@/lib/prisma");
     const response = await GET(

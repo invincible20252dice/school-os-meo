@@ -1,9 +1,57 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGoogleReviewManagementUrl,
   copyReviewReply,
   formatDraftText,
+  submitDirectReviewReply,
 } from "./review-reply-assist";
+
+describe("submitDirectReviewReply", () => {
+  const input = { reviewId: "review-1", schoolId: "school-1", replyText: "  返信\\n本文  ", headers: { authorization: "Bearer session-token" } };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("submits the edited text with the review's school and authenticated session", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, googlePosted: true, message: "送信しました" }));
+    expect(await submitDirectReviewReply(input, fetchMock)).toBe("送信しました");
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/reviews/reply", {
+      method: "POST", headers: { authorization: "Bearer session-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewId: "review-1", schoolId: "school-1", replyText: "返信\n本文" }),
+    });
+  });
+
+  it("does not submit an empty draft", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    await expect(submitDirectReviewReply({ ...input, replyText: " \\n " }, fetchMock)).rejects.toThrow("返信文を入力");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [200, { success: true, googlePosted: false }],
+    [200, { success: false, googlePosted: true }],
+    [200, { success: true }],
+    [401, { success: true, googlePosted: true }],
+    [200, null],
+  ])("does not report an unconfirmed Google post as successful (case %#)", async (status, body) => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(body, { status }));
+    await expect(submitDirectReviewReply(input, fetchMock)).rejects.toThrow("Googleへの返信送信を確認できませんでした");
+  });
+
+  it("preserves the distinct remote-success/database-failure message", async () => {
+    const message = "Googleへの送信は完了しましたが、管理画面への保存に失敗しました。";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: false, googlePosted: true, message }, { status: 500 }));
+    await expect(submitDirectReviewReply(input, fetchMock)).rejects.toThrow(message);
+  });
+
+  it("reports invalid JSON as an unconfirmed post", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("gateway failure", { status: 502 }));
+    await expect(submitDirectReviewReply(input, fetchMock)).rejects.toThrow("Googleへの返信送信を確認できませんでした");
+  });
+
+  it("uses browser fetch and the default confirmed-success message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ success: true, googlePosted: true })));
+    expect(await submitDirectReviewReply(input)).toBe("Googleへ返信を送信しました。");
+  });
+});
 
 describe("buildGoogleReviewManagementUrl", () => {
   it.each([

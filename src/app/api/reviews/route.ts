@@ -117,6 +117,13 @@ export async function GET(request: Request) {
     const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
     const accessResult = await resolveRequestAccess(request, url);
 
+    if (!accessResult.isAuthenticated) {
+      return NextResponse.json(
+        { message: "ログイン後に口コミ一覧を確認してください。" },
+        { status: 401 },
+      );
+    }
+
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         { message: "アカウント承認後に口コミ一覧を確認できます。" },

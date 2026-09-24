@@ -1,213 +1,119 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
-import {
-  postGbpReviewReply,
-  resolveGbpAccessToken,
-} from "@/lib/gbp-reply";
+import { canAccessSchool } from "@/lib/auth-access";
+import { DirectReplyError, publishDirectGbpReply } from "@/lib/gbp-direct-reply";
 import { prisma } from "@/lib/prisma";
-import {
-  buildScopedSchoolFilter,
-  resolveRequestAccess,
-} from "@/lib/supabase-access";
+import { formatDraftText } from "@/lib/review-reply-assist";
+import { resolveRequestAccess } from "@/lib/supabase-access";
 
-type ReplyBody = {
-  reviewId?: string;
-  replyText?: string;
-  schoolId?: string;
-};
+export const maxDuration = 60;
 
-function normalizeString(value: unknown) {
+function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function toGbpAccountResource(value?: string | null) {
-  const accountId = normalizeString(value);
-  if (!accountId) {
-    return "";
-  }
-
-  if (accountId.includes("@")) {
-    return "";
-  }
-
-  return accountId.startsWith("accounts/") ? accountId : `accounts/${accountId}`;
-}
-
-function toDashboardRedirect(request: Request, reviewId: string) {
-  const url = new URL(request.url);
-  url.pathname = "/dashboard/reviews";
-  url.search = "";
-  url.searchParams.set("reviewId", reviewId);
-  return NextResponse.redirect(url);
-}
-
-async function assertCanAccessReview(request: Request, reviewId: string) {
-  const url = new URL(request.url);
-  const accessResult = await resolveRequestAccess(request, url);
-
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
-    throw new Error("FORBIDDEN_PENDING");
-  }
-
-  const review = await prisma.review.findUnique({
-    where: { id: reviewId },
-    select: {
-      id: true,
-      schoolId: true,
-      googleReviewId: true,
-      gbpReviewId: true,
-      school: {
-        select: {
-          gbpAccountId: true,
-          gbpLocationId: true,
-          schoolSetting: {
-            select: {
-              googleAccountId: true,
-              googleRefreshToken: true,
-              selectedGbpLocationId: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!review) {
-    throw new Error("REVIEW_NOT_FOUND");
-  }
-
-  const scopedSchool = buildScopedSchoolFilter(accessResult.access, review.schoolId);
-
-  if (scopedSchool.effectiveSchoolId && scopedSchool.effectiveSchoolId !== review.schoolId) {
-    throw new Error("FORBIDDEN_SCHOOL");
-  }
-
-  return { review, access: accessResult.access };
-}
-
-function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  const status =
-    message === "REPLY_REQUIRED" || message === "REVIEW_ID_REQUIRED"
-      ? 400
-      : message === "FORBIDDEN_PENDING" || message === "FORBIDDEN_SCHOOL"
-        ? 403
-        : message === "REVIEW_NOT_FOUND"
-          ? 404
-          : 500;
-
-  if (status >= 500) {
-    console.error("GBP口コミ返信の投稿に失敗しました。", error);
-  }
-
-  return NextResponse.json(
-    {
-      message:
-        status === 400
-          ? "返信する口コミと返信文を確認してください。"
-          : status === 403
-            ? "この口コミには返信できません。"
-            : status === 404
-              ? "対象の口コミが見つかりませんでした。"
-              : "口コミ返信を投稿できませんでした。",
-    },
-    { status },
-  );
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const reviewId = normalizeString(url.searchParams.get("reviewId"));
-
-  if (!reviewId) {
-    return NextResponse.redirect(new URL("/dashboard/reviews", url));
-  }
-
-  return toDashboardRedirect(request, reviewId);
+  const reviewId = stringValue(url.searchParams.get("reviewId"));
+  url.pathname = "/dashboard/reviews";
+  url.search = "";
+  if (reviewId) url.searchParams.set("reviewId", reviewId);
+  return NextResponse.redirect(url);
 }
 
 export async function POST(request: Request) {
+  let googlePosted = false;
+  let reviewId = "";
   try {
-    const body = (await request.json()) as ReplyBody;
-    const reviewId = normalizeString(body.reviewId);
-    const replyText = normalizeString(body.replyText);
-
-    if (!reviewId) {
-      throw new Error("REVIEW_ID_REQUIRED");
+    const accessResult = await resolveRequestAccess(request, new URL(request.url));
+    if (!accessResult.isAuthenticated) {
+      throw new DirectReplyError("UNAUTHENTICATED", "ログイン後に口コミへ返信してください。", 401);
     }
-
-    if (!replyText) {
-      throw new Error("REPLY_REQUIRED");
+    if (!isApprovedAccess(accessResult.access)) {
+      throw new DirectReplyError("FORBIDDEN", "アカウント承認後に口コミへ返信できます。", 403);
     }
-
-    const { review } = await assertCanAccessReview(request, reviewId);
-
-    const googleReviewId = review.googleReviewId || review.gbpReviewId || "";
-    let googlePosted = false;
-
-    if (googleReviewId) {
-      try {
-        const accessToken = await resolveGbpAccessToken({
-          googleRefreshToken: review.school.schoolSetting?.googleRefreshToken,
-        });
-
-        await postGbpReviewReply({
-          gbpAccountId:
-            toGbpAccountResource(review.school.gbpAccountId) ||
-            toGbpAccountResource(review.school.schoolSetting?.googleAccountId),
-          gbpLocationId:
-            review.school.gbpLocationId ||
-            review.school.schoolSetting?.selectedGbpLocationId,
-          googleReviewId,
-          replyText,
-          accessToken,
-        });
-        googlePosted = true;
-      } catch (error) {
-        console.warn(
-          "Google Business Profile rejected the reply. Saving it locally for later synchronization.",
-          error,
-        );
-      }
-    } else {
-      console.warn(
-        "The review has no Google review identifier. Saving the reply locally.",
-      );
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      throw new DirectReplyError("INVALID_REQUEST", "返信する口コミと返信文を確認してください。", 400);
     }
-
-    const updatedReview = await prisma.review.update({
+    const payload = body as Record<string, unknown>;
+    reviewId = stringValue(payload.reviewId);
+    const replyText = formatDraftText(stringValue(payload.replyText)).trim();
+    if (!reviewId || !replyText || replyText.length > 4096) {
+      throw new DirectReplyError("INVALID_REQUEST", "口コミIDと1〜4096文字の返信文を指定してください。", 400);
+    }
+    const review = await prisma.review.findUnique({
+      where: { id: reviewId },
+      select: {
+        id: true, schoolId: true, googleReviewId: true, gbpReviewId: true,
+        authorName: true, parentName: true, originalText: true, comment: true, rating: true,
+        school: {
+          select: {
+            gbpAccountId: true, gbpLocationId: true,
+            schoolSetting: { select: {
+              googleAccountId: true, googleRefreshToken: true, selectedGbpLocationId: true,
+            } },
+            googleAccount: { select: { refreshToken: true, locationId: true } },
+          },
+        },
+      },
+    });
+    if (!review) throw new DirectReplyError("NOT_FOUND", "対象の口コミが見つかりませんでした。", 404);
+    if (!canAccessSchool(accessResult.access, review.schoolId)) {
+      throw new DirectReplyError("FORBIDDEN", "この校舎の口コミには返信できません。", 403);
+    }
+    const requestedSchoolId = stringValue(payload.schoolId);
+    if (requestedSchoolId && requestedSchoolId !== review.schoolId) {
+      throw new DirectReplyError("SCHOOL_MISMATCH", "選択中の校舎と口コミの所属校舎が一致しません。", 409);
+    }
+    const setting = review.school.schoolSetting;
+    const account = review.school.googleAccount;
+    const published = await publishDirectGbpReply({
+      refreshToken: setting?.googleRefreshToken || account?.refreshToken || "",
+      locationId: setting?.selectedGbpLocationId || account?.locationId || review.school.gbpLocationId || "",
+      accountId: review.school.gbpAccountId || setting?.googleAccountId || "",
+      review: {
+        googleReviewId: review.googleReviewId,
+        gbpReviewId: review.gbpReviewId,
+        authorName: review.authorName || review.parentName || "",
+        originalText: review.originalText || review.comment || "",
+        rating: review.rating,
+      },
+      replyText,
+    });
+    googlePosted = true;
+    const updated = await prisma.review.update({
       where: { id: review.id },
       data: {
-        aiReplyText: replyText,
-        replyText,
+        googleReviewId: published.googleReviewId,
+        gbpReviewId: published.gbpReviewId,
+        source: "GOOGLE",
+        aiReplyText: published.replyText,
+        aiReplyDraft: published.replyText,
+        replyText: published.replyText,
         status: "REPLIED",
         repliedAt: new Date(),
       },
-      select: {
-        id: true,
-        status: true,
-        aiReplyText: true,
-        replyText: true,
-        repliedAt: true,
-      },
+      select: { id: true, status: true, replyText: true, repliedAt: true },
     });
-
+    console.info("[GBP Direct Reply]", { reviewId, schoolId: review.schoolId, googlePosted: true });
     return NextResponse.json({
-      success: true,
-      googlePosted,
-      deliveryStatus: googlePosted ? "GOOGLE_POSTED" : "LOCAL_SAVED",
-      message: googlePosted
-        ? "Google口コミへ返信を投稿しました。"
-        : "返信を保存しました。Googleへの反映は連携復旧後に再同期してください。",
-      review: {
-        id: updatedReview.id,
-        status: updatedReview.status,
-        aiReplyText: updatedReview.aiReplyText,
-        replyText: updatedReview.replyText,
-        repliedAt: updatedReview.repliedAt?.toISOString() || "",
-      },
+      success: true, googlePosted: true, gbpPublished: true, deliveryStatus: "GOOGLE_POSTED",
+      message: "Googleへ返信を送信しました。公開反映にはGoogle側の審査で時間がかかる場合があります。",
+      review: { ...updated, repliedAt: updated.repliedAt?.toISOString() },
     });
   } catch (error) {
-    return errorResponse(error);
+    const failure = error instanceof DirectReplyError ? error : new DirectReplyError(
+      googlePosted ? "GOOGLE_POSTED_DB_FAILED" : "REPLY_FAILED",
+      googlePosted
+        ? "Googleへの返信送信は成功しましたが、管理画面への保存に失敗しました。口コミ同期で状態を更新してください。"
+        : "口コミ返信の処理を完了できませんでした。ログイン状態を確認し、時間をおいて再試行してください。",
+      500,
+    );
+    console.error("[GBP Direct Reply]", { reviewId, code: failure.code, googleStatus: failure.googleStatus, googlePosted });
+    return NextResponse.json({
+      success: false, googlePosted, gbpPublished: googlePosted,
+      code: failure.code, googleStatus: failure.googleStatus, message: failure.message,
+    }, { status: failure.status });
   }
 }

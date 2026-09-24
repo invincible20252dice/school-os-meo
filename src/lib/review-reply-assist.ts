@@ -44,3 +44,21 @@ export async function copyReviewReply(
 
   return normalizedReply;
 }
+
+export async function submitDirectReviewReply(
+  input: { reviewId: string; schoolId: string; replyText: string; headers: Record<string, string> },
+  fetchImpl: typeof fetch = fetch,
+) {
+  const replyText = formatDraftText(input.replyText).trim();
+  if (!replyText) throw new Error("返信文を入力してください。");
+  const response = await fetchImpl("/api/dashboard/reviews/reply", {
+    method: "POST",
+    headers: { ...input.headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ reviewId: input.reviewId, schoolId: input.schoolId, replyText }),
+  });
+  const body = await response.json().catch(() => null) as { success?: boolean; googlePosted?: boolean; message?: string } | null;
+  if (!response.ok || !body?.success || body.googlePosted !== true) {
+    throw new Error(body?.message || "Googleへの返信送信を確認できませんでした。");
+  }
+  return body.message || "Googleへ返信を送信しました。";
+}

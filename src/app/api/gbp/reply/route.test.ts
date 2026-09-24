@@ -1,521 +1,161 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GET, POST } from "./route";
+import { DirectReplyError, publishDirectGbpReply } from "@/lib/gbp-direct-reply";
+import { prisma } from "@/lib/prisma";
+import { resolveRequestAccess } from "@/lib/supabase-access";
 
-vi.mock("@/lib/supabase-access", () => ({
-  resolveRequestAccess: vi.fn(async () => ({
-    access: {
-      userId: "manager-1",
-      role: "manager",
-      schoolId: "school-1",
-      schoolIds: ["school-1"],
-      name: "教室長",
-      email: "manager@example.com",
-      status: "active",
-      source: "profiles",
-    },
-    isAuthenticated: true,
-  })),
-  buildScopedSchoolFilter: vi.fn((_access, schoolId) => ({
-    requestedSchoolId: schoolId,
-    effectiveSchoolId: schoolId,
-    role: "manager",
-    canSwitchSchool: false,
-  })),
+vi.mock("@/lib/supabase-access", () => ({ resolveRequestAccess: vi.fn() }));
+vi.mock("@/lib/gbp-direct-reply", async () => ({
+  ...await vi.importActual<typeof import("@/lib/gbp-direct-reply")>("@/lib/gbp-direct-reply"),
+  publishDirectGbpReply: vi.fn(),
 }));
+vi.mock("@/lib/prisma", () => ({ prisma: { review: { findUnique: vi.fn(), update: vi.fn() } } }));
 
-vi.mock("@/lib/gbp-reply", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/gbp-reply")>(
-    "@/lib/gbp-reply",
-  );
-
+const access = {
+  isAuthenticated: true,
+  access: { userId: "manager-1", role: "manager" as const, schoolId: "school-1", schoolIds: ["school-1"], name: "Manager", email: "manager@example.com", status: "active" as const, source: "profiles" as const },
+};
+function review() {
   return {
-    ...actual,
-    resolveGbpAccessToken: vi.fn(async () => "access-token"),
-    postGbpReviewReply: vi.fn(async () => ({ comment: "ありがとうございます。" })),
-  };
-});
-
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    review: {
-      findUnique: vi.fn(async () => ({
-        id: "review-1",
-        schoolId: "school-1",
-        googleReviewId: "google-review-1",
-        gbpReviewId: "short-review-1",
-        school: {
-          gbpAccountId: "accounts/1",
-          gbpLocationId: "locations/100",
-          schoolSetting: {
-            googleRefreshToken: "refresh-token",
-            selectedGbpLocationId: "locations/100",
-          },
-        },
-      })),
-      update: vi.fn(async ({ data }) => ({
-        id: "review-1",
-        ...data,
-      })),
+    id: "review-1", schoolId: "school-1", googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real",
+    authorName: "投稿者", parentName: null, originalText: "口コミ本文", comment: null, rating: 5,
+    school: {
+      gbpAccountId: "accounts/1", gbpLocationId: "locations/old",
+      schoolSetting: { googleRefreshToken: "setting-token", selectedGbpLocationId: "locations/100", googleAccountId: "owner@example.com" },
+      googleAccount: { refreshToken: "account-token", locationId: "locations/200" },
     },
-  },
-}));
+  };
+}
+const payload = { reviewId: "review-1", schoolId: "school-1", replyText: "  ありがとうございます。\\n今後ともよろしくお願いします。  " };
+const normalizedReply = "ありがとうございます。\n今後ともよろしくお願いします。";
+const request = (body: unknown = payload) => new Request("https://example.com/api/dashboard/reviews/reply", { method: "POST", body: JSON.stringify(body) });
 
-describe("/api/gbp/reply", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
-  });
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.mocked(resolveRequestAccess).mockResolvedValue(access);
+  vi.mocked(prisma.review.findUnique).mockResolvedValue(review() as never);
+  vi.mocked(publishDirectGbpReply).mockResolvedValue({ googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real", replyText: normalizedReply, alreadyPublished: false });
+  vi.mocked(prisma.review.update).mockResolvedValue({ id: "review-1", status: "REPLIED", replyText: normalizedReply, repliedAt: new Date("2026-09-24T00:00:00Z") } as never);
+});
+afterEach(() => vi.restoreAllMocks());
 
-  it("redirects GET requests from LINE to the dashboard review screen", async () => {
-    const { GET } = await import("./route");
-
-    const response = await GET(
-      new Request("https://app.example.com/api/gbp/reply?reviewId=review-1"),
-    );
-
+describe("GBP direct reply API", () => {
+  it.each(["", "?reviewId=review-1"])("GET never publishes and redirects to the editor %s", async (query) => {
+    const response = await GET(new Request(`https://example.com/api/gbp/reply${query}`));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://app.example.com/dashboard/reviews?reviewId=review-1",
-    );
+    expect(response.headers.get("location")).toBe(`https://example.com/dashboard/reviews${query}`);
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
   });
 
-  it("redirects GET requests without review id to reviews top", async () => {
-    const { GET } = await import("./route");
-
-    const response = await GET(
-      new Request("https://app.example.com/api/gbp/reply"),
-    );
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://app.example.com/dashboard/reviews",
-    );
-  });
-
-  it("posts an approved AI reply to GBP and marks the review as replied", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    const gbpReply = await import("@/lib/gbp-reply");
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
+  it("posts using server-owned school credentials and only then marks the review replied", async () => {
+    const response = await POST(request({ ...payload, authorName: "攻撃者が指定した名前" }));
     expect(response.status).toBe(200);
-    expect(body.message).toBe("Google口コミへ返信を投稿しました。");
-    expect(body).toMatchObject({
-      success: true,
-      googlePosted: true,
-      deliveryStatus: "GOOGLE_POSTED",
+    expect(await response.json()).toMatchObject({ success: true, googlePosted: true, gbpPublished: true, deliveryStatus: "GOOGLE_POSTED", review: { status: "REPLIED", replyText: normalizedReply } });
+    expect(publishDirectGbpReply).toHaveBeenCalledWith({
+      refreshToken: "setting-token", locationId: "locations/100", accountId: "accounts/1",
+      review: { googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real", authorName: "投稿者", originalText: "口コミ本文", rating: 5 }, replyText: normalizedReply,
     });
-    expect(gbpReply.resolveGbpAccessToken).toHaveBeenCalledWith({
-      googleRefreshToken: "refresh-token",
-    });
-    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith({
-      gbpAccountId: "accounts/1",
-      gbpLocationId: "locations/100",
-      googleReviewId: "google-review-1",
-      replyText: "ありがとうございます。",
-      accessToken: "access-token",
-    });
-    expect(prisma.review.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({
-        select: expect.not.objectContaining({
-          comment: expect.anything(),
-          aiReplyDraft: expect.anything(),
-        }),
-      }),
-    );
-    expect(prisma.review.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "review-1" },
-        data: expect.not.objectContaining({
-          aiReplyDraft: expect.anything(),
-        }),
-        select: expect.objectContaining({
-          id: true,
-          status: true,
-          aiReplyText: true,
-          replyText: true,
-        }),
-      }),
-    );
+    expect(prisma.review.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "review-1" },
+      data: expect.objectContaining({ googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real", source: "GOOGLE", status: "REPLIED", replyText: normalizedReply, aiReplyDraft: normalizedReply }),
+    }));
+    expect(vi.mocked(publishDirectGbpReply).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(prisma.review.update).mock.invocationCallOrder[0]);
   });
 
-  it("returns a clear validation error when reply text is missing", async () => {
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({ reviewId: "review-1", replyText: " " }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.message).toBe("返信する口コミと返信文を確認してください。");
+  it("accepts an approved admin for any school", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, role: "admin", schoolIds: [] } });
+    expect((await POST(request())).status).toBe(200);
   });
 
-  it("returns a validation error when review id is missing", async () => {
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({ replyText: "ありがとうございます。" }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.message).toBe("返信する口コミと返信文を確認してください。");
+  it("uses this school's GoogleAccount credentials when SchoolSetting is absent", async () => {
+    const row = review();
+    vi.mocked(prisma.review.findUnique).mockResolvedValue({ ...row, school: { ...row.school, gbpAccountId: null, schoolSetting: null } } as never);
+    await POST(request());
+    expect(publishDirectGbpReply).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: "account-token", locationId: "locations/200", accountId: "" }));
   });
 
-  it("returns a safe server error when the request body is invalid JSON", async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
-    const { POST } = await import("./route");
+  it("uses only existing legacy fields of the same record when canonical fields are empty", async () => {
+    const row = review();
+    vi.mocked(prisma.review.findUnique).mockResolvedValue({ ...row, authorName: null, parentName: "保護者", originalText: null, comment: "保存済み口コミ", school: { ...row.school, gbpAccountId: null, googleAccount: null, schoolSetting: { googleAccountId: "accounts/2", googleRefreshToken: null, selectedGbpLocationId: null } } } as never);
+    await POST(request({ ...payload, schoolId: undefined }));
+    expect(publishDirectGbpReply).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: "", accountId: "accounts/2", locationId: "locations/old", review: expect.objectContaining({ authorName: "保護者", originalText: "保存済み口コミ" }) }));
+  });
 
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: "{invalid-json",
-      }),
-    );
-    const body = await response.json();
+  it("does not invent missing credentials or identity data", async () => {
+    const row = review();
+    vi.mocked(prisma.review.findUnique).mockResolvedValue({ ...row, authorName: null, parentName: null, originalText: null, comment: null, school: { gbpAccountId: null, gbpLocationId: null, schoolSetting: null, googleAccount: null } } as never);
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_NOT_CONNECTED", "再連携してください"));
+    expect((await POST(request())).status).toBe(409);
+    expect(publishDirectGbpReply).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: "", accountId: "", locationId: "", review: expect.objectContaining({ authorName: "", originalText: "" }) }));
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
 
+  it.each([null, {}, { ...payload, reviewId: 123 }, { ...payload, replyText: "\\n " }, { ...payload, replyText: "あ".repeat(4097) }])("rejects invalid input without posting: %j", async (body) => {
+    expect((await POST(request(body))).status).toBe(400);
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid JSON", async () => {
+    expect((await POST(new Request("https://example.com/api/gbp/reply", { method: "POST", body: "{" }))).status).toBe(400);
+  });
+
+  it("requires authentication even if a caller claims admin", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, isAuthenticated: false, access: { ...access.access, role: "admin", source: "fallback" } });
+    const response = await POST(request());
+    expect(response.status).toBe(401);
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+  });
+
+  it("rejects pending users before reading credentials", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, status: "pending" } });
+    expect((await POST(request())).status).toBe(403);
+    expect(prisma.review.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects managers outside the review's school", async () => {
+    vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, schoolId: "school-2", schoolIds: ["school-2"] } });
+    expect((await POST(request())).status).toBe(403);
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched school supplied by the browser", async () => {
+    expect((await POST(request({ ...payload, schoolId: "other-school" }))).status).toBe(409);
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for an unknown review", async () => {
+    vi.mocked(prisma.review.findUnique).mockResolvedValue(null);
+    expect((await POST(request())).status).toBe(404);
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 404, 429, 500])("never marks a failed Google write as replied (%s)", async (googleStatus) => {
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_ERROR", "Googleが投稿を拒否しました", 502, googleStatus));
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ success: false, googlePosted: false, googleStatus });
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("reports remote success separately if subsequent persistence fails", async () => {
+    vi.mocked(prisma.review.update).mockRejectedValue(new Error("database secret connection string"));
+    const response = await POST(request());
     expect(response.status).toBe(500);
-    expect(body.message).toBe("口コミ返信を投稿できませんでした。");
-    consoleErrorSpy.mockRestore();
-  });
-
-  it("returns not found when the review does not exist", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce(null);
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "missing-review",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
     const body = await response.json();
-
-    expect(response.status).toBe(404);
-    expect(body.message).toBe("対象の口コミが見つかりませんでした。");
+    expect(body).toMatchObject({ success: false, googlePosted: true, code: "GOOGLE_POSTED_DB_FAILED" });
+    expect(body.message).not.toContain("secret");
   });
 
-  it("saves the reply locally when the review is missing its Google review id", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
-      id: "review-1",
-      schoolId: "school-1",
-      googleReviewId: null,
-      gbpReviewId: null,
-      school: {
-        gbpAccountId: "accounts/1",
-        gbpLocationId: "locations/100",
-        schoolSetting: {
-          googleAccountId: "accounts/setting-1",
-          googleRefreshToken: "refresh-token",
-          selectedGbpLocationId: "locations/100",
-        },
-      },
-    });
-    const gbpReply = await import("@/lib/gbp-reply");
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      success: true,
-      googlePosted: false,
-      deliveryStatus: "LOCAL_SAVED",
-      message: "返信を保存しました。Googleへの反映は連携復旧後に再同期してください。",
-    });
-    expect(gbpReply.postGbpReviewReply).not.toHaveBeenCalled();
-    expect(prisma.review.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          replyText: "ありがとうございます。",
-          status: "REPLIED",
-        }),
-      }),
-    );
-  });
-
-  it("rejects users outside the review school scope", async () => {
-    const access = await import("@/lib/supabase-access");
-    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
-      requestedSchoolId: "school-1",
-      effectiveSchoolId: "other-school",
-      role: "manager",
-      canSwitchSchool: false,
-    });
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body.message).toBe("この口コミには返信できません。");
-  });
-
-  it("rejects pending users before posting to GBP", async () => {
-    const access = await import("@/lib/supabase-access");
-    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
-      access: {
-        userId: "pending-1",
-        role: "manager",
-        schoolId: "school-1",
-        schoolIds: ["school-1"],
-        name: "承認待ち",
-        email: "pending@example.com",
-        status: "pending",
-        source: "profiles",
-      },
-      isAuthenticated: true,
-    });
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-  });
-
-  it("uses selected GBP location from school setting when school location is blank", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
-      id: "review-1",
-      schoolId: "school-1",
-      googleReviewId: "google-review-1",
-      school: {
-        gbpAccountId: "accounts/1",
-        gbpLocationId: null,
-        schoolSetting: {
-          googleRefreshToken: "refresh-token",
-          selectedGbpLocationId: "locations/setting-100",
-        },
-      },
-    });
-    const gbpReply = await import("@/lib/gbp-reply");
-    const { POST } = await import("./route");
-
-    await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-
-    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        gbpLocationId: "locations/setting-100",
-      }),
-    );
-  });
-
-  it("uses the GBP account resource saved on school settings when school account is blank", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
-      id: "review-1",
-      schoolId: "school-1",
-      googleReviewId: "google-review-1",
-      school: {
-        gbpAccountId: null,
-        gbpLocationId: "locations/100",
-        schoolSetting: {
-          googleAccountId: "accounts/setting-1",
-          googleRefreshToken: "refresh-token",
-          selectedGbpLocationId: "locations/setting-100",
-        },
-      },
-    });
-    const gbpReply = await import("@/lib/gbp-reply");
-    const { POST } = await import("./route");
-
-    await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-
-    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        gbpAccountId: "accounts/setting-1",
-        gbpLocationId: "locations/100",
-      }),
-    );
-  });
-
-  it("does not treat a Google account email as a GBP account resource", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({
-      id: "review-1",
-      schoolId: "school-1",
-      googleReviewId: "google-review-1",
-      school: {
-        gbpAccountId: null,
-        gbpLocationId: "locations/100",
-        schoolSetting: {
-          googleAccountId: "owner@example.com",
-          googleRefreshToken: "refresh-token",
-          selectedGbpLocationId: "locations/setting-100",
-        },
-      },
-    });
-    const gbpReply = await import("@/lib/gbp-reply");
-    const { POST } = await import("./route");
-
-    await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-
-    expect(gbpReply.postGbpReviewReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        gbpAccountId: "",
-      }),
-    );
-  });
-
-  it("saves the reply locally when GBP posting is rejected", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    const gbpReply = await import("@/lib/gbp-reply");
-    vi.mocked(gbpReply.postGbpReviewReply).mockRejectedValueOnce(
-      new gbpReply.GbpReplyError(403, "forbidden"),
-    );
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      success: true,
-      googlePosted: false,
-      deliveryStatus: "LOCAL_SAVED",
-      review: {
-        id: "review-1",
-        status: "REPLIED",
-        replyText: "ありがとうございます。",
-      },
-    });
-    expect(prisma.review.update).toHaveBeenCalled();
-  });
-
-  it("saves the reply locally when the access token cannot be refreshed", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    const gbpReply = await import("@/lib/gbp-reply");
-    vi.mocked(gbpReply.resolveGbpAccessToken).mockRejectedValueOnce(
-      new Error("Google OAuth refresh failed: 400"),
-    );
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ローカル保存する返信です。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.googlePosted).toBe(false);
-    expect(gbpReply.postGbpReviewReply).not.toHaveBeenCalled();
-    expect(prisma.review.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          aiReplyText: "ローカル保存する返信です。",
-          replyText: "ローカル保存する返信です。",
-          status: "REPLIED",
-        }),
-      }),
-    );
-  });
-
-  it("returns an error when the local reply cannot be persisted", async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.review.update).mockRejectedValueOnce(new Error("DB down"));
-    const { POST } = await import("./route");
-
-    const response = await POST(
-      new Request("https://app.example.com/api/gbp/reply", {
-        method: "POST",
-        body: JSON.stringify({
-          reviewId: "review-1",
-          replyText: "ありがとうございます。",
-        }),
-      }),
-    );
-    const body = await response.json();
-
+  it("does not call Google on database failure", async () => {
+    vi.mocked(prisma.review.findUnique).mockRejectedValue(new Error("db unavailable"));
+    const response = await POST(request());
     expect(response.status).toBe(500);
-    expect(body.message).toBe("口コミ返信を投稿できませんでした。");
-    consoleErrorSpy.mockRestore();
+    expect(await response.json()).toMatchObject({ success: false, googlePosted: false });
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
   });
 });
