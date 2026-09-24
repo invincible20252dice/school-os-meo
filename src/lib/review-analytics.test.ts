@@ -36,6 +36,12 @@ describe("grounded review analysis", () => {
     expect(isAnalyticsResponse(response)).toBe(true);
     expect(isAnalyticsResponse({ ...response, schoolId: null, totalReviews: 0, sampledReviews: 0, textReviews: 0, analyses: [] })).toBe(true);
   });
+  it("enforces the sampling limit without confusing sample size with the total", () => {
+    expect(isAnalyticsResponse({ ...response, totalReviews: 100, sampledReviews: 50 })).toBe(true);
+    expect(isAnalyticsResponse({ ...response, totalReviews: 100, sampledReviews: 51 })).toBe(false);
+    expect(isAnalyticsResponse({ ...response, limit: 0 })).toBe(false);
+    expect(isAnalyticsResponse({ ...response, limit: 0, totalReviews: 0, sampledReviews: 0, textReviews: 0, analyses: [] })).toBe(false);
+  });
   it.each([null, {}, { ...response, success: false }, { ...response, schoolId: 1 }, { ...response, schoolName: null }, { ...response, totalReviews: -1 }, { ...response, totalReviews: 0.5 }, { ...response, limit: "50" }, { ...response, analyses: null }, { ...response, totalReviews: 0 }, { ...response, sampledReviews: 0 }, { ...response, textReviews: 0 }, { ...response, analyses: [null] }, { ...response, analyses: [{ ...row, language: "bad" }] }])("rejects invalid API contract %#", value => {
     expect(isAnalyticsResponse(value)).toBe(false);
   });

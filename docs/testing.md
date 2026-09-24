@@ -112,6 +112,23 @@ Mocks replace only external session, database and HTTP boundaries; passing these
 tests does not prove production credentials or provider availability. Failures
 return explicit errors, never demonstration metrics or successful empty results.
 
+`review-analytics-workflow.test.tsx` connects the rendered client to the actual
+GET route, source-text extraction, OpenAI response parser, contract validator,
+and aggregation. It checks exact scoped Prisma query arguments and provider
+payloads, rendered percentages and source links, language filtering without
+another AI call, empty/textless data, expired/pending/cross-school access,
+database/quota/configuration failures, invented/omitted/duplicated AI evidence,
+explicit retry, the 50-record sampling boundary, and late results after changing
+schools. Only identity, database adapters, and external HTTP are substituted;
+this is not a live PostgreSQL or OpenAI integration test. The browser contract
+also rejects a zero sampling limit or a sample larger than that limit.
+
+Standalone `tsc --noEmit --incremental false` currently reports 144 existing
+type errors in other test files (including Prisma mock return types and fixture
+shapes). The analytics tests introduce none. A passing production build and
+Vitest run must not be described as a passing standalone whole-repository type
+check; fixing that existing test-type debt is separate work.
+
 ## Survey option editing
 
 The editor retains every line (including trailing empty entries) in its editable

@@ -69,7 +69,7 @@ export function isAnalyticsResponse(value: unknown): value is AnalyticsResponse 
     || ![value.totalReviews, value.sampledReviews, value.textReviews, value.limit].every(n => typeof n === "number" && Number.isInteger(n) && n >= 0)
     || !Array.isArray(value.analyses)) return false;
   const data = value as unknown as AnalyticsResponse;
-  if (data.totalReviews < data.sampledReviews || data.sampledReviews < data.textReviews || data.analyses.length !== data.textReviews) return false;
+  if (data.limit === 0 || data.sampledReviews > data.limit || data.totalReviews < data.sampledReviews || data.sampledReviews < data.textReviews || data.analyses.length !== data.textReviews) return false;
   try {
     // Validate the same strict shape at the browser boundary; source grounding is enforced on the server.
     parseReviewAnalysis({ reviews: data.analyses }, data.analyses.map(row => ({ id: row.reviewId, text: row.opinions.map(o => o.quote).join("\n") })));
