@@ -29,6 +29,7 @@ describe("submitDirectReviewReply", () => {
     [200, { success: true, googlePosted: false }],
     [200, { success: false, googlePosted: true }],
     [200, { success: true }],
+    [200, { success: "false", googlePosted: true }],
     [401, { success: true, googlePosted: true }],
     [200, null],
   ])("does not report an unconfirmed Google post as successful (case %#)", async (status, body) => {

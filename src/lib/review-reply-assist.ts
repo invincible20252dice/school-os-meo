@@ -57,7 +57,7 @@ export async function submitDirectReviewReply(
     body: JSON.stringify({ reviewId: input.reviewId, schoolId: input.schoolId, replyText }),
   });
   const body = await response.json().catch(() => null) as { success?: boolean; googlePosted?: boolean; message?: string } | null;
-  if (!response.ok || !body?.success || body.googlePosted !== true) {
+  if (!response.ok || body?.success !== true || body.googlePosted !== true) {
     throw new Error(body?.message || "Googleへの返信送信を確認できませんでした。");
   }
   return body.message || "Googleへ返信を送信しました。";

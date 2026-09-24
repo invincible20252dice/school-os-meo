@@ -110,7 +110,8 @@ export default function ReviewsClient() {
   );
   const [message, setMessage] = useState("");
   const [postingReviewId, setPostingReviewId] = useState<string | null>(null);
-  const postingRef = useRef(false);
+  const mutationRef = useRef(false);
+  const [mutating, setMutating] = useState(false);
   const loadVersion = useRef(0);
   const reviewRefs = useRef<Record<string, HTMLElement | null>>({});
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -149,11 +150,11 @@ export default function ReviewsClient() {
       const body = (await response.json()) as ReviewsResponse;
       if (version !== loadVersion.current) return;
 
-      if (!response.ok) {
-        throw new Error(body.message || "口コミ一覧を取得できませんでした。");
+      if (!response.ok || body?.success !== true || !Array.isArray(body.reviews)) {
+        throw new Error(body?.message || "口コミ一覧を取得できませんでした。");
       }
 
-      const rows = body.reviews || [];
+      const rows = body.reviews;
       setReviews(rows);
       setDrafts(
         Object.fromEntries(
@@ -174,8 +175,9 @@ export default function ReviewsClient() {
   }
 
   async function postReplyToGoogle(review: ReviewRow) {
-    if (postingRef.current) return;
-    postingRef.current = true;
+    if (mutationRef.current) return;
+    mutationRef.current = true;
+    setMutating(true);
     setPostingReviewId(review.id);
     setStatus("saving");
     setMessage("");
@@ -196,12 +198,14 @@ export default function ReviewsClient() {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Googleへ返信を送信できませんでした。");
     } finally {
-      postingRef.current = false;
+      mutationRef.current = false;
+      setMutating(false);
       setPostingReviewId(null);
     }
   }
 
   async function copyReplyForGoogle(reviewId: string) {
+    const version = loadVersion.current;
     setMessage("");
 
     try {
@@ -209,11 +213,13 @@ export default function ReviewsClient() {
         writeText: (text) => navigator.clipboard.writeText(text),
         writeTextFallback: copyTextWithDocument,
       });
+      if (version !== loadVersion.current) return;
       setStatus("idle");
       setMessage(
         "返信文をコピーしました。Googleビジネスプロフィールで貼り付けて返信してください。",
       );
     } catch (error) {
+      if (version !== loadVersion.current) return;
       setStatus("error");
       setMessage(
         error instanceof Error && error.message === "REPLY_REQUIRED"
@@ -223,7 +229,11 @@ export default function ReviewsClient() {
     }
   }
 
-  async function markAsReplied(reviewId: string) {
+  async function markAsReplied(review: ReviewRow) {
+    if (mutationRef.current) return;
+    mutationRef.current = true;
+    setMutating(true);
+    const version = loadVersion.current;
     setStatus("saving");
     setMessage("");
 
@@ -233,28 +243,39 @@ export default function ReviewsClient() {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({
-          reviewId,
-          replyText: drafts[reviewId] || "",
-          schoolId: selectedSchoolId || undefined,
+          reviewId: review.id,
+          replyText: drafts[review.id] || "",
+          schoolId: review.schoolId,
         }),
       });
       const body = (await response.json()) as ReviewsResponse;
+      if (version !== loadVersion.current) return;
 
-      if (!response.ok) {
+      if (!response.ok || body.success !== true) {
         throw new Error(body.message || "返信状態を更新できませんでした。");
       }
 
-      await loadReviews();
-      setMessage(body.message || "Googleでの返信完了を記録しました。");
+      const loaded = await loadReviews();
+      if (loaded && loadVersion.current === version + 1) {
+        setMessage(body.message || "Googleでの返信完了を記録しました。");
+      }
     } catch (error) {
+      if (version !== loadVersion.current) return;
       setStatus("error");
       setMessage(
         error instanceof Error ? error.message : "返信状態を更新できませんでした。",
       );
+    } finally {
+      mutationRef.current = false;
+      setMutating(false);
     }
   }
 
   async function syncGbpReviews() {
+    if (mutationRef.current) return;
+    mutationRef.current = true;
+    setMutating(true);
+    const version = loadVersion.current;
     setStatus("loading");
     setMessage("");
 
@@ -272,18 +293,25 @@ export default function ReviewsClient() {
         count?: number;
         error?: string;
       };
+      if (version !== loadVersion.current) return;
 
       if (!response.ok || !body.success) {
         throw new Error(body.error || "Google口コミを同期できませんでした。");
       }
 
-      await loadReviews();
-      setMessage(`Google口コミを${body.count ?? 0}件同期しました。`);
+      const loaded = await loadReviews();
+      if (loaded && loadVersion.current === version + 1) {
+        setMessage(`Google口コミを${body.count ?? 0}件同期しました。`);
+      }
     } catch (error) {
+      if (version !== loadVersion.current) return;
       setStatus("error");
       setMessage(
         error instanceof Error ? error.message : "Google口コミを同期できませんでした。",
       );
+    } finally {
+      mutationRef.current = false;
+      setMutating(false);
     }
   }
 
@@ -311,7 +339,7 @@ export default function ReviewsClient() {
         <div>
           <h2>実データの口コミ返信</h2>
         </div>
-        <button type="button" className={styles.secondaryButton} onClick={loadReviews} disabled={Boolean(postingReviewId)}>
+        <button type="button" className={styles.secondaryButton} onClick={loadReviews} disabled={mutating}>
           <RefreshIcon />
           再読み込み
         </button>
@@ -319,7 +347,7 @@ export default function ReviewsClient() {
           type="button"
           className={styles.secondaryButton}
           onClick={() => void syncGbpReviews()}
-          disabled={status === "loading" || status === "saving" || Boolean(postingReviewId)}
+          disabled={status === "loading" || mutating}
         >
           <RefreshIcon />
           GBP口コミを同期
@@ -367,7 +395,7 @@ export default function ReviewsClient() {
             <label className={styles.replyEditor}>
               <span>AI返信案</span>
               <textarea
-                disabled={Boolean(postingReviewId)}
+                disabled={mutating || status === "loading"}
                 ref={(element) => {
                   textareaRefs.current[review.id] = element;
                 }}
@@ -388,7 +416,7 @@ export default function ReviewsClient() {
                 <button
                   type="button"
                   className={styles.primaryButton}
-                  disabled={Boolean(postingReviewId) || status === "loading" || !formatDraftText(drafts[review.id]).trim()}
+                  disabled={mutating || status === "loading" || !formatDraftText(drafts[review.id]).trim()}
                   onClick={() => void postReplyToGoogle(review)}
                 >
                   <CheckIcon />
@@ -400,7 +428,12 @@ export default function ReviewsClient() {
                     href={review.googleReviewManagementUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-disabled={mutating || status === "loading"}
                     onClick={(event) => {
+                      if (mutationRef.current || status === "loading") {
+                        event.preventDefault();
+                        return;
+                      }
                       if (!formatDraftText(drafts[review.id]).trim()) {
                         event.preventDefault();
                       }
@@ -421,8 +454,8 @@ export default function ReviewsClient() {
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  onClick={() => void markAsReplied(review.id)}
-                  disabled={status === "saving" || Boolean(postingReviewId) || Boolean(review.repliedAt)}
+                  onClick={() => void markAsReplied(review)}
+                  disabled={mutating || status === "loading" || Boolean(review.repliedAt) || !formatDraftText(drafts[review.id]).trim()}
                 >
                   <CheckIcon />
                   返信済みにする

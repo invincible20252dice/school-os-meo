@@ -39,7 +39,7 @@ beforeEach(() => {
   vi.mocked(publishDirectGbpReply).mockResolvedValue({ googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real", replyText: normalizedReply, alreadyPublished: false });
   vi.mocked(prisma.review.update).mockResolvedValue({ id: "review-1", status: "REPLIED", replyText: normalizedReply, repliedAt: new Date("2026-09-24T00:00:00Z") } as never);
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("GBP direct reply API", () => {
   it.each(["", "?reviewId=review-1"])("GET never publishes and redirects to the editor %s", async (query) => {
@@ -157,5 +157,31 @@ describe("GBP direct reply API", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ success: false, googlePosted: false });
     expect(publishDirectGbpReply).not.toHaveBeenCalled();
+  });
+
+  it.each([200, 403, 429])("integrates the real OAuth/list/PUT pipeline with persistence (Google PUT=%s)", async (status) => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-secret");
+    const actual = await vi.importActual<typeof import("@/lib/gbp-direct-reply")>("@/lib/gbp-direct-reply");
+    const network = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: "fresh-token" }))
+      .mockResolvedValueOnce(Response.json({ reviews: [{ reviewId: "real", name: "accounts/1/locations/100/reviews/real" }] }))
+      .mockResolvedValueOnce(Response.json(status === 200 ? { comment: normalizedReply } : { error: { message: "provider refusal" } }, { status }));
+    vi.mocked(publishDirectGbpReply).mockImplementation(input => actual.publishDirectGbpReply(input, network));
+    const response = await POST(request());
+    const body = await response.json();
+    expect(network).toHaveBeenCalledTimes(3);
+    expect(Object.fromEntries(network.mock.calls[0][1]?.body as URLSearchParams)).toMatchObject({ refresh_token: "setting-token", grant_type: "refresh_token" });
+    expect(network.mock.calls[2]).toEqual(["https://mybusiness.googleapis.com/v4/accounts/1/locations/100/reviews/real/reply", expect.objectContaining({ method: "PUT", body: JSON.stringify({ comment: normalizedReply }), headers: { Authorization: "Bearer fresh-token", "Content-Type": "application/json" } })]);
+    if (status === 200) {
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ success: true, googlePosted: true });
+      expect(prisma.review.update).toHaveBeenCalledTimes(1);
+      expect(network.mock.invocationCallOrder[2]).toBeLessThan(vi.mocked(prisma.review.update).mock.invocationCallOrder[0]);
+    } else {
+      expect(response.status).toBe(status === 429 ? 429 : 502);
+      expect(body).toMatchObject({ success: false, googlePosted: false, googleStatus: status });
+      expect(prisma.review.update).not.toHaveBeenCalled();
+    }
+    expect(JSON.stringify(body)).not.toMatch(/fresh-token|setting-token|test-secret/);
   });
 });
