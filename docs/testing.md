@@ -6,14 +6,15 @@ Prisma Client generation and the Next.js production build.
 ## Measured scope
 
 `vitest.config.ts` measures the existing shared TypeScript libraries, API routes,
-dashboard navigation, and the reviews and overview client components. It does not measure all
+dashboard navigation, the reviews and overview client components, and the survey
+editor component. It does not measure all
 other application pages or components. The database client bootstrap is excluded;
 tests replace external database and provider connections at their boundaries.
 Test files are not counted as application code.
 
 Lines, statements, functions, and branches must each reach 95% globally. The same
 four thresholds also apply independently to these files so aggregate coverage
-cannot hide missing coverage in the direct-reply workflow:
+cannot hide missing coverage in the covered workflows:
 
 - `src/app/(dashboard)/dashboard/reviews/reviews-client.tsx`
 - `src/app/api/gbp/reply/route.ts`
@@ -25,6 +26,7 @@ cannot hide missing coverage in the direct-reply workflow:
 - `src/app/api/reviews/route.ts`
 - `src/lib/google-gbp-oauth.ts`
 - `src/lib/survey-builder.ts`
+- `src/app/(dashboard)/dashboard/surveys/[id]/edit/survey-editor.tsx`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -75,9 +77,25 @@ data, never to a typing event or a reorder operation. DOM tests of the full edit
 cover both choice types, trailing Enter, blank lines, whitespace/IME input,
 reordering/deletion, save without blur, whitespace-only validation, failed saves,
 switching surveys with reused item IDs, and changing question types. Pure tests
-verify that preview/save normalization does not mutate the editing buffer. The
-full editor is exercised by these tests but is not added to the measured component
-scope; the shared survey-builder library has independent 95% thresholds.
+verify that preview/save normalization does not mutate the editing buffer. Both
+the full editor and the shared survey-builder library have independent 95%
+thresholds for lines, statements, functions, and branches.
+
+Additional DOM tests cover loading without editable defaults, all generation
+fields, add/reorder operations, create/update responses, missing IDs, denied or
+failed requests, duplicate-save prevention, and local list controls. List-control
+tests assert client state only; they do not claim those controls persist changes.
+Deferred-response tests reproduce stale success/error responses after switching
+surveys or schools. Effect cleanup aborts the obsolete request, and aborted
+requests cannot overwrite current form data, notices, or loading state. Tests
+also cover unmounting during session resolution and during an in-flight request.
+
+`survey-editor-workflow.test.tsx` connects the actual editor, GET/POST routes,
+school-scope resolution, persistence normalization, Prisma write arguments,
+reloading, and public-question serialization. Only session identity, network
+dispatch, and the database adapter are substituted. Create and update tests
+verify the selected school, ordered choices without blank lines, and public
+question order. These are in-process integration tests, not live database tests.
 
 ### Quota and permission refusals
 

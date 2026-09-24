@@ -308,7 +308,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  async function loadSurveys() {
+  async function loadSurveys(signal: AbortSignal) {
     setIsLoading(true);
     setNotice(null);
 
@@ -324,11 +324,16 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
         params.set("id", surveyId);
       }
 
+      const headers = await getAuthHeaders();
+      if (signal.aborted) return;
+
       const response = await fetch(`/api/surveys?${params.toString()}`, {
-        headers: await getAuthHeaders(),
+        headers,
         cache: "no-store",
+        signal,
       });
       const data = (await response.json()) as SurveysApiResponse;
+      if (signal.aborted) return;
 
       if (!response.ok) {
         throw new Error(data.message || "アンケート設定を取得できませんでした。");
@@ -364,6 +369,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       setEditingExistingId(target.id);
       setNotice(`${target.title}をDBから読み込みました。`);
     } catch (error) {
+      if (signal.aborted) return;
       setSettings([]);
       setNotice(
         error instanceof Error
@@ -371,7 +377,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
           : "アンケート設定を取得できませんでした。",
       );
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
   }
 
@@ -476,7 +482,9 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
   }
 
   useEffect(() => {
-    void loadSurveys();
+    const controller = new AbortController();
+    void loadSurveys(controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId, searchParams]);
 
@@ -535,7 +543,6 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
               </button>
             </div>
             {notice ? <p className={styles.toast}>{notice}</p> : null}
-            {isLoading ? <p className={styles.toast}>DBから読み込み中です。</p> : null}
           </section>
 
           <section className={styles.panel}>
