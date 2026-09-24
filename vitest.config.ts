@@ -13,6 +13,7 @@ export default defineConfig({
         "src/app/api/**/*.ts",
         "src/components/dashboard/navigation.ts",
         "src/app/**/reviews/reviews-client.tsx",
+        "src/app/**/dashboard/overview-client.tsx",
       ],
       exclude: [
         "src/**/*.test.ts",
@@ -26,6 +27,9 @@ export default defineConfig({
         branches: 95,
         statements: 95,
         "src/app/**/reviews/reviews-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/**/dashboard/overview-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/dashboard-summary.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/dashboard/overview/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/gbp-direct-reply.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/review-reply-assist.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/gbp/reply/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },

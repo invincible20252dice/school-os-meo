@@ -6,7 +6,7 @@ Prisma Client generation and the Next.js production build.
 ## Measured scope
 
 `vitest.config.ts` measures the existing shared TypeScript libraries, API routes,
-dashboard navigation, and the reviews client component. It does not measure all
+dashboard navigation, and the reviews and overview client components. It does not measure all
 other application pages or components. The database client bootstrap is excluded;
 tests replace external database and provider connections at their boundaries.
 Test files are not counted as application code.
@@ -19,6 +19,9 @@ cannot hide missing coverage in the direct-reply workflow:
 - `src/app/api/gbp/reply/route.ts`
 - `src/lib/gbp-direct-reply.ts`
 - `src/lib/review-reply-assist.ts`
+- `src/app/(dashboard)/dashboard/overview-client.tsx`
+- `src/app/api/dashboard/overview/route.ts`
+- `src/lib/dashboard-summary.ts`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -49,3 +52,31 @@ credentials, or prove Google API approval/quota availability. A successful build
 and coverage report are not evidence of a successful production Google write.
 Production posting must be verified with an authorized account and an intended
 reply. Never replace a failed Google request with a fabricated success response.
+
+## Overview metrics and regression tests
+
+The overview reads the selected school from the URL. An approved manager is
+restricted to assigned schools; authenticated headquarters users can request all
+active schools. A missing school or failed query never widens the scope or
+substitutes demonstration metrics. No schema migration is needed for this change.
+
+- Registered reviews count non-archived `Review` records (including survey
+  records, not exclusively published Google reviews). Average rating excludes
+  unrated records. Month counts use `postedAt`, or `createdAt` when no posting date
+  exists, with Japanese calendar-month boundaries. The displayed comparison is
+  the current month to date versus the previous full month.
+- Pending replies count `PENDING` and `PENDING_CUSTOM_REPLY` records without a
+  reply timestamp. Churn counts distinguish open, in-progress, and unresolved
+  high-risk alerts.
+- MEO uses the newest `RankHistory` among active `TargetKeyword` records and
+  compares only with that same keyword's previous measurement. A null measured
+  rank means out of range; no history means unmeasured.
+- AIO averages each active keyword's latest `AioScoreHistory`, without counting
+  older measurements again. Search terms use the latest stored reporting month
+  and sum matching queries across the authorized schools. Unmeasured values are
+  null, never fake scores or copied values from another school.
+- Tests cover school isolation, denied/pending authentication, empty databases,
+  database failures, JST month/year boundaries, ranking comparisons, AIO zeroes,
+  query aggregation, and alert-derived actions. Component tests use the actual
+  aggregator's response and operate the rendered DOM, including retries and
+  stale success/error responses after switching schools.
