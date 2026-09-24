@@ -356,6 +356,14 @@ describe("google-gbp-oauth", () => {
     } satisfies Partial<GoogleBusinessProfileApiError>);
   });
 
+  it("preserves the quota status when the error response stream fails", async () => {
+    const response = new Response(null, { status: 429 });
+    vi.spyOn(response, "text").mockRejectedValue(new Error("response stream interrupted"));
+    await expect(fetchGbpAccounts({ accessToken: "access-token", fetchImpl: vi.fn(async () => response) })).rejects.toMatchObject({
+      name: "GoogleBusinessProfileApiError", status: 429, responseBody: "",
+    });
+  });
+
   it("handles empty GBP pages and sparse location addresses", async () => {
     const accountsFetch = vi.fn(async () => jsonResponse({})) as unknown as typeof fetch;
     const accounts = await fetchGbpAccounts({

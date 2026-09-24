@@ -22,6 +22,8 @@ cannot hide missing coverage in the direct-reply workflow:
 - `src/app/(dashboard)/dashboard/overview-client.tsx`
 - `src/app/api/dashboard/overview/route.ts`
 - `src/lib/dashboard-summary.ts`
+- `src/app/api/reviews/route.ts`
+- `src/lib/google-gbp-oauth.ts`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -44,6 +46,17 @@ branches to make a change pass.
   preservation, valid empty states, invalid response rejection, edit deep links,
   copy behavior, and stale responses after switching schools. Sync, manual
   completion, and direct publication cannot run concurrently.
+- `reply-workflow.test.tsx` connects the actual component, reply API, OAuth/Google
+  provider code, database write arguments, and list serializer in one test. Only
+  session identity, the PostgreSQL adapter, and Google HTTP are replaced. It
+  checks the edited text end to end, quota/permission refusals, reload after a
+  draft save, explicit retry, confirmed publication, and a 500 refusal that must
+  not mutate storage. These are in-process integration tests, not live-DB or live
+  Google posting tests.
+- Review API tests use the real school-scope resolver instead of stubbing its
+  answer. Missing/inconsistent manager memberships are denied before listing or
+  updating reviews; explicit cross-school requests are rejected. Admin access
+  remains available without a specific school assignment.
 
 ## External verification boundary
 

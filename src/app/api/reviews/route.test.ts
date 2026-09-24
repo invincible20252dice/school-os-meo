@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-vi.mock("@/lib/supabase-access", () => ({
+vi.mock("@/lib/supabase-access", async () => ({
+  ...await vi.importActual<typeof import("@/lib/supabase-access")>("@/lib/supabase-access"),
   resolveRequestAccess: vi.fn(async () => ({
     access: {
       userId: "manager-1",
@@ -14,12 +15,6 @@ vi.mock("@/lib/supabase-access", () => ({
       source: "profiles",
     },
     isAuthenticated: true,
-  })),
-  buildScopedSchoolFilter: vi.fn((_access, schoolId) => ({
-    requestedSchoolId: schoolId || "school-1",
-    effectiveSchoolId: schoolId || "school-1",
-    role: "manager",
-    canSwitchSchool: false,
   })),
 }));
 
@@ -69,6 +64,32 @@ vi.mock("@/lib/prisma", () => ({
 describe("GET /api/reviews", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([
+    { schoolId: "", schoolIds: [] },
+    { schoolId: "all", schoolIds: [] },
+    { schoolId: "school-2", schoolIds: ["school-1"] },
+  ])("denies inconsistent manager assignments without broadening the database query (%j)", async assignment => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, ...assignment } });
+    const response = await GET(new Request("https://app.example.com/api/reviews?schoolId=all"));
+    expect(response.status).toBe(403);
+    expect(prisma.review.findMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "?schoolId=all", "?schoolId=school-1"])("uses the real scope resolver to restrict managers (%s)", async query => {
+    const { prisma } = await import("@/lib/prisma");
+    expect((await GET(new Request(`https://app.example.com/api/reviews${query}`))).status).toBe(200);
+    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { schoolId: "school-1" } }));
+  });
+
+  it("rejects a manager's explicit request for another school", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    expect((await GET(new Request("https://app.example.com/api/reviews?schoolId=school-2"))).status).toBe(403);
+    expect(prisma.review.findMany).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated listing before reading review data", async () => {
@@ -220,12 +241,8 @@ describe("GET /api/reviews", () => {
   it("allows admins to list all schools when no school is selected", async () => {
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
-      requestedSchoolId: "all",
-      effectiveSchoolId: undefined,
-      role: "admin",
-      canSwitchSchool: true,
-    });
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, role: "admin", schoolId: "", schoolIds: [] } });
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
 
@@ -286,6 +303,32 @@ describe("GET /api/reviews", () => {
 describe("PATCH /api/reviews", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("allows headquarters to confirm a reply without a school assignment", async () => {
+    const { PATCH } = await import("./route");
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, role: "admin", schoolId: "", schoolIds: [] } });
+    const response = await PATCH(new Request("https://app.example.com/api/reviews", { method: "PATCH", body: JSON.stringify({ reviewId: "review-1", replyText: "投稿済み本文" }) }));
+    expect(response.status).toBe(200);
+    expect(prisma.review.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "review-1" }, data: expect.objectContaining({ replyText: "投稿済み本文" }) }));
+  });
+
+  it.each([
+    { schoolId: "", schoolIds: [] },
+    { schoolId: "all", schoolIds: [] },
+    { schoolId: "school-1", schoolIds: ["school-2"] },
+  ])("does not allow incomplete or inconsistent memberships to update reply status (%j)", async assignment => {
+    const { PATCH } = await import("./route");
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, ...assignment } });
+    const response = await PATCH(new Request("https://app.example.com/api/reviews", { method: "PATCH", body: JSON.stringify({ reviewId: "review-1", replyText: "投稿済み本文" }) }));
+    expect(response.status).toBe(403);
+    expect(prisma.review.update).not.toHaveBeenCalled();
   });
 
   it("marks a Google review as replied with the edited draft", async () => {
@@ -427,12 +470,8 @@ describe("PATCH /api/reviews", () => {
     const { PATCH } = await import("./route");
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
-      requestedSchoolId: "school-1",
-      effectiveSchoolId: "school-2",
-      role: "manager",
-      canSwitchSchool: false,
-    });
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, schoolId: "school-2", schoolIds: ["school-2"] } });
 
     const response = await PATCH(
       new Request("https://app.example.com/api/reviews", {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
+import { canAccessSchool, isAllSchoolRole } from "@/lib/auth-access";
 import { prisma } from "@/lib/prisma";
 import {
   buildGoogleReviewManagementUrl,
@@ -64,15 +65,7 @@ async function resolveScopedReview(request: Request, reviewId: string) {
     return { error: "NOT_FOUND" as const };
   }
 
-  const scopedSchool = buildScopedSchoolFilter(
-    accessResult.access,
-    review.schoolId,
-  );
-
-  if (
-    scopedSchool.effectiveSchoolId &&
-    scopedSchool.effectiveSchoolId !== review.schoolId
-  ) {
+  if (!canAccessSchool(accessResult.access, review.schoolId)) {
     return { error: "FORBIDDEN" as const };
   }
 
@@ -114,7 +107,7 @@ function serializeReview(review: ReviewRow) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
+    const requestedSchoolId = url.searchParams.get("schoolId")?.trim() || undefined;
     const accessResult = await resolveRequestAccess(request, url);
 
     if (!accessResult.isAuthenticated) {
@@ -135,6 +128,13 @@ export async function GET(request: Request) {
       accessResult.access,
       requestedSchoolId,
     );
+    if (!isAllSchoolRole(accessResult.access.role) && (
+      !scopedSchool.effectiveSchoolId ||
+      !canAccessSchool(accessResult.access, scopedSchool.effectiveSchoolId) ||
+      (requestedSchoolId && requestedSchoolId !== "all" && !canAccessSchool(accessResult.access, requestedSchoolId))
+    )) {
+      return NextResponse.json({ message: "担当校舎の権限を確認できません。管理者に校舎の割り当てを確認してください。" }, { status: 403 });
+    }
     const reviews = await prisma.review.findMany({
       where: scopedSchool.effectiveSchoolId
         ? { schoolId: scopedSchool.effectiveSchoolId }
