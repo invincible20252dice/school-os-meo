@@ -3,13 +3,14 @@ import { GET, POST } from "./route";
 import { DirectReplyError, publishDirectGbpReply } from "@/lib/gbp-direct-reply";
 import { prisma } from "@/lib/prisma";
 import { resolveRequestAccess } from "@/lib/supabase-access";
+import { GET as getReviews } from "../../reviews/route";
 
-vi.mock("@/lib/supabase-access", () => ({ resolveRequestAccess: vi.fn() }));
+vi.mock("@/lib/supabase-access", async () => ({ ...await vi.importActual<typeof import("@/lib/supabase-access")>("@/lib/supabase-access"), resolveRequestAccess: vi.fn() }));
 vi.mock("@/lib/gbp-direct-reply", async () => ({
   ...await vi.importActual<typeof import("@/lib/gbp-direct-reply")>("@/lib/gbp-direct-reply"),
   publishDirectGbpReply: vi.fn(),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: { review: { findUnique: vi.fn(), update: vi.fn() } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { review: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() } } }));
 
 const access = {
   isAuthenticated: true,
@@ -34,6 +35,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.mocked(resolveRequestAccess).mockResolvedValue(access);
   vi.mocked(prisma.review.findUnique).mockResolvedValue(review() as never);
   vi.mocked(publishDirectGbpReply).mockResolvedValue({ googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real", replyText: normalizedReply, alreadyPublished: false });
@@ -134,12 +136,70 @@ describe("GBP direct reply API", () => {
     expect(publishDirectGbpReply).not.toHaveBeenCalled();
   });
 
-  it.each([403, 404, 429, 500])("never marks a failed Google write as replied (%s)", async (googleStatus) => {
+  it.each([404, 500])("never marks a failed Google write as replied (%s)", async (googleStatus) => {
     vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_ERROR", "Googleが投稿を拒否しました", 502, googleStatus));
     const response = await POST(request());
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ success: false, googlePosted: false, googleStatus });
     expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 429])("saves only the edited draft after provider refusal (%s)", async googleStatus => {
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_ERROR", "Google refusal", 502, googleStatus));
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ success: true, googlePosted: false, gbpPublished: false, draftSaved: true, deliveryStatus: "DRAFT_SAVED", warning: googleStatus === 429 ? "RATE_LIMITED" : "PERMISSION_DENIED", googleStatus });
+    expect(body.message).toContain("Googleには未反映");
+    expect(prisma.review.update).toHaveBeenCalledExactlyOnceWith({ where: { id: "review-1" }, data: { aiReplyText: normalizedReply, aiReplyDraft: normalizedReply }, select: { id: true } });
+    expect(body.status).toBeUndefined();
+    expect(vi.mocked(publishDirectGbpReply).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(prisma.review.update).mock.invocationCallOrder[0]);
+  });
+
+  it("does not claim draft persistence when the database refuses the write", async () => {
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_QUOTA_EXCEEDED", "quota", 429, 429));
+    vi.mocked(prisma.review.update).mockRejectedValue(new Error("database secret"));
+    const response = await POST(request());
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ success: false, googlePosted: false, code: "DRAFT_SAVE_FAILED", googleStatus: 429 });
+  });
+
+  it("does not downgrade an already published reply when an attempted edit is refused", async () => {
+    const stored = { ...review(), status: "REPLIED", replyText: "以前の公開本文", repliedAt: new Date("2026-09-01T00:00:00Z") };
+    vi.mocked(prisma.review.findUnique).mockResolvedValue(stored as never);
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_ERROR", "quota", 429, 429));
+    vi.mocked(prisma.review.update).mockImplementation(async args => Object.assign(stored, args.data) as never);
+    await POST(request());
+    expect(stored).toMatchObject({ status: "REPLIED", replyText: "以前の公開本文", repliedAt: new Date("2026-09-01T00:00:00Z"), aiReplyDraft: normalizedReply });
+  });
+
+  it("round-trips a quota-saved draft through the real reviews list serializer", async () => {
+    const row = review();
+    const stored = { ...row, school: { ...row.school, name: "対象校舎" }, source: "GOOGLE", status: "PENDING", aiReplyText: "元のドラフト", aiReplyDraft: "元のドラフト", replyText: null, repliedAt: null, aiReplyGeneratedAt: null, createdAt: new Date("2026-09-01T00:00:00Z") };
+    vi.mocked(prisma.review.findUnique).mockResolvedValue(stored as never);
+    vi.mocked(prisma.review.findMany).mockImplementation(async () => [stored] as never);
+    vi.mocked(prisma.review.update).mockImplementation(async args => Object.assign(stored, args.data) as never);
+    vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_QUOTA_EXCEEDED", "quota", 429, 429));
+    expect((await (await POST(request())).json()).draftSaved).toBe(true);
+    const response = await getReviews(new Request("https://example.com/api/dashboard/reviews?schoolId=school-1"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).reviews[0]).toMatchObject({ id: "review-1", aiReplyText: normalizedReply, aiReplyDraft: normalizedReply, replyText: "", repliedAt: "", status: "PENDING" });
+  });
+
+  it.each(["token", "accounts", "list"].flatMap(stage => [403, 429].map(status => ({ stage, status }))))("saves drafts for $status during $stage without sending a Google write", async ({ stage, status }) => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-secret");
+    const row = review();
+    if (stage === "accounts") vi.mocked(prisma.review.findUnique).mockResolvedValue({ ...row, googleReviewId: "real", school: { ...row.school, gbpAccountId: null } } as never);
+    const actual = await vi.importActual<typeof import("@/lib/gbp-direct-reply")>("@/lib/gbp-direct-reply");
+    const network = vi.fn<typeof fetch>();
+    if (stage !== "token") network.mockResolvedValueOnce(Response.json({ access_token: "fresh-token" }));
+    network.mockResolvedValueOnce(Response.json({ error: { message: "provider refusal" } }, { status }));
+    vi.mocked(publishDirectGbpReply).mockImplementation(input => actual.publishDirectGbpReply(input, network));
+    const body = await (await POST(request())).json();
+    expect(body).toMatchObject({ success: true, draftSaved: true, googlePosted: false, googleStatus: status });
+    expect(network.mock.calls.every(([, init]) => init?.method !== "PUT")).toBe(true);
+    expect(prisma.review.update).toHaveBeenCalledExactlyOnceWith({ where: { id: "review-1" }, data: { aiReplyText: normalizedReply, aiReplyDraft: normalizedReply }, select: { id: true } });
   });
 
   it("reports remote success separately if subsequent persistence fails", async () => {
@@ -178,9 +238,9 @@ describe("GBP direct reply API", () => {
       expect(prisma.review.update).toHaveBeenCalledTimes(1);
       expect(network.mock.invocationCallOrder[2]).toBeLessThan(vi.mocked(prisma.review.update).mock.invocationCallOrder[0]);
     } else {
-      expect(response.status).toBe(status === 429 ? 429 : 502);
-      expect(body).toMatchObject({ success: false, googlePosted: false, googleStatus: status });
-      expect(prisma.review.update).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ success: true, googlePosted: false, draftSaved: true, googleStatus: status });
+      expect(prisma.review.update).toHaveBeenCalledExactlyOnceWith({ where: { id: "review-1" }, data: { aiReplyText: normalizedReply, aiReplyDraft: normalizedReply }, select: { id: true } });
     }
     expect(JSON.stringify(body)).not.toMatch(/fresh-token|setting-token|test-secret/);
   });

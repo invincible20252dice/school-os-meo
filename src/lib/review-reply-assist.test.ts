@@ -12,7 +12,7 @@ describe("submitDirectReviewReply", () => {
 
   it("submits the edited text with the review's school and authenticated session", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, googlePosted: true, message: "送信しました" }));
-    expect(await submitDirectReviewReply(input, fetchMock)).toBe("送信しました");
+    expect(await submitDirectReviewReply(input, fetchMock)).toEqual({ deliveryStatus: "GOOGLE_POSTED", message: "送信しました" });
     expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/reviews/reply", {
       method: "POST", headers: { authorization: "Bearer session-token", "Content-Type": "application/json" },
       body: JSON.stringify({ reviewId: "review-1", schoolId: "school-1", replyText: "返信\n本文" }),
@@ -50,7 +50,24 @@ describe("submitDirectReviewReply", () => {
 
   it("uses browser fetch and the default confirmed-success message", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ success: true, googlePosted: true })));
-    expect(await submitDirectReviewReply(input)).toBe("Googleへ返信を送信しました。");
+    expect(await submitDirectReviewReply(input)).toEqual({ deliveryStatus: "GOOGLE_POSTED", message: "Googleへ返信を送信しました。" });
+  });
+
+  it.each(["RATE_LIMITED", "PERMISSION_DENIED"])("reports a confirmed draft save separately from publication (%s)", async warning => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, googlePosted: false, draftSaved: true, deliveryStatus: "DRAFT_SAVED", warning, message: "下書き保存済み・Google未反映" }));
+    expect(await submitDirectReviewReply(input, fetchMock)).toEqual({ deliveryStatus: "DRAFT_SAVED", message: "下書き保存済み・Google未反映" });
+  });
+
+  it("uses an explicitly unpublished message when a saved draft response has no message", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, googlePosted: false, draftSaved: true, deliveryStatus: "DRAFT_SAVED", warning: "RATE_LIMITED" }));
+    expect(await submitDirectReviewReply(input, fetchMock)).toEqual({ deliveryStatus: "DRAFT_SAVED", message: "返信文を下書き保存しました。Googleには未反映です。" });
+  });
+
+  it.each([
+    { draftSaved: false }, { deliveryStatus: "LOCAL_SAVED" }, { warning: "UNKNOWN" },
+  ])("rejects incomplete or unrecognized draft confirmation (case %#)", async override => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, googlePosted: false, draftSaved: true, deliveryStatus: "DRAFT_SAVED", warning: "RATE_LIMITED", ...override }));
+    await expect(submitDirectReviewReply(input, fetchMock)).rejects.toThrow("Googleへの返信送信を確認できませんでした");
   });
 });
 

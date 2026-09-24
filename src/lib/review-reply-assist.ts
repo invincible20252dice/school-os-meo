@@ -56,9 +56,16 @@ export async function submitDirectReviewReply(
     headers: { ...input.headers, "Content-Type": "application/json" },
     body: JSON.stringify({ reviewId: input.reviewId, schoolId: input.schoolId, replyText }),
   });
-  const body = await response.json().catch(() => null) as { success?: boolean; googlePosted?: boolean; message?: string } | null;
+  const body = await response.json().catch(() => null) as {
+    success?: boolean; googlePosted?: boolean; message?: string; draftSaved?: boolean;
+    deliveryStatus?: string; warning?: string;
+  } | null;
+  if (response.ok && body?.success === true && body.googlePosted === false && body.draftSaved === true
+    && body.deliveryStatus === "DRAFT_SAVED" && (body.warning === "RATE_LIMITED" || body.warning === "PERMISSION_DENIED")) {
+    return { deliveryStatus: "DRAFT_SAVED" as const, message: body.message || "返信文を下書き保存しました。Googleには未反映です。" };
+  }
   if (!response.ok || body?.success !== true || body.googlePosted !== true) {
     throw new Error(body?.message || "Googleへの返信送信を確認できませんでした。");
   }
-  return body.message || "Googleへ返信を送信しました。";
+  return { deliveryStatus: "GOOGLE_POSTED" as const, message: body.message || "Googleへ返信を送信しました。" };
 }

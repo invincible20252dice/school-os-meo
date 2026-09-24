@@ -259,7 +259,7 @@ export async function refreshGoogleAccessToken({
   });
 
   if (!response.ok) {
-    throw new Error(`Google OAuth refresh failed: ${response.status}`);
+    throw new GoogleBusinessProfileApiError(`Google OAuth refresh failed: ${response.status}`, response.status);
   }
 
   const data = (await response.json()) as GoogleTokenResponse;

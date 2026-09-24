@@ -68,19 +68,43 @@ export async function POST(request: Request) {
     }
     const setting = review.school.schoolSetting;
     const account = review.school.googleAccount;
-    const published = await publishDirectGbpReply({
-      refreshToken: setting?.googleRefreshToken || account?.refreshToken || "",
-      locationId: setting?.selectedGbpLocationId || account?.locationId || review.school.gbpLocationId || "",
-      accountId: review.school.gbpAccountId || setting?.googleAccountId || "",
-      review: {
-        googleReviewId: review.googleReviewId,
-        gbpReviewId: review.gbpReviewId,
-        authorName: review.authorName || review.parentName || "",
-        originalText: review.originalText || review.comment || "",
-        rating: review.rating,
-      },
-      replyText,
-    });
+    let published: Awaited<ReturnType<typeof publishDirectGbpReply>>;
+    try {
+      published = await publishDirectGbpReply({
+        refreshToken: setting?.googleRefreshToken || account?.refreshToken || "",
+        locationId: setting?.selectedGbpLocationId || account?.locationId || review.school.gbpLocationId || "",
+        accountId: review.school.gbpAccountId || setting?.googleAccountId || "",
+        review: {
+          googleReviewId: review.googleReviewId,
+          gbpReviewId: review.gbpReviewId,
+          authorName: review.authorName || review.parentName || "",
+          originalText: review.originalText || review.comment || "",
+          rating: review.rating,
+        },
+        replyText,
+      });
+    } catch (error) {
+      // Persist only the editable draft. A provider refusal is never a published reply.
+      if (!(error instanceof DirectReplyError) || (error.googleStatus !== 429 && error.googleStatus !== 403)) throw error;
+      const warning = error.googleStatus === 429 ? "RATE_LIMITED" : "PERMISSION_DENIED";
+      try {
+        await prisma.review.update({
+          where: { id: review.id },
+          data: { aiReplyText: replyText, aiReplyDraft: replyText },
+          select: { id: true },
+        });
+      } catch {
+        throw new DirectReplyError("DRAFT_SAVE_FAILED", "Googleへ投稿できず、下書きの保存にも失敗しました。入力文をコピーして保管し、時間をおいて再試行してください。", 500, error.googleStatus);
+      }
+      console.warn("[GBP Direct Reply Draft Saved]", { reviewId, schoolId: review.schoolId, warning, googleStatus: error.googleStatus });
+      return NextResponse.json({
+        success: true, googlePosted: false, gbpPublished: false, draftSaved: true,
+        deliveryStatus: "DRAFT_SAVED", warning, googleStatus: error.googleStatus,
+        message: error.googleStatus === 429
+          ? "返信文を下書き保存しました。Google APIの利用上限により、Googleには未反映です。利用枠を確認し、時間をおいて再送信するか、コピーしてGoogleで返信してください。"
+          : "返信文を下書き保存しました。Googleがアクセスを拒否したため、Googleには未反映です。APIの利用承認・店舗の管理権限・Google連携を確認するか、コピーしてGoogleで返信してください。",
+      });
+    }
     googlePosted = true;
     const updated = await prisma.review.update({
       where: { id: review.id },

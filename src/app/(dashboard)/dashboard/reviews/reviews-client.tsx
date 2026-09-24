@@ -105,7 +105,7 @@ export default function ReviewsClient() {
   const selectedSchoolId = searchParams.get("schoolId") || "";
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<"idle" | "loading" | "saving" | "error">(
+  const [status, setStatus] = useState<"idle" | "loading" | "saving" | "error" | "warning">(
     "loading",
   );
   const [message, setMessage] = useState("");
@@ -184,15 +184,21 @@ export default function ReviewsClient() {
     const version = loadVersion.current;
     try {
       const headers = await buildAuthHeaders();
-      const successMessage = await submitDirectReviewReply({
+      const result = await submitDirectReviewReply({
         reviewId: review.id,
         schoolId: review.schoolId,
         replyText: drafts[review.id] || "",
         headers,
       });
       if (version !== loadVersion.current) return;
+      if (result.deliveryStatus === "DRAFT_SAVED") {
+        // Keep the user's exact edited text visible even if a subsequent list request fails.
+        setStatus("warning");
+        setMessage(result.message);
+        return;
+      }
       const loaded = await loadReviews();
-      if (loaded && loadVersion.current === version + 1) setMessage(successMessage);
+      if (loaded && loadVersion.current === version + 1) setMessage(result.message);
     } catch (error) {
       if (version !== loadVersion.current) return;
       setStatus("error");
@@ -357,7 +363,7 @@ export default function ReviewsClient() {
       {message ? (
         <p
           role="status"
-          className={status === "error" ? styles.errorMessage : styles.successMessage}
+          className={status === "error" ? styles.errorMessage : status === "warning" ? styles.warningMessage : styles.successMessage}
         >
           {message}
         </p>

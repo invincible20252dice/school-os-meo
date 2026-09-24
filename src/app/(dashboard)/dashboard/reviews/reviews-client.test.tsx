@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReviewsClient from "./reviews-client";
 import { renderToString } from "react-dom/server";
+import styles from "./page.module.css";
 
 const route = vi.hoisted(() => ({ params: new URLSearchParams("schoolId=school-1") }));
 const session = vi.hoisted(() => vi.fn());
@@ -33,6 +34,48 @@ describe("ReviewsClient direct Google replies", () => {
     session.mockReset().mockResolvedValue({ data: { session: { access_token: "session-token" } } });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it.each(["RATE_LIMITED", "PERMISSION_DENIED"])("preserves the draft and permits retry after a confirmed local save (%s)", async warning => {
+    const message = "返信文を下書き保存しました。Googleには未反映です。";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(list())
+      .mockResolvedValueOnce(Response.json({ success: true, googlePosted: false, draftSaved: true, deliveryStatus: "DRAFT_SAVED", warning, message }))
+      .mockResolvedValueOnce(list([{ ...review, aiReplyText: "修正した下書き" }]))
+      .mockResolvedValueOnce(success())
+      .mockResolvedValueOnce(list([{ ...review, aiReplyText: "修正した下書き", replyText: "修正した下書き", repliedAt: "2026-09-24T00:00:00Z" }]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ReviewsClient />);
+    await screen.findByText("投稿者");
+    fireEvent.change(editor(), { target: { value: "修正した下書き" } });
+    fireEvent.click(button());
+    await screen.findByText(message);
+    expect(screen.getByRole("status").className).toBe(styles.warningMessage);
+    expect(editor().value).toBe("修正した下書き");
+    expect(editor().disabled).toBe(false);
+    expect((button() as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("未返信")).toBeDefined();
+    expect(screen.queryByText("返信済")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "再読み込み" }));
+    await waitFor(() => expect(editor().disabled).toBe(false));
+    expect(editor().value).toBe("修正した下書き");
+    fireEvent.click(button());
+    await screen.findByText("Googleへ送信しました。");
+    expect(screen.getByText("返信済")).toBeDefined();
+    expect(screen.getByRole("status").className).toBe(styles.successMessage);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("keeps edited text when both Google and the draft save fail", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(list()).mockResolvedValueOnce(Response.json({ success: false, googlePosted: false, code: "DRAFT_SAVE_FAILED", message: "下書き保存にも失敗しました。" }, { status: 500 })));
+    render(<ReviewsClient />);
+    await screen.findByText("投稿者");
+    fireEvent.change(editor(), { target: { value: "失ってはいけない本文" } });
+    fireEvent.click(button());
+    await screen.findByText("下書き保存にも失敗しました。");
+    expect(editor().value).toBe("失ってはいけない本文");
+    expect(screen.getByRole("status").className).toBe(styles.errorMessage);
+    expect(screen.queryByText("返信済")).toBeNull();
+  });
 
   it("posts the edited text without opening Google and refreshes only after confirmed success", async () => {
     const fetchMock = vi.fn<typeof fetch>()

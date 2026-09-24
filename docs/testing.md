@@ -53,6 +53,23 @@ and coverage report are not evidence of a successful production Google write.
 Production posting must be verified with an authorized account and an intended
 reply. Never replace a failed Google request with a fabricated success response.
 
+### Quota and permission refusals
+
+Google 429/403 responses during OAuth, account discovery, review lookup, or the
+reply PUT save only `aiReplyText` and `aiReplyDraft` for the authorized review.
+The API returns `deliveryStatus: DRAFT_SAVED`, `draftSaved: true`,
+`googlePosted: false`, and `warning: RATE_LIMITED` or `PERMISSION_DENIED`.
+Here `success: true` confirms local draft persistence only, not publication.
+Existing `replyText`, `status`, and `repliedAt` remain unchanged. A failed draft
+write returns an error instead of claiming that the text was saved.
+
+The UI shows a warning, preserves the editor text, and permits an explicit retry
+or copying to Google's management page. It does not automatically retry a
+quota-limited write. Google quota/access approval must still be resolved; local
+persistence does not bypass Google's restrictions. Tests exercise actual
+provider HTTP handling, draft persistence and list serialization, warning UI,
+reload/retry, and protection of previously published replies.
+
 ## Overview metrics and regression tests
 
 The overview reads the selected school from the URL. An approved manager is

@@ -278,6 +278,7 @@
 }
 
 .successMessage,
+.warningMessage,
 .errorMessage {
   margin: 16px 0 0;
   border-radius: 8px;
@@ -294,6 +295,12 @@
 .errorMessage {
   background: #fff0ee;
   color: #c43b2f;
+}
+
+.warningMessage {
+  background: #fff8df;
+  color: #705400;
+  border: 1px solid #e4c75e;
 }
 
 @media (max-width: 720px) {

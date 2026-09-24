@@ -42,6 +42,12 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("publishDirectGbpReply", () => {
+  it.each([403, 429])("preserves OAuth refusal status for draft-save handling (%s)", async status => {
+    const network = responses(json({}, status));
+    await expect(publishDirectGbpReply(input, network)).rejects.toMatchObject({ googleStatus: status });
+    expect(network).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes the school token, verifies the real review, and PUTs normalized text", async () => {
     const fetchMock = responses(token(), listing(), posted());
     const result = await publishDirectGbpReply({ ...input, replyText: ` ${replyText.replace(/\n/g, "\\n")} ` }, fetchMock);

@@ -128,7 +128,8 @@ export async function publishDirectGbpReply(input: DirectReplyInput, fetchImpl: 
   let accessToken: string;
   try {
     accessToken = await refreshGoogleAccessToken({ refreshToken: input.refreshToken.trim(), fetchImpl: timedFetch });
-  } catch {
+  } catch (error) {
+    if (error instanceof GoogleBusinessProfileApiError && (error.status === 429 || error.status === 403)) throw googleError(error.status);
     throw new DirectReplyError("GOOGLE_TOKEN_REFRESH_FAILED", "Googleのアクセストークンを更新できません。OAuth環境変数を確認し、Googleアカウントを再連携してください。", 502);
   }
 
