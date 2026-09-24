@@ -121,6 +121,10 @@ function normalizeIncentive(survey: SurveyEditorState): SurveyEditorState {
   };
 }
 
+export function normalizeSurveyOptions(options: string[]) {
+  return options.map(option => option.trim()).filter(Boolean);
+}
+
 export function normalizeSurveyItemOrder(
   items: SurveyEditorItem[],
 ): SurveyEditorItem[] {
@@ -175,7 +179,7 @@ export function validateSurveyEditorState(survey: SurveyEditorState) {
       errors.push(`${index + 1}番目の設問文を入力してください。`);
     }
 
-    if (item.type !== "TEXT" && item.options.length === 0) {
+    if (item.type !== "TEXT" && normalizeSurveyOptions(item.options).length === 0) {
       errors.push(`${index + 1}番目の選択肢を1つ以上入力してください。`);
     }
   });
@@ -190,7 +194,10 @@ export function saveSurveySetting(
 ): SurveySettingListItem[] {
   const normalizedSurvey = normalizeIncentive({
     ...survey,
-    items: normalizeSurveyItemOrder(survey.items),
+    items: normalizeSurveyItemOrder(survey.items).map(item => ({
+      ...item,
+      options: normalizeSurveyOptions(item.options),
+    })),
   });
   const existing = settings.find((setting) => setting.id === survey.id);
 
@@ -294,6 +301,7 @@ export function buildSurveyPreviewSteps(survey: SurveyEditorState) {
   return normalizeSurveyItemOrder(survey.items)
     .map((item) => ({
       ...item,
+      options: normalizeSurveyOptions(item.options),
       placeholder:
         item.type === "TEXT"
           ? getTextQuestionPlaceholder(item.question, item.placeholder)

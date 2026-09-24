@@ -24,6 +24,7 @@ cannot hide missing coverage in the direct-reply workflow:
 - `src/lib/dashboard-summary.ts`
 - `src/app/api/reviews/route.ts`
 - `src/lib/google-gbp-oauth.ts`
+- `src/lib/survey-builder.ts`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -65,6 +66,18 @@ credentials, or prove Google API approval/quota availability. A successful build
 and coverage report are not evidence of a successful production Google write.
 Production posting must be verified with an authorized account and an intended
 reply. Never replace a failed Google request with a fabricated success response.
+
+## Survey option editing
+
+The editor retains every line (including trailing empty entries) in its editable
+options array. Normalization is applied only to preview, validation, and saved
+data, never to a typing event or a reorder operation. DOM tests of the full editor
+cover both choice types, trailing Enter, blank lines, whitespace/IME input,
+reordering/deletion, save without blur, whitespace-only validation, failed saves,
+switching surveys with reused item IDs, and changing question types. Pure tests
+verify that preview/save normalization does not mutate the editing buffer. The
+full editor is exercised by these tests but is not added to the measured component
+scope; the shared survey-builder library has independent 95% thresholds.
 
 ### Quota and permission refusals
 

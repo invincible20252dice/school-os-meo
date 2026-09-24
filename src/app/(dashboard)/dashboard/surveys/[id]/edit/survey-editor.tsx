@@ -9,6 +9,7 @@ import {
   deleteSurveySetting,
   moveSurveyItem,
   normalizeSurveyItemOrder,
+  normalizeSurveyOptions,
   saveSurveySetting,
   type SurveyEditorItem,
   type SurveyEditorState,
@@ -94,13 +95,6 @@ function ArrowDownIcon() {
       <path d="M19 12l-7 7-7-7" />
     </svg>
   );
-}
-
-function parseOptions(value: string) {
-  return value
-    .split("\n")
-    .map((option) => option.trim())
-    .filter(Boolean);
 }
 
 function serializeOptions(options: string[]) {
@@ -393,7 +387,10 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
       const surveyToSave = {
         ...survey,
         schoolId: getSaveSchoolId(),
-        items: normalizeSurveyItemOrder(survey.items),
+        items: normalizeSurveyItemOrder(survey.items).map(item => ({
+          ...item,
+          options: normalizeSurveyOptions(item.options),
+        })),
       };
       const response = await fetch("/api/surveys", {
         method: "POST",
@@ -761,7 +758,8 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                           value={serializeOptions(item.options)}
                           onChange={(event) =>
                             updateItem(item.id, {
-                              options: parseOptions(event.target.value),
+                              // Preserve all input lines; normalize only for preview and persistence.
+                              options: event.target.value.split("\n"),
                             })
                           }
                         />

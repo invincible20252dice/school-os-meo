@@ -35,6 +35,7 @@ export default defineConfig({
         "src/app/api/gbp/reply/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/reviews/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-gbp-oauth.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/survey-builder.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
       },
     },
   },

@@ -9,11 +9,24 @@ import {
   deleteSurveySetting,
   moveSurveyItem,
   normalizeSurveyItemOrder,
+  normalizeSurveyOptions,
   saveSurveySetting,
   validateSurveyEditorState,
 } from "./survey-builder";
 
 describe("survey-builder", () => {
+  it("normalizes display/save choices without mutating the raw editing lines", () => {
+    const raw = ["", " 選択肢A ", "", "　選択肢B　", " ", ""];
+    expect(normalizeSurveyOptions(raw)).toEqual(["選択肢A", "選択肢B"]);
+    expect(normalizeSurveyOptions([])).toEqual([]);
+    const survey = buildMockSurveyEditorState();
+    survey.items[0].options = raw;
+    expect(buildSurveyPreviewSteps(survey)[0].options).toEqual(["選択肢A", "選択肢B"]);
+    expect(saveSurveySetting([], survey, "2026-09-24")[0].items[0].options).toEqual(["選択肢A", "選択肢B"]);
+    expect(moveSurveyItem(survey.items, survey.items[0].id, "down")[1].options).toEqual(raw);
+    expect(survey.items[0].options).toEqual(["", " 選択肢A ", "", "　選択肢B　", " ", ""]);
+  });
+
   it("builds editable survey settings with dynamic items", () => {
     const survey = buildMockSurveyEditorState();
 
