@@ -7,7 +7,7 @@ Prisma Client generation and the Next.js production build.
 
 `vitest.config.ts` measures the existing shared TypeScript libraries, API routes,
 dashboard navigation, the reviews, overview and review-analytics client components,
-and the survey editor component. It does not measure all
+and the survey editor and public survey client components. It does not measure all
 other application pages or components. The database client bootstrap is excluded;
 tests replace external database and provider connections at their boundaries.
 Test files are not counted as application code.
@@ -31,6 +31,13 @@ cannot hide missing coverage in the covered workflows:
 - `src/lib/review-analytics.ts`
 - `src/lib/review-analytics-ai.ts`
 - `src/app/api/dashboard/reviews/analytics/route.ts`
+- `src/app/(customer)/survey/[id]/survey-client.tsx`
+- `src/lib/survey-respondent.ts`
+- `src/lib/public-survey-answers.ts`
+- `src/lib/review-generator.ts`
+- `src/lib/survey-persistence.ts`
+- `src/app/api/generate-review/route.ts`
+- `src/app/api/survey-responses/route.ts`
 
 Reports are generated in `coverage/coverage-summary.json` and
 `coverage/coverage-final.json`. Do not lower thresholds or exclude executable
@@ -160,7 +167,18 @@ configured for production generation. No credentials are committed.
 routes, substituting only provider HTTP and persistence. It verifies unselected
 Q1 blocking, both roles, high-school text context, stored identity in both rating
 paths, and preservation of input on provider errors. Generator, respondent
-contract, and generation route each have independent 95% coverage gates.
+contract, generation route, public client, answer aggregation, persistence, and
+response-save route each have independent 95% coverage gates.
+
+`survey-client-dom.test.tsx` operates the real public form with only HTTP and
+browser clipboard/window boundaries substituted. Tests cover role replacement,
+multi-choice limits and deselection, free text, encoded request IDs, delayed
+loading, missing/malformed data, network failure, timeout, late success/failure
+after changing surveys, save failures and retry, duplicate-submit prevention,
+copy success and clipboard denial. A generated draft is not exposed for posting
+until answer persistence succeeds. Missing/invalid generated text is an error,
+not an empty successful response or a substitute draft. These deterministic
+tests verify state and API contracts, not the quality of live LLM prose.
 
 The editor retains every line (including trailing empty entries) in its editable
 options array. Normalization is applied only to preview, validation, and saved

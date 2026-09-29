@@ -219,6 +219,7 @@ export default function SurveyClient({
       return;
     }
 
+    let active = true;
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 8000);
 
@@ -235,6 +236,7 @@ export default function SurveyClient({
           { signal: controller.signal },
         );
         const rawText = await response.text();
+        if (!active) return;
         let data: {
           school?: { name?: string };
           schoolName?: string;
@@ -310,6 +312,7 @@ export default function SurveyClient({
           setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
         }
       } catch (fetchError) {
+        if (!active) return;
         setDebugError(
           JSON.stringify(
             {
@@ -331,14 +334,17 @@ export default function SurveyClient({
         setGoogleReviewUrl(DEFAULT_GOOGLE_REVIEW_URL);
       } finally {
         window.clearTimeout(timeoutId);
-        setHasLoadedSurveySetting(true);
-        setIsSettingLoading(false);
+        if (active) {
+          setHasLoadedSurveySetting(true);
+          setIsSettingLoading(false);
+        }
       }
     }
 
     void loadPublicSurveySetting();
 
     return () => {
+      active = false;
       window.clearTimeout(timeoutId);
       controller.abort();
     };
@@ -373,6 +379,7 @@ export default function SurveyClient({
     setIsLoading(true);
     setError("");
     setResponseNotice("");
+    setReviews([]);
     setCopiedIndex(null);
     setCopyNotice("");
     const normalizedRating = normalizePublicSurveyRating(rating);
@@ -424,11 +431,11 @@ export default function SurveyClient({
         throw new Error(typeof failure.message === "string" ? failure.message : "生成に失敗しました");
       }
 
-      const data = (await response.json()) as { review?: string; reviews?: string[] };
-      const generatedReviews = data.review
-        ? [data.review]
-        : data.reviews?.slice(0, 1) ?? [];
-      setReviews(generatedReviews);
+      const data = (await response.json()) as { review?: unknown } | null;
+      if (typeof data?.review !== "string" || !data.review.trim()) {
+        throw new Error("生成結果を確認できませんでした。再度お試しください。");
+      }
+      const generatedReviews = [data.review.trim()];
 
       const saveResponse = await fetch("/api/survey-responses", {
         method: "POST",
@@ -450,6 +457,7 @@ export default function SurveyClient({
         throw new Error(saveData.message || "アンケート回答を保存できませんでした。");
       }
 
+      setReviews(generatedReviews);
       setResponseNotice("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
@@ -459,7 +467,13 @@ export default function SurveyClient({
   }
 
   async function copyAndOpen(text: string, index: number) {
-    await navigator.clipboard.writeText(text);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      setError("コピーできませんでした。ブラウザのクリップボード権限を確認してください。");
+      return;
+    }
+    setError("");
     setCopiedIndex(index);
     const targetUrl = getPublicSurveyReviewDestinationUrl(googleReviewUrl);
     setCopyNotice(

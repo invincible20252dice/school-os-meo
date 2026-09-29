@@ -16,6 +16,7 @@ export default defineConfig({
         "src/app/**/dashboard/overview-client.tsx",
         "src/app/**/surveys/**/survey-editor.tsx",
         "src/app/**/review-analytics-client.tsx",
+        "src/app/**/survey-client.tsx",
       ],
       exclude: [
         "src/**/*.test.ts",
@@ -43,6 +44,10 @@ export default defineConfig({
         "src/lib/review-analytics.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/review-analytics-ai.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/survey-respondent.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/**/survey-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/public-survey-answers.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/survey-persistence.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/survey-responses/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/review-generator.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/generate-review/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/dashboard/reviews/analytics/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
