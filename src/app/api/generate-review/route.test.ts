@@ -41,14 +41,14 @@ describe("POST /api/generate-review", () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const response = await POST(request());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ success: true, generationSource: "answers", review: "質問しやすいと感じています。", reviews: ["質問しやすいと感じています。"] });
+    expect(await response.json()).toEqual({ success: true, generationSource: "answers", review: "先生への質問のしやすさが、通う中で良いと感じる点です。", reviews: ["先生への質問のしやすさが、通う中で良いと感じる点です。"] });
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each([401, 403, 429, 500])("returns a labelled answer-based draft for provider HTTP %s", async status => {
     vi.mocked(fetch).mockResolvedValue(new Response("private provider details", { status }));
     const response = await POST(request());
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ success: true, generationSource: "answers", review: "質問しやすいと感じています。" });
+    expect(await response.json()).toMatchObject({ success: true, generationSource: "answers", review: "先生への質問のしやすさが、通う中で良いと感じる点です。" });
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private provider");
   });
   it.each([{}, { status: "incomplete", output: [] }, { status: "completed", output: {} }, output("{"), output("{}"), output('{"review":3}'), output('{"review":" "}'),
@@ -58,7 +58,7 @@ describe("POST /api/generate-review", () => {
     vi.mocked(fetch).mockResolvedValue(Response.json(payload));
     const response = await POST(request());
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ generationSource: "answers", review: "質問しやすいと感じています。" });
+    expect(await response.json()).toMatchObject({ generationSource: "answers", review: "先生への質問のしやすさが、通う中で良いと感じる点です。" });
   });
   it("returns the answer-based draft when the provider times out", async () => {
     vi.mocked(fetch).mockRejectedValue(new DOMException("timeout", "TimeoutError"));

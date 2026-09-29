@@ -169,13 +169,21 @@ are not substituted for an OpenAI key. No credentials are committed.
 
 The composer uses the required respondent identity, actual school name and
 answered choices/text only. It does not manufacture academic improvement,
-facilities, family gender, SEO facts or a target length. Known choices have exact
-sentence mappings; other choices are quoted, and free text is preserved. Negative
+facilities, family gender, SEO facts or a target length. Known choices map to
+semantic facts (with exact aliases), not one sentence per selection. The composer
+deduplicates those facts and builds up to four paragraphs: merged school/grade
+context, concerns and purpose, instruction and changes, environment and explicit
+future intentions. Empty sections are omitted rather than padded. School names
+are kept as supplied, without appending an assumed school suffix. Custom choices
+are grouped together once, and free text is preserved. Negative
 questions are not converted to praise. Structured answers take precedence over
 their duplicated aggregate fields. Identity-only or invalid input remains a 400,
 not a generic positive review. Short answers can produce short drafts: no padding
 with unreported experiences. The same existing answer-save flow persists the
-draft only after generation, without schema changes.
+draft only after generation, without schema changes. Paragraphs survive display,
+persistence and clipboard copying. Golden-output tests cover both viewpoints,
+all introduction combinations, aliases, selected vocabulary, unknown choices,
+negative answers, empty sections and unsupported claims.
 
 `respondent-workflow.test.tsx` drives the actual public DOM and generation/save
 routes, substituting only provider HTTP and persistence. It verifies unselected

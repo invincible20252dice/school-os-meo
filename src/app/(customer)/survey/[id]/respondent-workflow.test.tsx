@@ -77,7 +77,7 @@ describe("public respondent workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "回答を送信する" }));
     await screen.findByText("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
     expect(boundary.persist).toHaveBeenCalledTimes(1);
-    expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual(["私が実校舎で学んでいます。私は済々黌に通っています。"]);
+    expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual(["済々黌に通っており、実校舎で学んでいます。"]);
     expect(screen.getByText("回答内容から作成した下書き")).toBeTruthy();
     expect((screen.getByRole("textbox", { name: "高校はどこですか？" }) as HTMLTextAreaElement).value).toBe("済々黌");
     expect((screen.getByRole("radio", { name: "生徒ご本人様" }) as HTMLInputElement).checked).toBe(true);
@@ -85,6 +85,9 @@ describe("public respondent workflow", () => {
   });
   it.each(["生徒ご本人様", "保護者様"])("completes generation and persistence for %s without an API key", async value => {
     vi.stubEnv("OPENAI_API_KEY", "");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
     render(<SurveyClient schoolId="s1" surveyId="v1" initialData={initialData} />);
     fireEvent.click(screen.getByRole("radio", { name: value }));
     fireEvent.change(screen.getByRole("textbox", { name: "高校はどこですか？" }), { target: { value: "九州学院" } });
@@ -92,12 +95,16 @@ describe("public respondent workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "回答を送信する" }));
     await screen.findByText("回答内容から作成した下書き");
     expect(boundary.provider).not.toHaveBeenCalled();
-    const subject = value === "生徒ご本人様" ? "私" : "子ども";
-    const draft = `${subject}が実校舎で学んでいます。${subject}は九州学院に通っています。質問しやすいと感じています。`;
+    const intro = value === "生徒ご本人様" ? "九州学院に通っており、実校舎で学んでいます。" : "九州学院に通う子どもが実校舎に通っています。";
+    const draft = `${intro}\n\n先生への質問のしやすさが、通う中で良いと感じる点です。`;
     expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual([draft]);
-    expect(screen.getByText(draft)).toBeTruthy();
+    expect(screen.getByText(draft.replace(/\s+/g, " "))).toBeTruthy();
     expect(screen.getByRole("button", { name: "コピーして投稿画面へ" })).toBeTruthy();
     expect(screen.queryByText(/接続設定が未完了/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "コピーして投稿画面へ" }));
+    await screen.findByText("コピー完了");
+    expect(writeText).toHaveBeenCalledWith(draft);
+    expect(open).toHaveBeenCalledWith(initialData.googleReviewUrl, "_blank", "noopener,noreferrer");
   });
   it("rejects direct answer-save requests without identity before persistence", async () => {
     const response = await saveResponse(new Request("https://school.test/api/survey-responses", { method: "POST", body: JSON.stringify({ schoolId: "s1", questionAnswers: [] }) }));
