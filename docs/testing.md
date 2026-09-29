@@ -159,66 +159,50 @@ not prove that every live LLM output is natural or factually correct.
 
 The HTTP Responses API reads message content from `output`, not the SDK-only
 `output_text` convenience property (official reference:
-https://developers.openai.com/api/docs/guides/text). When the OpenAI key is absent,
-or the provider fails, refuses, times out, or returns invalid output, generation
-uses the answer-based composer in `review-template.ts`. Responses explicitly
-identify `generationSource: "ai" | "answers"`; the latter is labelled on the
-public form and must not be presented as a successful external AI call.
-`OPENAI_API_KEY` is required only for external AI generation. Gemini credentials
-are not substituted for an OpenAI key. No credentials are committed.
+https://developers.openai.com/api/docs/guides/structured-outputs).
+`buildUniversalReview` in `review-template.ts` uses the configured provider for
+all generation. The fixed choice dictionary, school/grade regex classifier,
+unknown-choice 422 validation, and template fallback have been removed.
+`OPENAI_API_KEY` must be configured in the production deployment before releasing
+this change. Missing configuration returns 503; provider/quota/output failures
+remain failures and never produce substitute praise. Only sanitized error codes
+are logged. No credentials are committed.
 
-The composer uses the required respondent identity, actual school name and
-answered choices/text only. It does not manufacture academic improvement,
-facilities, family gender, SEO facts or a target length. Known choices map to
-semantic facts (with exact aliases), not one sentence per selection. The composer
-deduplicates those facts and builds one paragraph with ordered topics: merged school/grade
-context, concerns and purpose, instruction and changes, environment and explicit
-future intentions. Empty sections are omitted rather than padded. School names
-are kept as supplied, without appending an assumed school suffix. Explicit grade
-abbreviations are normalized, but neither school nor respondent identity is
-inferred from keywords in serialized JSON or from unrelated question titles.
-Planning, consultation and clarity outcomes have separate mappings so selecting
-planning alone cannot manufacture improvement, weekly progress or consultation.
-Unknown choices are never placed in a quoted list. A configured provider can
-compose them from the original answers; if it is unavailable and the local
-composer does not support a choice, the API returns 422 with an actionable
-message, not fabricated prose or a partially completed review. Free text is
-preserved. Negative
-questions are not converted to praise. Structured answers take precedence over
-their duplicated aggregate fields. Identity-only or invalid input remains a 400,
-not a generic positive review. Short answers can produce short drafts: no padding
-with unreported experiences. The same existing answer-save flow persists the
-draft only after generation, without schema changes. Text survives display,
-persistence and clipboard copying. Golden-output tests cover both viewpoints,
-all introduction combinations, aliases, selected vocabulary, unknown choices,
-negative answers, empty sections and unsupported claims.
+Arbitrary free-input school names and new/edited choice text are passed unchanged
+along with their question IDs, titles and types. The actual tutoring-school name
+is separate. The required respondent answer is resolved by its stable ID, not a
+search for parent/student words in serialized JSON or other question titles.
+No school suffix is added or removed. Prompt rules require one natural paragraph,
+no quoted choice list, no invented experiences and preservation of negative
+feedback. The model interprets new question meanings; no choice-word code update
+is needed. Provider text is whitespace-normalized into one paragraph.
+
+Tests verify request construction and response handling, not a guarantee of
+perfect prose for every possible live input. Successful provider fixtures are
+explicit test data. Production release requires a real provider smoke test with
+arbitrary school names and newly added choices. The existing answer-save flow
+persists the returned draft only after generation, without schema changes.
 
 `respondent-workflow.test.tsx` drives the actual public DOM and generation/save
 routes, substituting only provider HTTP and persistence. It verifies unselected
 Q1 blocking, both roles, high-school text context, stored identity in both rating
-paths, key-free generation for both roles, and answer-based persistence on
-provider errors. Generator, answer-based composer, respondent
+paths, and preservation of input on provider/configuration errors. Generator,
+universal generation engine, respondent
 contract, generation route, public client, answer aggregation, persistence, and
 response-save route each have independent 95% coverage gates.
 
 `natural-review-workflow.test.tsx` extends that boundary through the real
 persistence implementation; only Prisma and external provider HTTP are replaced.
-It verifies exact single-paragraph output for both roles, school-scoped write
-arguments, stored answers, actual-provider output preservation, clipboard text,
+It verifies provider-output preservation for both roles, school-scoped write
+arguments, stored answers, clipboard text,
 the configured review URL, and changing respondent roles on the same form.
-Regression cases use the reported planning choice and school/grade answers,
-including student responses to forms containing a parent's closing-question
-title. Unsupported-choice errors preserve input and cannot save or enable posting.
+Regression cases use arbitrary schools, new options, and school/grade answers,
+including student responses to forms containing a parent's question title.
+Required-only submissions reach the provider without a choice-word gate.
 School lookup and response-write failures must preserve input, hide the posting
 button, expose no database details, and allow an explicit retry. Validation
 failures must not query or write the database. These tests do not write to a live
 database or post a Google review.
-
-Regression cases reproduce episode questions mentioning school or grade being
-misclassified as identity fields. Identity matching now requires a direct
-school-name/grade question, not merely those words anywhere in a question.
-Tests preserve free-text episodes verbatim and separately verify direct identity
-questions, school names without an invented suffix, and optional punctuation.
 
 `survey-client-dom.test.tsx` operates the real public form with only HTTP and
 browser clipboard/window boundaries substituted. Tests cover role replacement,

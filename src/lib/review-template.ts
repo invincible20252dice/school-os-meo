@@ -1,167 +1,58 @@
-import type { NormalizedReviewRequest } from "./review-generator";
+import {
+  buildReviewPromptUserContent,
+  type NormalizedReviewRequest,
+  REVIEW_GENERATION_SYSTEM_PROMPT,
+  REVIEW_GENERATION_TEMPERATURE,
+} from "./review-generator";
 
-type Group = "purpose" | "problem" | "reason" | "plan" | "consultation" | "clarity" | "support" | "change" | "environment" | "closing" | "concern";
-type Fact = { group: Group; choices: string[]; text: string; parentText?: string; parentOnly?: true };
-
-// Exact semantic aliases, not substring matches: "質問しにくい" must never imply praise.
-const facts: Fact[] = [
-  { group: "reason", choices: ["知人の紹介"], text: "知人の紹介" },
-  { group: "reason", choices: ["体験授業"], text: "体験授業" },
-  { group: "plan", choices: ["自分に合った学習計画を立ててもらえる", "自分専用の学習計画を立ててもらえる"], text: "自分に合った学習計画を立ててもらっています", parentText: "子どもに合った学習計画を立ててもらっています" },
-  { group: "consultation", choices: ["全教科の相談に乗ってもらえる", "全教科の相談ができる"], text: "全教科について相談に乗ってもらえる" },
-  { group: "consultation", choices: ["大学受験の悩みを相談できる"], text: "大学受験の悩みを相談できる" },
-  { group: "consultation", choices: ["親身に相談に乗ってくれる", "話を聞いてくれる"], text: "親身に話を聞いてもらえる" },
-  { group: "clarity", choices: ["毎週やることが明確になった"], text: "毎週取り組む勉強も明確になりました" },
-  { group: "clarity", choices: ["やることが明確になった"], text: "取り組む勉強が明確になりました" },
-  { group: "concern", choices: ["質問しにくい"], text: "質問しにくいと感じています。" },
-  { group: "concern", choices: ["自習室に集中できない"], text: "自習室では集中しづらいと感じています。" },
-  { group: "purpose", choices: ["大学受験対策", "大学受験の専門対策をしたかった"], text: "大学受験の対策" },
-  { group: "purpose", choices: ["苦手科目の克服"], text: "苦手科目の克服" },
-  { group: "purpose", choices: ["学習習慣づくり", "学習習慣づけ"], text: "学習習慣の定着" },
-  { group: "purpose", choices: ["推薦入試対策", "推薦・総合型選抜の対策が必要だった"], text: "推薦入試などの選抜対策" },
-  { group: "problem", choices: ["何から勉強していいかわからない"], text: "何から勉強を始めればよいかわからないこと" },
-  { group: "problem", choices: ["志望校への合格方法が分からなかった"], text: "志望校に向けた勉強の進め方がわからないこと" },
-  { group: "problem", choices: ["模試の成績・判定が伸び悩んでいた"], text: "模試の成績や判定が伸び悩んでいたこと" },
-  { group: "problem", choices: ["学校や集団授業についていけない"], text: "学校や集団授業についていけないこと" },
-  { group: "support", choices: ["先生の説明"], text: "先生の説明" },
-  { group: "support", choices: ["わかりやすい個別指導"], text: "わかりやすい個別指導" },
-  { group: "support", choices: ["質問しやすさ", "質問しやすい", "先生への質問のしやすさ"], text: "先生への質問のしやすさ" },
-  { group: "support", choices: ["先生にいつでも質問・相談しやすい"], text: "先生にいつでも質問や相談ができること" },
-  { group: "support", choices: ["面談の丁寧さ", "丁寧な学習相談・面談"], text: "学習相談や面談の丁寧さ" },
-  { group: "support", choices: ["定期的な面談で進捗がわかり安心"], text: "定期的な面談で進捗がわかる安心感" },
-  { group: "support", choices: ["自分に合ったペースで進められる"], text: "自分に合った学習ペース", parentText: "子どもに合った学習ペース" },
-  { group: "support", choices: ["個別カリキュラムを組んでくれる"], text: "個別に組んでもらえるカリキュラム" },
-  { group: "support", choices: ["学習計画を立ててもらえる"], text: "学習計画を立ててもらえること" },
-  { group: "support", choices: ["勉強法や計画まで細かく教えてくれる"], text: "勉強法や計画まで細かく教えてもらえること" },
-  { group: "support", choices: ["苦手単元を根本から克服できる"], text: "苦手単元を根本から克服できる指導" },
-  { group: "support", choices: ["モチベーションを引き出してくれる"], text: "学習意欲を引き出してくれる対応" },
-  { group: "support", choices: ["価格", "安心できる価格設定"], text: "価格面での安心感" },
-  { group: "change", choices: ["成績の変化"], text: "成績の良い変化" },
-  { group: "change", choices: ["模試の判定・順位が上がった"], text: "模試の判定や順位の向上" },
-  { group: "change", choices: ["勉強時間が圧倒的に増えた", "勉強時間が増えた"], text: "勉強時間の増加" },
-  { group: "change", choices: ["自ら机に向かう習慣がついた"], text: "自分から机に向かう習慣の定着", parentText: "子どもが自ら机に向かう習慣の定着" },
-  { group: "change", choices: ["苦手科目に自信がついた"], text: "苦手科目への自信" },
-  { group: "change", choices: ["志望校合格への道筋が見えた"], text: "志望校に向けた道筋が見えたこと" },
-  { group: "environment", choices: ["教室の雰囲気"], text: "教室の雰囲気" },
-  { group: "environment", choices: ["自習室が静かで集中できる"], text: "静かで集中しやすい自習室" },
-  { group: "environment", choices: ["下通りで通塾が便利", "通いやすい立地（下通り・街中）"], text: "下通りの通いやすい立地" },
-  { group: "closing", choices: ["受験本番まで引き続きお願いしたいです"], text: "受験本番まで引き続きお世話になりたいです。" },
-  { group: "closing", choices: ["志望校合格に向けて頑張りたい"], text: "志望校合格に向けて頑張りたいと思います。", parentText: "子どもの志望校合格に向けて支えていきたいと思います。" },
-  { group: "closing", choices: ["安心して子供を任せられる塾です"], text: "安心して子どもを任せられる塾だと感じています。", parentOnly: true },
-  { group: "closing", choices: ["もっと早く通わせればよかったです"], text: "もっと早く通わせればよかったと思います。", parentOnly: true },
-  { group: "closing", choices: ["個別指導でじっくり伸ばしたい方におすすめです"], text: "個別指導でじっくり学びたい方におすすめしたいです。" },
-];
-
-export class UnsupportedReviewChoiceError extends Error {
-  constructor() {
-    super("文章化に未対応の選択肢があります。管理者にアンケート設定の確認を依頼してください。");
-    this.name = "UnsupportedReviewChoiceError";
+export class ReviewGenerationError extends Error {
+  constructor(readonly code: "NOT_CONFIGURED" | "PROVIDER_FAILED" | "INVALID_OUTPUT", readonly status: number) {
+    super(code);
+    this.name = "ReviewGenerationError";
   }
 }
 
-const gradeNames: Record<string, string> = {
-  高1: "高校1年生", 高校1年: "高校1年生", 高校1年生: "高校1年生",
-  高2: "高校2年生", 高校2年: "高校2年生", 高校2年生: "高校2年生",
-  高3: "高校3年生", 高校3年: "高校3年生", 高校3年生: "高校3年生",
-  既卒: "既卒生", 既卒生: "既卒生", 浪人: "既卒生", 浪人生: "既卒生", "既卒・浪人生": "既卒生",
-};
-
-function list(values: string[]) {
-  if (values.length < 2) return values.join("");
-  return `${values.slice(0, -1).join("、")}と${values.at(-1)}`;
-}
-
-function finish(text: string) {
-  return /[。！？!?]$/.test(text) ? text : `${text}。`;
-}
-
-function introduction(student: boolean, schoolName: string, highSchool: string, grade: string) {
-  const studentContext = highSchool ? `${highSchool}に通${grade ? `う${grade}` : "っています"}` : grade;
-  const childContext = highSchool ? `${highSchool}に通う${grade ? `${grade}の` : ""}子ども` : `${grade ? `${grade}の` : ""}子ども`;
-  if (schoolName) {
-    if (!student) return `${childContext}が${schoolName}に通っています。`;
-    if (highSchool && !grade) return `${highSchool}に通っており、${schoolName}で学んでいます。`;
-    return studentContext ? `${studentContext}で、${schoolName}で学んでいます。` : `${schoolName}に通っています。`;
+// All choice text and school names are data, not keys in a prose dictionary.
+export async function buildUniversalReview(input: NormalizedReviewRequest): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new ReviewGenerationError("NOT_CONFIGURED", 503);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal: AbortSignal.timeout(45000),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        temperature: REVIEW_GENERATION_TEMPERATURE,
+        store: false,
+        input: [
+          { role: "system", content: REVIEW_GENERATION_SYSTEM_PROMPT },
+          { role: "user", content: buildReviewPromptUserContent(input) },
+        ],
+        text: {
+          format: {
+            type: "json_schema", name: "review_pattern", strict: true,
+            schema: {
+              type: "object", additionalProperties: false, required: ["review"],
+              properties: { review: { type: "string" } },
+            },
+          },
+        },
+      }),
+    });
+    if (!response.ok) throw new ReviewGenerationError("PROVIDER_FAILED", response.status === 429 ? 429 : 502);
+    const data = await response.json();
+    if (data?.status !== "completed" || !Array.isArray(data.output)) throw new ReviewGenerationError("INVALID_OUTPUT", 502);
+    const parts = data.output.filter((item: { type: string }) => item.type === "message")
+      .flatMap((item: { content: { type: string; text?: string }[] }) => item.content);
+    if (parts.some((part: { type: string }) => part.type === "refusal")) throw new ReviewGenerationError("INVALID_OUTPUT", 502);
+    const text = parts.filter((part: { type: string }) => part.type === "output_text")
+      .map((part: { text: string }) => part.text).join("");
+    const parsed = JSON.parse(text) as { review?: string } | null;
+    if (typeof parsed?.review !== "string" || !parsed.review.trim()) throw new ReviewGenerationError("INVALID_OUTPUT", 502);
+    return parsed.review.replace(/\s+/g, " ").trim();
+  } catch (error) {
+    if (error instanceof ReviewGenerationError) throw error;
+    throw new ReviewGenerationError("PROVIDER_FAILED", 502);
   }
-  if (!highSchool && !grade) return "";
-  if (!student) return `${childContext}の保護者です。`;
-  return highSchool && !grade ? `${studentContext}。` : `${studentContext}です。`;
-}
-
-export function buildAnswerBasedReview(input: NormalizedReviewRequest): string {
-  const student = input.respondentType === "STUDENT";
-  const groups: Record<Group, Set<string>> = {
-    purpose: new Set(), problem: new Set(), support: new Set(),
-    change: new Set(), environment: new Set(), closing: new Set(),
-    reason: new Set(), plan: new Set(), consultation: new Set(), clarity: new Set(), concern: new Set(),
-  };
-  let grade = "";
-  let highSchool = "";
-  const free = new Set<string>();
-
-  function collect(value: string, question: string, type: string) {
-    if (value === "記載しない") return;
-    // Match the identity question itself, not school/grade words inside an episode prompt.
-    const title = question.replace(/[\s？?。]/g, "");
-    if (/^(?:(?:お子さま|お子様|お子さん|あなた)の|口コミに入れてもよい)?学年(?:を(?:教えて|選んで|選択して|入力して)ください)?$/.test(title)) { grade = Object.hasOwn(gradeNames, value) ? gradeNames[value] : value; return; }
-    if (/^(?:(?:お子さま|お子様|お子さん|あなた)の)?(?:(?:高校名|学校名|校名|在籍校)(?:を(?:教えて|入力して)ください)?|(?:高校|学校)はどこですか|(?:通っている|在籍している)(?:高校|学校)を教えてください)$/.test(title)) { highSchool = value; return; }
-    if (/^(text|textarea|free|free_text|自由記述)$/i.test(type)) { free.add(finish(value)); return; }
-    // Legacy choice-only payloads still have explicit grade values, never scan all JSON.
-    if (!question && Object.hasOwn(gradeNames, value)) { grade = gradeNames[value]; return; }
-    if (/不満|悪かった|困って|改善して|不安/.test(question)) {
-      const concern = new Map([
-        ["価格", "価格については改善を望んでいます。"],
-        ["個別カリキュラムを組んでくれる", "個別カリキュラムについては改善を望んでいます。"],
-      ]).get(value);
-      if (concern) { groups.concern.add(concern); return; }
-      const negative = facts.find(item => item.group === "concern" && item.choices.includes(value));
-      if (negative) { groups.concern.add(negative.text); return; }
-      throw new UnsupportedReviewChoiceError();
-    }
-    const fact = facts.find(item => item.choices.includes(value));
-    if (fact) {
-      if (fact.parentOnly && student) return;
-      groups[fact.group].add(!student && fact.parentText ? fact.parentText : fact.text);
-    } else {
-      throw new UnsupportedReviewChoiceError();
-    }
-  }
-
-  // Collect facts first; prose is composed once per topic, never once per choice.
-  if (input.questionAnswers.length) {
-    for (const answer of input.questionAnswers) {
-      const values = Array.isArray(answer.value) ? answer.value : [answer.value];
-      for (const value of values) if (value?.trim()) collect(value.trim(), answer.question ?? "", answer.type ?? "");
-    }
-  } else {
-    for (const value of input.selectedReasons) collect(value, "", "MULTI_SELECT");
-    if (input.freeText) collect(input.freeText, "", "TEXT");
-  }
-
-  const purpose = list([...groups.purpose]);
-  const problem = list([...groups.problem]);
-  const support = list([...groups.support]);
-  const change = list([...groups.change]);
-  const environment = list([...groups.environment]);
-  const consultation = [...groups.consultation];
-  const plan = [...groups.plan];
-  const guidance = [
-    consultation.length && `${consultation.join("ほか、")}のが心強いです。`,
-    plan.length && `${plan.join("。")}。`,
-    ...[...groups.clarity].map(finish),
-  ].filter(Boolean).join("");
-  const background = [
-    problem && `入塾前は、${problem}が悩みでした。`,
-    purpose && `${purpose}を目的に、通塾を決めました。`,
-    groups.reason.size && `${list([...groups.reason])}をきっかけに通い始めました。`,
-  ].filter(Boolean).join("");
-  const experience = [
-    guidance,
-    support && `${support}が、通う中で良いと感じる点です。`,
-    change && `通塾後は、${change}という変化${support ? "も" : "が"}ありました。`,
-    ...groups.concern,
-  ].filter(Boolean).join("");
-  const closing = [environment && `${environment}も魅力です。`, ...groups.closing, ...free].filter(Boolean).join("");
-  if (!highSchool && !grade && !background && !experience && !closing) return "";
-  return [introduction(student, input.schoolName, highSchool, grade), background, experience, closing].filter(Boolean).join("");
 }
