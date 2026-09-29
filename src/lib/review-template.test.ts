@@ -16,6 +16,24 @@ beforeEach(() => { vi.stubEnv("OPENAI_API_KEY", " test-key "); vi.stubGlobal("fe
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("universal review generation", () => {
+  it("keeps concurrent respondents isolated when the provider finishes in reverse order", async () => {
+    let finishStudent!: (response: Response) => void;
+    let finishParent!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockImplementationOnce(() => new Promise(resolve => { finishStudent = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishParent = resolve; }));
+    const student = buildUniversalReview(input("Student School", "早朝相談", "生徒ご本人様"));
+    const parent = buildUniversalReview(input("Parent School", "夜間面談", "保護者様"));
+    finishParent(Response.json(output('{"review":"子どもの夜間面談を利用しています。"}')));
+    expect(await parent).toBe("子どもの夜間面談を利用しています。");
+    finishStudent(Response.json(output('{"review":"私は早朝相談を利用しています。"}')));
+    expect(await student).toBe("私は早朝相談を利用しています。");
+    const sent = vi.mocked(fetch).mock.calls.map(call =>
+      JSON.parse(JSON.parse(String(call[1]?.body)).input[1].content.split("\n")[2]));
+    expect(sent.map(data => data.respondentType)).toEqual(["STUDENT", "PARENT"]);
+    expect(sent.map(data => data.answers.map((answer: { value: unknown }) => answer.value)))
+      .toEqual([["Student School", ["早朝相談"]], ["Parent School", ["夜間面談"]]]);
+  });
   it.each(["札幌南高等学校", "大阪府立北野高等学校", "九州学院", "International School A", "任意の新設校"])("passes any school name unchanged: %s", async school => {
     const draft = `${school}に通っています。オンラインで添削を受けられるのが便利です。`;
     vi.mocked(fetch).mockResolvedValue(Response.json(output(JSON.stringify({ review: draft }))));

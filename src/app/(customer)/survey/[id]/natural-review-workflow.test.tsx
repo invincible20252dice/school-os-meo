@@ -57,6 +57,46 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("universal generation and persistence contract", () => {
+  it("prevents duplicate generation and persistence while the provider is pending", async () => {
+    let finish!: (response: Response) => void;
+    boundary.provider.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<SurveyClient schoolId="actual-school" surveyId="actual-survey" initialData={initialData} />);
+    fill("生徒ご本人様");
+    const button = screen.getByRole("button", { name: "回答を送信する" }) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(boundary.provider).toHaveBeenCalledTimes(1));
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(boundary.provider).toHaveBeenCalledTimes(1);
+    expect(boundary.review.create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "コピーして投稿画面へ" })).toBeNull();
+    finish(providerResult(defaultDraft));
+    await screen.findByText("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
+    expect(boundary.review.create).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(false);
+  });
+  it.each([
+    ["incomplete", { status: "incomplete", output: [] }],
+    ["refusal", { status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "private-provider-details" }] }] }],
+    ["empty draft", { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: '{"review":" "}' }] }] }],
+    ["invalid JSON", { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "private-provider-details" }] }] }],
+  ])("never saves or offers posting for %s provider output and preserves answers for retry", async (_name, payload) => {
+    boundary.provider.mockResolvedValueOnce(Response.json(payload));
+    render(<SurveyClient schoolId="actual-school" surveyId="actual-survey" initialData={initialData} />);
+    fill("保護者様", "任意の新設校"); submit();
+    await screen.findByText("口コミを生成できませんでした。入力内容は保持されています。時間をおいて再度お試しください。");
+    expect(boundary.review.create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "コピーして投稿画面へ" })).toBeNull();
+    expect(screen.queryByText(/private-provider-details/)).toBeNull();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("任意の新設校");
+    expect((screen.getByRole("radio", { name: "保護者様" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getAllByRole("checkbox").every(node => (node as HTMLInputElement).checked)).toBe(true);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private-provider-details");
+    submit();
+    await screen.findByText("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
+    expect(boundary.review.create).toHaveBeenCalledTimes(1);
+    expect(boundary.provider.mock.calls[1][1]?.body).toBe(boundary.provider.mock.calls[0][1]?.body);
+  });
   it.each([
     ["生徒ご本人様", "札幌南高等学校"], ["保護者様", "九州学院"], ["生徒ご本人様", "International School A"],
   ])("carries new options and %s / %s through real routes, prompt, database and clipboard", async (role, school) => {
