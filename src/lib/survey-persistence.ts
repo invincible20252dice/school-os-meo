@@ -13,6 +13,7 @@ import type {
   SurveyItemType,
 } from "./survey-builder";
 import { normalizeSurveyItemOrder } from "./survey-builder";
+import { requireRespondentType } from "./survey-respondent";
 
 type SurveyPersistenceItemInput = {
   id?: string;
@@ -240,6 +241,8 @@ export async function persistSurvey(
 
 export function normalizeSurveyResponseInput(input: SurveyResponseInput) {
   const schoolId = normalizeString(input.schoolId) || DEFAULT_SCHOOL_ID;
+  const questionAnswers = normalizeQuestionAnswers(input.questionAnswers);
+  requireRespondentType(questionAnswers);
 
   return {
     schoolId,
@@ -248,7 +251,7 @@ export function normalizeSurveyResponseInput(input: SurveyResponseInput) {
     rating: normalizeInteger(input.rating, 0),
     selectedReasons: normalizeOptions(input.selectedReasons),
     freeText: normalizeString(input.freeText),
-    questionAnswers: normalizeQuestionAnswers(input.questionAnswers),
+    questionAnswers,
     generatedReviews: normalizeOptions(input.generatedReviews),
   };
 }

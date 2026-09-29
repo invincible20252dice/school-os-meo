@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { withRespondentQuestion, RESPONDENT_QUESTION_ID } from "./survey-respondent";
 import {
   buildPublicSurveyQuestionAnswers,
   buildReviewGenerationInputFromSurveyAnswers,
@@ -121,8 +122,8 @@ describe("public-survey-answers", () => {
     };
 
     const input = buildReviewGenerationInputFromSurveyAnswers({
-      questions,
-      answers,
+      questions: [withRespondentQuestion([])[0], ...questions],
+      answers: { ...answers, [RESPONDENT_QUESTION_ID]: "生徒ご本人様" },
     });
 
     expect(input.selectedReasons).toEqual([
@@ -133,13 +134,15 @@ describe("public-survey-answers", () => {
     expect(input.freeText).toBe("家での勉強時間が増えた");
     expect(input.freeText).not.toContain("通塾のきっかけ");
     expect(input.freeText).not.toContain("良かった点");
-    expect(input.questionAnswers).toHaveLength(3);
+    expect(input.respondentType).toBe("STUDENT");
+    expect(input.questionAnswers).toHaveLength(4);
     expect(input.questionAnswers.map((answer) => answer.question)).toContain("変化");
   });
 
   it("joins multiple free-text answers for generated prompt material", () => {
     const input = buildReviewGenerationInputFromSurveyAnswers({
       questions: [
+        withRespondentQuestion([])[0],
         {
           id: "q3",
           type: "TEXT",
@@ -149,6 +152,7 @@ describe("public-survey-answers", () => {
         },
       ],
       answers: {
+        [RESPONDENT_QUESTION_ID]: "保護者様",
         q3: ["苦手だった数学に向き合えた", "家庭学習の時間が増えた"],
       },
     });
@@ -158,6 +162,7 @@ describe("public-survey-answers", () => {
       "苦手だった数学に向き合えた\n家庭学習の時間が増えた",
     );
     expect(input.questionAnswers).toEqual([
+      { questionId: RESPONDENT_QUESTION_ID, question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "保護者様" },
       {
         questionId: "q3",
         question: "お子さまの変化",
@@ -170,8 +175,8 @@ describe("public-survey-answers", () => {
 
   it("omits blank answers from generated prompt text", () => {
     const input = buildReviewGenerationInputFromSurveyAnswers({
-      questions,
-      answers: { q1: " ", q2: [], q3: "" },
+      questions: [withRespondentQuestion([])[0], ...questions],
+      answers: { q1: " ", q2: [], q3: "", [RESPONDENT_QUESTION_ID]: "保護者様" },
     });
 
     expect(input.selectedReasons).toEqual([]);
@@ -181,6 +186,7 @@ describe("public-survey-answers", () => {
   it("treats public free-text aliases as text answers", () => {
     const input = buildReviewGenerationInputFromSurveyAnswers({
       questions: [
+        withRespondentQuestion([])[0],
         {
           id: "q-free",
           type: "自由記述",
@@ -197,6 +203,7 @@ describe("public-survey-answers", () => {
         },
       ],
       answers: {
+        [RESPONDENT_QUESTION_ID]: "保護者様",
         "q-free": "熊本高校",
         "q-textarea": "質問しやすかった",
       },
@@ -204,6 +211,6 @@ describe("public-survey-answers", () => {
 
     expect(input.selectedReasons).toEqual([]);
     expect(input.freeText).toBe("熊本高校\n質問しやすかった");
-    expect(input.questionAnswers).toHaveLength(2);
+    expect(input.questionAnswers).toHaveLength(3);
   });
 });

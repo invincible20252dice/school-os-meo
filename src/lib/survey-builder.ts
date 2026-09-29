@@ -1,3 +1,5 @@
+import { withRespondentQuestion } from "./survey-respondent";
+
 export type SurveyItemType = "SINGLE_SELECT" | "MULTI_SELECT" | "TEXT";
 export type SurveyWeekday = "月" | "火" | "水" | "木" | "金" | "土" | "日";
 
@@ -176,11 +178,11 @@ export function validateSurveyEditorState(survey: SurveyEditorState) {
 
   survey.items.forEach((item, index) => {
     if (!item.question.trim()) {
-      errors.push(`${index + 1}番目の設問文を入力してください。`);
+      errors.push(`${index + 2}番目の設問文を入力してください。`);
     }
 
     if (item.type !== "TEXT" && normalizeSurveyOptions(item.options).length === 0) {
-      errors.push(`${index + 1}番目の選択肢を1つ以上入力してください。`);
+      errors.push(`${index + 2}番目の選択肢を1つ以上入力してください。`);
     }
   });
 
@@ -298,7 +300,7 @@ export function getTextQuestionHelperText(
 }
 
 export function buildSurveyPreviewSteps(survey: SurveyEditorState) {
-  return normalizeSurveyItemOrder(survey.items)
+  return withRespondentQuestion(survey.items)
     .map((item) => ({
       ...item,
       options: normalizeSurveyOptions(item.options),

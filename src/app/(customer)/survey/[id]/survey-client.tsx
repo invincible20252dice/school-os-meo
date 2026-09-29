@@ -162,13 +162,13 @@ export default function SurveyClient({
   );
   const previewSteps = useMemo(
     () =>
-      buildPublicSurveyPreviewSteps({
+      surveyItems.length ? buildPublicSurveyPreviewSteps({
         questions: surveyItems,
         title: surveyTitle,
         schoolId,
         minCharCount: surveyTextRange.min,
         maxCharCount: surveyTextRange.max,
-      }),
+      }) : [],
     [schoolId, surveyItems, surveyTextRange.max, surveyTextRange.min, surveyTitle],
   );
   const isGoogleReviewGuideVisible = reviews.length > 0;
@@ -363,6 +363,13 @@ export default function SurveyClient({
       return;
     }
 
+    let promptInput;
+    try {
+      promptInput = buildReviewGenerationInputFromSurveyAnswers({ questions: previewSteps, answers });
+    } catch {
+      setError("ご回答者様（保護者様 / 生徒ご本人様）を選択してください。");
+      return;
+    }
     setIsLoading(true);
     setError("");
     setResponseNotice("");
@@ -371,11 +378,6 @@ export default function SurveyClient({
     const normalizedRating = normalizePublicSurveyRating(rating);
 
     try {
-      const promptInput = buildReviewGenerationInputFromSurveyAnswers({
-        questions: surveyItems,
-        answers,
-      });
-
       if (!shouldShowGoogleReviewGuide(normalizedRating)) {
         const saveResponse = await fetch("/api/survey-responses", {
           method: "POST",
@@ -418,7 +420,8 @@ export default function SurveyClient({
       });
 
       if (!response.ok) {
-        throw new Error("生成に失敗しました");
+        const failure = await response.json();
+        throw new Error(typeof failure.message === "string" ? failure.message : "生成に失敗しました");
       }
 
       const data = (await response.json()) as { review?: string; reviews?: string[] };
@@ -448,8 +451,8 @@ export default function SurveyClient({
       }
 
       setResponseNotice("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
-    } catch {
-      setError("口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
     } finally {
       setIsLoading(false);
     }
@@ -494,11 +497,12 @@ export default function SurveyClient({
             previewSteps.map((item) => (
               <section className={styles.previewStep} key={item.id}>
                 <span className={styles.questionNumber}>Q{item.order}</span>
-                <h2>{item.question}</h2>
+                <h2>{item.question}{item.order === 1 ? <small>（必須）</small> : null}</h2>
                 <p>{item.helperText}</p>
                 {item.type === "TEXT" ? (
                   <>
                     <textarea
+                      aria-label={item.question}
                       value={String(answers[item.id] || "")}
                       onChange={(event) => updateTextAnswer(item, event.target.value)}
                       rows={5}

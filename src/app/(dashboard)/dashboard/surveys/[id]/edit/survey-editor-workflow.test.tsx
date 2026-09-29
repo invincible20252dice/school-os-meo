@@ -79,7 +79,7 @@ describe("survey editor persistence integration", () => {
     await screen.findByText(id === "new" ? "新規アンケート作成" : "保存済み設定をDBから読み込みました。");
     const input = screen.getAllByRole("textbox", { name: "選択肢（改行区切り）" })[0];
     fireEvent.change(input, { target: { value: "\n  対策A  \n\n対策B\n" } });
-    fireEvent.click(screen.getByRole("button", { name: "設問 1 を下に移動" }));
+    fireEvent.click(screen.getByRole("button", { name: "設問 2 を下に移動" }));
     fireEvent.click(screen.getByRole("button", { name: id === "new" ? "保存する" : "更新する" }));
     await screen.findByText("アンケート設定をDBへ保存しました。");
     expect(boundary.db.survey[id === "new" ? "create" : "update"]).toHaveBeenCalledOnce();
@@ -97,7 +97,8 @@ describe("survey editor persistence integration", () => {
     expect(choices.at(-1)?.value).toBe("対策A\n対策B");
     const preview = within(screen.getByRole("complementary"));
     expect(preview.getByRole("button", { name: "対策A", exact: true })).toBeDefined();
-    expect(preview.getAllByRole("heading", { level: 3 }).map(el => el.textContent)).toEqual(stored.items.map(item => item.question));
+    expect(preview.getAllByRole("heading", { level: 3 }).map(el => el.textContent)).toEqual(["ご回答者様を選択してください", ...stored.items.map(item => item.question)]);
+    expect(within(screen.getByRole("article", { name: "必須の回答者設問" })).queryByRole("button")).toBeNull();
     const published = serializePublicSurvey(stored);
     expect(published.questions.map(item => item.title)).toEqual(stored.items.map(item => item.question));
     expect(published.questions[1].options).toEqual(["対策A", "対策B"]);

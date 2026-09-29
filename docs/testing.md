@@ -123,13 +123,44 @@ schools. Only identity, database adapters, and external HTTP are substituted;
 this is not a live PostgreSQL or OpenAI integration test. The browser contract
 also rejects a zero sampling limit or a sample larger than that limit.
 
-Standalone `tsc --noEmit --incremental false` currently reports 144 existing
+Standalone `tsc --noEmit --incremental false` currently reports existing
 type errors in other test files (including Prisma mock return types and fixture
 shapes). The analytics tests introduce none. A passing production build and
 Vitest run must not be described as a passing standalone whole-repository type
 check; fixing that existing test-type debt is separate work.
 
 ## Survey option editing
+
+### Respondent identity and generated reviews
+
+Every builder preview and public form begins with the same fixed, required
+respondent question (`system-respondent-type`). This is application-owned form
+metadata, not an editable SurveyItem: old survey IDs and saved question order
+remain unchanged, and no data migration is needed. The displayed editable
+questions start at Q2; the list count includes the fixed question. No answer is
+preselected. The selected identity is persisted in the existing `surveyAnswers`
+JSON, and both generation and response-save APIs reject missing/invalid identity.
+
+Generation derives PARENT/STUDENT only from that stable question ID, never the
+position or the respondent's free text. The user prompt preserves question/answer
+pairs so a high-school name cannot be confused with the tutoring-school name or
+an episode. Instructions enforce the selected viewpoint, 150-280 characters,
+natural context, and no invented gender, grades, improvement, or school-specific
+instruction. Prompt tests verify those constraints; deterministic fixtures do
+not prove that every live LLM output is natural or factually correct.
+
+The HTTP Responses API reads message content from `output`, not the SDK-only
+`output_text` convenience property (official reference:
+https://developers.openai.com/api/docs/guides/text). Missing API credentials,
+provider refusals, malformed output and outages return explicit 503/502 errors;
+the old fabricated parent-template fallback is removed. `OPENAI_API_KEY` must be
+configured for production generation. No credentials are committed.
+
+`respondent-workflow.test.tsx` drives the actual public DOM and generation/save
+routes, substituting only provider HTTP and persistence. It verifies unselected
+Q1 blocking, both roles, high-school text context, stored identity in both rating
+paths, and preservation of input on provider errors. Generator, respondent
+contract, and generation route each have independent 95% coverage gates.
 
 The editor retains every line (including trailing empty entries) in its editable
 options array. Normalization is applied only to preview, validation, and saved

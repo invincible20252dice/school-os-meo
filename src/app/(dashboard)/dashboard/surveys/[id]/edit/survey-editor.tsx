@@ -680,17 +680,22 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
             </div>
 
             <div className={styles.itemList}>
+              <article className={styles.itemCard} aria-label="必須の回答者設問">
+                <div className={styles.itemHeader}><strong>設問 1（必須）</strong></div>
+                <p>{previewSteps[0].question}</p>
+                <p>{previewSteps[0].options.join(" / ")}</p>
+              </article>
               {survey.items.map((item, index) => (
                 <article key={item.id} className={styles.itemCard}>
                   <div className={styles.itemHeader}>
-                    <strong>設問 {index + 1}</strong>
+                    <strong>設問 {index + 2}</strong>
                     <div className={styles.itemActions}>
                       <button
                         type="button"
                         className={styles.moveButton}
                         onClick={() => moveItem(item.id, "up")}
                         disabled={index === 0}
-                        aria-label={`設問 ${index + 1} を上に移動`}
+                        aria-label={`設問 ${index + 2} を上に移動`}
                         title="上に移動"
                       >
                         <ArrowUpIcon />
@@ -700,7 +705,7 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                         className={styles.moveButton}
                         onClick={() => moveItem(item.id, "down")}
                         disabled={index === survey.items.length - 1}
-                        aria-label={`設問 ${index + 1} を下に移動`}
+                        aria-label={`設問 ${index + 2} を下に移動`}
                         title="下に移動"
                       >
                         <ArrowDownIcon />

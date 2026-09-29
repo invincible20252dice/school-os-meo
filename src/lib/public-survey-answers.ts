@@ -1,3 +1,5 @@
+import { requireRespondentType, RESPONDENT_QUESTION_ID } from "./survey-respondent";
+
 export type PublicSurveyQuestionType =
   | "SINGLE_SELECT"
   | "MULTI_SELECT"
@@ -128,7 +130,7 @@ export function buildReviewGenerationInputFromSurveyAnswers({
     (answer) => getAnswerValues(answers, answer.questionId).length > 0,
   );
   const choiceAnswers = questionAnswers.filter(
-    (answer) => !isTextQuestion(answer.type),
+    (answer) => answer.questionId !== RESPONDENT_QUESTION_ID && !isTextQuestion(answer.type),
   );
   const textAnswers = questionAnswers.filter((answer) => isTextQuestion(answer.type));
   const selectedReasons = choiceAnswers
@@ -142,6 +144,7 @@ export function buildReviewGenerationInputFromSurveyAnswers({
     .join("\n");
 
   return {
+    respondentType: requireRespondentType(questionAnswers),
     selectedReasons,
     freeText,
     questionAnswers,

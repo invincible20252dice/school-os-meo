@@ -147,17 +147,18 @@ describe("survey editor workflow", () => {
     const questions = screen.getAllByRole("textbox", { name: "設問文", exact: true }) as HTMLInputElement[];
     expect(questions).toHaveLength(3);
     fireEvent.change(questions[2], { target: { value: "追加した質問" } });
-    fireEvent.click(screen.getByRole("button", { name: "設問 3 を上に移動" }));
+    fireEvent.click(screen.getByRole("button", { name: "設問 4 を上に移動" }));
     expect(screen.getAllByRole("textbox", { name: "設問文", exact: true }).map(el => (el as HTMLInputElement).value)).toEqual([
       "良かったと感じた点を選んでください", "追加した質問", "印象に残っている変化を教えてください",
     ]);
     change("入力例（プレースホルダー）", "体験を入力してください");
     expect(within(screen.getByRole("complementary")).getByText("体験を入力してください")).toBeDefined();
     expect(within(screen.getByRole("complementary")).getAllByRole("heading", { level: 3 }).map(el => el.textContent)).toEqual([
+      "ご回答者様を選択してください",
       "良かったと感じた点を選んでください", "追加した質問", "印象に残っている変化を教えてください",
     ]);
-    expect((screen.getByRole("button", { name: "設問 1 を上に移動" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "設問 3 を下に移動" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "設問 2 を上に移動" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "設問 4 を下に移動" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("switches between saved and new settings without carrying edited choice text", async () => {
@@ -332,7 +333,7 @@ describe("survey option editing", () => {
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
     fireEvent.change(textareas()[0], { target: { value: "先頭の設問\n\n" } });
     fireEvent.change(textareas()[1], { target: { value: "二番目の設問\n" } });
-    fireEvent.click(screen.getByRole("button", { name: "設問 1 を下に移動" }));
+    fireEvent.click(screen.getByRole("button", { name: "設問 2 を下に移動" }));
     expect(textareas().map(area => area.value)).toEqual(["二番目の設問\n", "先頭の設問\n\n"]);
     fireEvent.click(within(textareas()[0].closest("article")!).getByRole("button", { name: "削除", exact: true }));
     expect(textareas()).toHaveLength(1);
@@ -345,7 +346,7 @@ describe("survey option editing", () => {
     render(<SurveyEditor surveyId="survey-1" />);
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
     fireEvent.change(textareas()[0], { target: { value: "\n 選択A \n\n選択B\n" } });
-    fireEvent.click(screen.getByRole("button", { name: "設問 1 を下に移動" }));
+    fireEvent.click(screen.getByRole("button", { name: "設問 2 を下に移動" }));
     fireEvent.click(screen.getByRole("button", { name: "更新する" }));
     await screen.findByText("アンケート設定をDBへ保存しました。");
     const [url, request] = network.mock.calls[1];
@@ -362,7 +363,7 @@ describe("survey option editing", () => {
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
     fireEvent.change(textareas()[0], { target: { value: " \n\n　\n" } });
     expect(textareas()[0].value).toBe(" \n\n　\n");
-    expect(screen.getByText("1番目の選択肢を1つ以上入力してください。")).toBeDefined();
+    expect(screen.getByText("2番目の選択肢を1つ以上入力してください。")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "更新する" }));
     await screen.findByText("入力内容を確認してください。");
     expect(fetch).toHaveBeenCalledTimes(1);

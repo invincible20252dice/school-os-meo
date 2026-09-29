@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+const questionAnswers = [{ questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "保護者様" }];
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {},
@@ -24,6 +25,7 @@ describe("POST /api/survey-responses", () => {
         method: "POST",
         body: JSON.stringify({
           schoolId: "school-demo-001",
+          questionAnswers,
           rating: 5,
           selectedReasons: ["丁寧"],
           freeText: "よかったです",
@@ -47,7 +49,7 @@ describe("POST /api/survey-responses", () => {
     const response = await POST(
       new Request("http://localhost/api/survey-responses", {
         method: "POST",
-        body: JSON.stringify({ schoolId: "" }),
+        body: JSON.stringify({ schoolId: "", questionAnswers }),
       }),
     );
     const body = await response.json();
@@ -67,7 +69,7 @@ describe("POST /api/survey-responses", () => {
     const response = await POST(
       new Request("http://localhost/api/survey-responses", {
         method: "POST",
-        body: JSON.stringify({ schoolId: "school-demo-001" }),
+        body: JSON.stringify({ schoolId: "school-demo-001", questionAnswers }),
       }),
     );
     const body = await response.json();
@@ -87,7 +89,7 @@ describe("POST /api/survey-responses", () => {
     const response = await POST(
       new Request("http://localhost/api/survey-responses", {
         method: "POST",
-        body: JSON.stringify({ schoolId: "school-demo-001" }),
+        body: JSON.stringify({ schoolId: "school-demo-001", questionAnswers }),
       }),
     );
     const body = await response.json();

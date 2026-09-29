@@ -107,7 +107,7 @@ function isSurveyActive(survey: SurveyListItem) {
 }
 
 function getQuestionCount(survey: SurveyListItem) {
-  return survey.itemCount ?? survey.questionCount ?? 0;
+  return (survey.itemCount ?? survey.questionCount ?? 0) + 1;
 }
 
 function getCharacterRange(survey: SurveyListItem) {

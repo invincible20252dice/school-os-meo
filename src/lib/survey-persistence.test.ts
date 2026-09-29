@@ -279,6 +279,7 @@ describe("survey-persistence", () => {
       selectedReasons: [" 説明が丁寧 "],
       freeText: "よかったです",
       questionAnswers: [
+        { questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "生徒ご本人様" },
         {
           questionId: " q1 ",
           question: " 通塾のきっかけ ",
@@ -303,6 +304,7 @@ describe("survey-persistence", () => {
     });
 
     expect(input.questionAnswers).toEqual([
+      { questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "生徒ご本人様" },
       {
         questionId: "q1",
         question: "通塾のきっかけ",
@@ -333,13 +335,12 @@ describe("survey-persistence", () => {
     });
   });
 
-  it("normalizes missing survey response question answers to an empty list", () => {
-    const input = normalizeSurveyResponseInput({
+  it("rejects missing respondent answers instead of saving an empty list", () => {
+    expect(() => normalizeSurveyResponseInput({
       schoolId: "school-own",
       questionAnswers: "invalid" as never,
-    });
-
-    expect(input.questionAnswers).toEqual([]);
+    })).toThrow("ご回答者様");
+    expect(() => normalizeSurveyResponseInput({ schoolId: "school-own" })).toThrow("ご回答者様");
   });
 
   it("creates a school before saving a response when the school is missing", async () => {
@@ -358,7 +359,7 @@ describe("survey-persistence", () => {
 
     await persistSurveyResponse(
       prisma,
-      normalizeSurveyResponseInput({ schoolId: "school-missing" }),
+      normalizeSurveyResponseInput({ schoolId: "school-missing", questionAnswers: [{ questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "保護者様" }] }),
     );
 
     expect(prisma.user.upsert).toHaveBeenCalledWith(

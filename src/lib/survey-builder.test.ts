@@ -21,7 +21,7 @@ describe("survey-builder", () => {
     expect(normalizeSurveyOptions([])).toEqual([]);
     const survey = buildMockSurveyEditorState();
     survey.items[0].options = raw;
-    expect(buildSurveyPreviewSteps(survey)[0].options).toEqual(["選択肢A", "選択肢B"]);
+    expect(buildSurveyPreviewSteps(survey)[1].options).toEqual(["選択肢A", "選択肢B"]);
     expect(saveSurveySetting([], survey, "2026-09-24")[0].items[0].options).toEqual(["選択肢A", "選択肢B"]);
     expect(moveSurveyItem(survey.items, survey.items[0].id, "down")[1].options).toEqual(raw);
     expect(survey.items[0].options).toEqual(["", " 選択肢A ", "", "　選択肢B　", " ", ""]);
@@ -58,7 +58,7 @@ describe("survey-builder", () => {
     ).toEqual([
       "最小文字数は最大文字数以下にしてください。",
       "公開する曜日を1つ以上選択してください。",
-      "1番目の設問文を入力してください。",
+      "2番目の設問文を入力してください。",
     ]);
   });
 
@@ -76,7 +76,7 @@ describe("survey-builder", () => {
       }),
     ).toEqual([
       "アンケート名を入力してください。",
-      "1番目の選択肢を1つ以上入力してください。",
+      "2番目の選択肢を1つ以上入力してください。",
     ]);
   });
 
@@ -88,14 +88,15 @@ describe("survey-builder", () => {
     });
 
     expect(preview.map((item) => item.id)).toEqual([
+      "system-respondent-type",
       "item-004",
       "item-003",
       "item-002",
       "item-001",
     ]);
-    expect(preview.map((item) => item.order)).toEqual([1, 2, 3, 4]);
-    expect(preview[1].helperText).toBe("100〜300文字を目安に入力");
-    expect(preview[1].placeholder).toBe(
+    expect(preview.map((item) => item.order)).toEqual([1, 2, 3, 4, 5]);
+    expect(preview[2].helperText).toBe("100〜300文字を目安に入力");
+    expect(preview[2].placeholder).toBe(
       "例: 苦手だった数学に自信がつき、家でも自分から机に向かうようになりました。",
     );
   });
@@ -114,11 +115,13 @@ describe("survey-builder", () => {
     });
 
     expect(preview.map((item) => item.id)).toEqual([
+      "system-respondent-type",
       "item-003",
       "item-001",
       "item-002",
     ]);
     expect(preview.map((item) => item.helperText)).toEqual([
+      "1つ選択してください",
       "80〜240文字を目安に入力",
       "1つ選択してください",
       "1つ選択してください",
@@ -156,8 +159,8 @@ describe("survey-builder", () => {
       ],
     });
 
-    expect(preview[0].helperText).toBe("学校名を入力してください");
-    expect(preview[0].placeholder).toBe("例: 熊本高校、済々黌高校、第一高校 など");
+    expect(preview[1].helperText).toBe("学校名を入力してください");
+    expect(preview[1].placeholder).toBe("例: 熊本高校、済々黌高校、第一高校 など");
   });
 
   it("moves survey items up and down while renumbering display order", () => {
