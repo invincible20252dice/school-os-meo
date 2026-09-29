@@ -51,4 +51,9 @@ describe("respondent-aware review generation", () => {
   it("encodes the Google place ID", () => {
     expect(buildGoogleReviewUrl("place/&")).toBe("https://search.google.com/local/writereview?placeid=place%2F%26");
   });
+  it("instructs the provider to compose one paragraph instead of a quoted choice list", () => {
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("選択肢をカギ括弧で囲んで列挙することは禁止");
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("「という点も印象に残っています」で項目群をまとめない");
+    expect(REVIEW_GENERATION_SYSTEM_PROMPT).toContain("導入・きっかけ・支援・環境や変化を自然につないだ一段落");
+  });
 });

@@ -171,16 +171,24 @@ The composer uses the required respondent identity, actual school name and
 answered choices/text only. It does not manufacture academic improvement,
 facilities, family gender, SEO facts or a target length. Known choices map to
 semantic facts (with exact aliases), not one sentence per selection. The composer
-deduplicates those facts and builds up to four paragraphs: merged school/grade
+deduplicates those facts and builds one paragraph with ordered topics: merged school/grade
 context, concerns and purpose, instruction and changes, environment and explicit
 future intentions. Empty sections are omitted rather than padded. School names
-are kept as supplied, without appending an assumed school suffix. Custom choices
-are grouped together once, and free text is preserved. Negative
+are kept as supplied, without appending an assumed school suffix. Explicit grade
+abbreviations are normalized, but neither school nor respondent identity is
+inferred from keywords in serialized JSON or from unrelated question titles.
+Planning, consultation and clarity outcomes have separate mappings so selecting
+planning alone cannot manufacture improvement, weekly progress or consultation.
+Unknown choices are never placed in a quoted list. A configured provider can
+compose them from the original answers; if it is unavailable and the local
+composer does not support a choice, the API returns 422 with an actionable
+message, not fabricated prose or a partially completed review. Free text is
+preserved. Negative
 questions are not converted to praise. Structured answers take precedence over
 their duplicated aggregate fields. Identity-only or invalid input remains a 400,
 not a generic positive review. Short answers can produce short drafts: no padding
 with unreported experiences. The same existing answer-save flow persists the
-draft only after generation, without schema changes. Paragraphs survive display,
+draft only after generation, without schema changes. Text survives display,
 persistence and clipboard copying. Golden-output tests cover both viewpoints,
 all introduction combinations, aliases, selected vocabulary, unknown choices,
 negative answers, empty sections and unsupported claims.
@@ -195,9 +203,12 @@ response-save route each have independent 95% coverage gates.
 
 `natural-review-workflow.test.tsx` extends that boundary through the real
 persistence implementation; only Prisma and external provider HTTP are replaced.
-It verifies exact four-paragraph output for both roles, school-scoped write
+It verifies exact single-paragraph output for both roles, school-scoped write
 arguments, stored answers, actual-provider output preservation, clipboard text,
 the configured review URL, and changing respondent roles on the same form.
+Regression cases use the reported planning choice and school/grade answers,
+including student responses to forms containing a parent's closing-question
+title. Unsupported-choice errors preserve input and cannot save or enable posting.
 School lookup and response-write failures must preserve input, hide the posting
 button, expose no database details, and allow an explicit retry. Validation
 failures must not query or write the database. These tests do not write to a live

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAnswerBasedReview } from "./review-template";
+import { buildAnswerBasedReview, UnsupportedReviewChoiceError } from "./review-template";
 import type { NormalizedReviewRequest } from "./review-generator";
 
 const input = (overrides: Partial<NormalizedReviewRequest> = {}): NormalizedReviewRequest => ({
@@ -39,17 +39,18 @@ describe("topic-based review composition", () => {
     expect(result).toBe("自分から勉強を始めるようになりました。");
     expect(result).not.toContain("に通");
   });
-  it.each(["STUDENT", "PARENT"] as const)("composes a complete four-part %s review without one sentence per choice", respondentType => {
+  it.each(["STUDENT", "PARENT"] as const)("composes a single-paragraph %s review without quoting choices", respondentType => {
     const result = buildAnswerBasedReview(input({ respondentType, questionAnswers: fullAnswers }));
     const intro = respondentType === "STUDENT"
       ? "済々黌に通う高校1年生で、iスクール予備校で学んでいます。"
       : "済々黌に通う高校1年生の子どもがiスクール予備校に通っています。";
-    expect(result.split("\n\n")).toEqual([
+    expect(result).toBe([
       intro,
       "入塾前は、何から勉強を始めればよいかわからないことが悩みでした。大学受験の対策を目的に、通塾を決めました。",
       "わかりやすい個別指導と先生への質問のしやすさが、通う中で良いと感じる点です。通塾後は、勉強時間の増加という変化もありました。",
       "静かで集中しやすい自習室も魅力です。受験本番まで引き続きお世話になりたいです。",
-    ]);
+    ].join(""));
+    expect(result).not.toMatch(/[「」\n]/);
     expect(result.match(/大学受験の対策/g)).toHaveLength(1);
     expect(result.match(/質問のしやすさ/g)).toHaveLength(1);
     for (const unwanted of ["私は", "通塾については", "済々黌高校", "全教科", "優しく", "家より", "下通", "成績が上が", "感謝"]) expect(result).not.toContain(unwanted);
@@ -65,7 +66,7 @@ describe("topic-based review composition", () => {
     ["STUDENT", "", "", "iスクール予備校に通っています。"],
   ] as const)("merges introduction for %s, %s, %s", (respondentType, highSchool, grade, intro) => {
     const result = buildAnswerBasedReview(input({ respondentType, questionAnswers: [answer("学校名", highSchool, "TEXT"), answer("学年", grade), answer("良かった点", "質問しやすい")] }));
-    expect(result.split("\n\n")[0]).toBe(intro);
+    expect(result.startsWith(intro)).toBe(true);
     expect(result).not.toMatch(/高校高校|学院高校|中学生.*高校生/);
   });
 
@@ -105,17 +106,44 @@ describe("topic-based review composition", () => {
       answer("感想", ["質問しにくい", "自習室に集中できない"]),
       answer("感想", "まだ成績は変わっていません。", "TEXT"),
     ] }));
-    expect(result).toContain("「価格」と「個別カリキュラムを組んでくれる」という点は気になっています。");
-    expect(result).toContain("「質問しにくい」と「自習室に集中できない」という点も印象に残っています。");
+    expect(result).toContain("価格については改善を望んでいます。個別カリキュラムについては改善を望んでいます。");
+    expect(result).toContain("質問しにくいと感じています。自習室では集中しづらいと感じています。");
+    expect(result).not.toMatch(/[「」]/);
     expect(result).toContain("まだ成績は変わっていません。");
     for (const invented of ["安心感", "良いと感じ", "集中しやすい", "向上", "意欲"]) expect(result).not.toContain(invented);
   });
 
-  it("groups new custom choices without losing them or repeating a stock sentence", () => {
+  it("groups introduction reasons and ignores blank answers without quoting them", () => {
     const result = buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [
-      answer("きっかけ", ["知人の紹介", "体験授業"]), { value: ["独自の授業", "送迎", "送迎", " "] }, { value: undefined },
+      answer("きっかけ", ["知人の紹介", "体験授業", "知人の紹介"]), { value: [" "] }, { value: undefined },
     ] }));
-    expect(result).toBe("「知人の紹介」と「体験授業」というきっかけもありました。\n\n「独自の授業」と「送迎」という点も印象に残っています。");
+    expect(result).toBe("知人の紹介と体験授業をきっかけに通い始めました。");
+  });
+  it.each(["良かった点", "入塾のきっかけ", "改善してほしい点"])("does not turn unsupported choices into a fabricated or quoted sentence: %s", question => {
+    expect(() => buildAnswerBasedReview(input({ questionAnswers: [answer(question, "独自の未対応選択肢")] }))).toThrow(UnsupportedReviewChoiceError);
+  });
+  it("preserves negative choices in negative questions without adding praise", () => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [answer("不満な点", "質問しにくい")] }))).toBe("質問しにくいと感じています。");
+  });
+  it.each(["STUDENT", "PARENT"] as const)("composes planning and consultation in the %s perspective without claiming an unselected outcome", respondentType => {
+    const result = buildAnswerBasedReview(input({ schoolName: "", respondentType, questionAnswers: [
+      answer("お子さまの学年を教えてください", "高校1年生"),
+      answer("高校はどこですか？", "熊本高校", "TEXT"),
+      answer("良かった点", ["自分に合った学習計画を立ててもらえる", "自分専用の学習計画を立ててもらえる", "全教科の相談に乗ってもらえる"]),
+    ] }));
+    const intro = respondentType === "STUDENT" ? "熊本高校に通う高校1年生です。" : "熊本高校に通う高校1年生の子どもの保護者です。";
+    const plan = respondentType === "STUDENT" ? "自分" : "子ども";
+    expect(result).toBe(`${intro}全教科について相談に乗ってもらえるのが心強いです。${plan}に合った学習計画を立ててもらっています。`);
+    expect(result).not.toMatch(/[「」\n]|高校高校|勉強時間|成績|明確|自習室/);
+  });
+  it("composes planning alone without inventing consultation", () => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", selectedReasons: ["自分に合った学習計画を立ててもらえる"] }))).toBe("自分に合った学習計画を立ててもらっています。");
+  });
+  it("keeps distinct consultation facts and an explicitly selected clarity outcome", () => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", selectedReasons: ["大学受験の悩みを相談できる", "親身に相談に乗ってくれる", "毎週やることが明確になった"] }))).toBe("大学受験の悩みを相談できるほか、親身に話を聞いてもらえるのが心強いです。毎週取り組む勉強も明確になりました。");
+  });
+  it.each([["高1", "高校1年生"], ["高2", "高校2年生"], ["高3", "高校3年生"], ["既卒・浪人生", "既卒生"]])("normalizes an explicit grade value %s without inspecting question prose", (value, grade) => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", selectedReasons: [value] }))).toBe(`${grade}です。`);
   });
   it.each(["text", "TEXT", "textarea", "free", "free_text", "自由記述"])("preserves personal free text (%s), including its punctuation, only once", type => {
     expect(buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [answer("感想", "先生に感謝しています！", type), answer("その他", "先生に感謝しています！", type)] }))).toBe("先生に感謝しています！");
@@ -149,7 +177,7 @@ describe("topic-based review composition", () => {
     ["先生にいつでも質問・相談しやすい", "先生にいつでも質問や相談ができること"],
     ["定期的な面談で進捗がわかり安心", "定期的な面談で進捗がわかる安心感"],
     ["学習計画を立ててもらえる", "学習計画を立ててもらえること"],
-    ["やることが明確になった", "やるべきことが明確になったこと"],
+    ["やることが明確になった", "取り組む勉強が明確になりました。"],
     ["勉強法や計画まで細かく教えてくれる", "勉強法や計画まで細かく教えてもらえること"],
     ["苦手単元を根本から克服できる", "苦手単元を根本から克服できる指導"],
     ["モチベーションを引き出してくれる", "学習意欲を引き出してくれる対応"],

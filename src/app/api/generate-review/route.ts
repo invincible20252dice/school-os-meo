@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildAnswerBasedReview } from "@/lib/review-template";
+import { buildAnswerBasedReview, UnsupportedReviewChoiceError } from "@/lib/review-template";
 import {
   buildReviewPromptUserContent,
   type GenerateReviewRequest,
@@ -78,8 +78,18 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ message: "ご回答者様（保護者様 / 生徒ご本人様）を選択し、回答内容を確認してください。" }, { status: 400 });
   }
-  const answerBasedReview = buildAnswerBasedReview(input);
-  if (!answerBasedReview) {
+  let answerBasedReview = "";
+  let unsupportedChoice: UnsupportedReviewChoiceError | undefined;
+  try {
+    answerBasedReview = buildAnswerBasedReview(input);
+  } catch (error) {
+    if (error instanceof UnsupportedReviewChoiceError) {
+      unsupportedChoice = error;
+    } else {
+      throw error;
+    }
+  }
+  if (!answerBasedReview && !unsupportedChoice) {
     return NextResponse.json({ message: "通塾についての選択肢または自由記述を入力してください。" }, { status: 400 });
   }
   try {
@@ -93,6 +103,9 @@ export async function POST(request: Request) {
   } catch (error) {
     const unconfigured = error instanceof Error && error.message === "NOT_CONFIGURED";
     console.error("[Generate Review]", { code: unconfigured ? "NOT_CONFIGURED" : "PROVIDER_FAILED" });
+    if (unsupportedChoice) {
+      return NextResponse.json({ message: unsupportedChoice.message }, { status: 422 });
+    }
     return NextResponse.json({
       success: true,
       generationSource: "answers",

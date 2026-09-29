@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { RESPONDENT_QUESTION_ID } from "@/lib/survey-respondent";
+import * as composer from "@/lib/review-template";
 
 const request = (body: unknown = { selectedReasons: ["質問しやすい"], questionAnswers: [{ questionId: RESPONDENT_QUESTION_ID, value: "生徒ご本人様" }] }) => new Request("https://school.test/api/generate-review", { method: "POST", body: JSON.stringify(body) });
 const output = (text: string) => ({ status: "completed", output: [{ type: "reasoning" }, { type: "message", content: [{ type: "output_text", text }] }] });
@@ -12,6 +13,28 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("POST /api/generate-review", () => {
+  const customInput = { questionAnswers: [
+    { questionId: RESPONDENT_QUESTION_ID, value: "生徒ご本人様" },
+    { questionId: "custom", question: "良かった点", value: "独自の授業" },
+  ] };
+  it("allows the configured provider to compose custom choices", async () => {
+    vi.mocked(fetch).mockResolvedValue(Response.json(output(JSON.stringify({ review: "独自の授業が良いと感じています。" }))));
+    const response = await POST(request(customInput));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ generationSource: "ai", review: "独自の授業が良いと感じています。" });
+  });
+  it.each(["missing-key", "provider-failed"])("rejects unsupported choices instead of quoting them when %s", async mode => {
+    if (mode === "missing-key") vi.stubEnv("OPENAI_API_KEY", "");
+    else vi.mocked(fetch).mockResolvedValue(new Response("upstream details", { status: 500 }));
+    const response = await POST(request(customInput));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ message: "文章化に未対応の選択肢があります。管理者にアンケート設定の確認を依頼してください。" });
+  });
+  it("does not disguise an unexpected composer defect as unsupported input", async () => {
+    vi.spyOn(composer, "buildAnswerBasedReview").mockImplementationOnce(() => { throw new Error("unexpected defect"); });
+    await expect(POST(request())).rejects.toThrow("unexpected defect");
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it.each(["生徒ご本人様", "保護者様"])("sends %s and the school answer to the real prompt builder and parses HTTP Responses output", async value => {
     const draft = value === "生徒ご本人様" ? "九州学院に通っています。質問がしやすいです。" : "九州学院に通う子どもが質問しやすいと話しています。";
     vi.mocked(fetch).mockResolvedValue(Response.json(output(JSON.stringify({ review: ` ${draft} ` }))));

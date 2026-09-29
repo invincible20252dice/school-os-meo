@@ -73,7 +73,41 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("actual composition and persistence contract", () => {
-  it.each(["生徒ご本人様", "保護者様"])("carries the four-paragraph %s draft through actual routes, normalization, Prisma arguments and clipboard", async role => {
+  it.each(["生徒ご本人様", "保護者様"])("integrates school, grade and planning choices for %s without inferring identity from other question titles", async role => {
+    const currentQuestions = [questions[0], questions[1],
+      item("planning", "良かった点", ["自分に合った学習計画を立ててもらえる", "全教科の相談に乗ってもらえる"], 3),
+      item("future", "保護者様からの一言をください。", ["受験本番まで引き続きお願いしたいです"], 4),
+    ];
+    const data = { ...initialData, questions: currentQuestions, survey: { ...initialData.survey!, questions: currentQuestions, items: currentQuestions } };
+    render(<SurveyClient schoolId="actual-school" surveyId="actual-survey" initialData={data} />);
+    fill(role);
+    fireEvent.change(screen.getByRole("textbox", { name: "高校はどこですか？" }), { target: { value: "熊本高校" } });
+    submit();
+    await screen.findByText("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
+    const intro = role === "生徒ご本人様"
+      ? "熊本高校に通う高校1年生で、実校舎で学んでいます。"
+      : "熊本高校に通う高校1年生の子どもが実校舎に通っています。";
+    const subject = role === "生徒ご本人様" ? "自分" : "子ども";
+    const expected = `${intro}全教科について相談に乗ってもらえるのが心強いです。${subject}に合った学習計画を立ててもらっています。受験本番まで引き続きお世話になりたいです。`;
+    expect(boundary.review.create.mock.calls[0][0].data.generatedPatterns).toEqual([expected]);
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(expected).not.toMatch(/[「」\n]|高校高校|印象に残っています|自習室|成績/);
+  });
+
+  it("does not save or offer to post quoted prose for unsupported choices", async () => {
+    const custom = [item("custom", "良かった点", ["独自の未対応選択肢"], 1)];
+    const data = { ...initialData, questions: custom, survey: { ...initialData.survey!, questions: custom, items: custom } };
+    render(<SurveyClient schoolId="actual-school" surveyId="actual-survey" initialData={data} />);
+    fireEvent.click(screen.getByRole("radio", { name: "生徒ご本人様" }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    submit();
+    await screen.findByText("文章化に未対応の選択肢があります。管理者にアンケート設定の確認を依頼してください。");
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect(boundary.review.create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "コピーして投稿画面へ" })).toBeNull();
+  });
+
+  it.each(["生徒ご本人様", "保護者様"])("carries the single-paragraph %s draft through actual routes, normalization, Prisma arguments and clipboard", async role => {
     const copy = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copy } });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
@@ -84,7 +118,8 @@ describe("actual composition and persistence contract", () => {
     const intro = role === "生徒ご本人様"
       ? "済々黌高校に通う高校1年生で、実校舎で学んでいます。"
       : "済々黌高校に通う高校1年生の子どもが実校舎に通っています。";
-    const draft = [intro, ...paragraphs].join("\n\n");
+    const draft = [intro, ...paragraphs].join("");
+    expect(draft).not.toMatch(/[「」\n]/);
     expect(boundary.review.create).toHaveBeenCalledTimes(1);
     const stored = boundary.review.create.mock.calls[0][0].data;
     expect(stored).toMatchObject({ schoolId: "actual-school", source: "SURVEY", status: "GENERATED", rating: 5, generatedPatterns: [draft], surveyAnswers: { surveyId: "actual-survey", schoolName: "実校舎" } });

@@ -96,7 +96,7 @@ describe("public respondent workflow", () => {
     await screen.findByText("回答内容から作成した下書き");
     expect(boundary.provider).not.toHaveBeenCalled();
     const intro = value === "生徒ご本人様" ? "九州学院に通っており、実校舎で学んでいます。" : "九州学院に通う子どもが実校舎に通っています。";
-    const draft = `${intro}\n\n先生への質問のしやすさが、通う中で良いと感じる点です。`;
+    const draft = `${intro}先生への質問のしやすさが、通う中で良いと感じる点です。`;
     expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual([draft]);
     expect(screen.getByText(draft.replace(/\s+/g, " "))).toBeTruthy();
     expect(screen.getByRole("button", { name: "コピーして投稿画面へ" })).toBeTruthy();
