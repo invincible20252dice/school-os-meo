@@ -80,8 +80,10 @@ export function buildAnswerBasedReview(input: NormalizedReviewRequest): string {
 
   function collect(value: string, question: string, type: string) {
     if (value === "記載しない") return;
-    if (/学年/.test(question)) { grade = value; return; }
-    if (/(高校|学校|校名|在籍校).*(どこ|教え|名前|名称)|^(高校名|学校名|在籍校)$/.test(question)) { highSchool = value; return; }
+    // Match the identity question itself, not school/grade words inside an episode prompt.
+    const title = question.replace(/[\s？?。]/g, "");
+    if (/^(?:(?:お子さま|お子様|お子さん|あなた)の|口コミに入れてもよい)?学年(?:を(?:教えて|選んで|選択して|入力して)ください)?$/.test(title)) { grade = value; return; }
+    if (/^(?:(?:お子さま|お子様|お子さん|あなた)の)?(?:(?:高校名|学校名|校名|在籍校)(?:を(?:教えて|入力して)ください)?|(?:高校|学校)はどこですか|(?:通っている|在籍している)(?:高校|学校)を教えてください)$/.test(title)) { highSchool = value; return; }
     if (/^(text|textarea|free|free_text|自由記述)$/i.test(type)) { free.add(finish(value)); return; }
     if (/不満|悪かった|困って|改善して|不安/.test(question)) { concerns.add(value); return; }
     const fact = facts.find(item => item.choices.includes(value));

@@ -193,6 +193,22 @@ provider errors. Generator, answer-based composer, respondent
 contract, generation route, public client, answer aggregation, persistence, and
 response-save route each have independent 95% coverage gates.
 
+`natural-review-workflow.test.tsx` extends that boundary through the real
+persistence implementation; only Prisma and external provider HTTP are replaced.
+It verifies exact four-paragraph output for both roles, school-scoped write
+arguments, stored answers, actual-provider output preservation, clipboard text,
+the configured review URL, and changing respondent roles on the same form.
+School lookup and response-write failures must preserve input, hide the posting
+button, expose no database details, and allow an explicit retry. Validation
+failures must not query or write the database. These tests do not write to a live
+database or post a Google review.
+
+Regression cases reproduce episode questions mentioning school or grade being
+misclassified as identity fields. Identity matching now requires a direct
+school-name/grade question, not merely those words anywhere in a question.
+Tests preserve free-text episodes verbatim and separately verify direct identity
+questions, school names without an invented suffix, and optional punctuation.
+
 `survey-client-dom.test.tsx` operates the real public form with only HTTP and
 browser clipboard/window boundaries substituted. Tests cover role replacement,
 multi-choice limits and deselection, free text, encoded request IDs, delayed

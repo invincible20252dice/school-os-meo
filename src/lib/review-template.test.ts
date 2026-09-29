@@ -17,6 +17,28 @@ const fullAnswers = [
 ];
 
 describe("topic-based review composition", () => {
+  it.each([
+    "学年", "学年を教えてください", "お子さまの学年を教えてください", "口コミに入れてもよい学年を選んでください",
+  ])("recognizes a direct grade question: %s", question => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [answer(question, "高校1年生")] }))).toBe("高校1年生です。");
+  });
+  it.each([
+    "高校はどこですか？", "学校はどこですか?", "学校名", "高校名を教えてください。", "在籍校を入力してください",
+    "お子さまの学校名を教えてください", "通っている学校を教えてください", "在籍している高校を教えてください", " 学校名 ",
+  ])("recognizes a direct school name question: %s", question => {
+    expect(buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [answer(question, "九州学院", "TEXT")] }))).toBe("九州学院に通っています。");
+  });
+  it.each([
+    "高校に入ってからの変化を教えてください",
+    "学校での様子を教えてください",
+    "学年が上がってからの変化はどうですか？",
+    "高校名を教えてもらった時の印象は？",
+    "お子さまの学年での様子を教えてください",
+  ])("does not interpret an episode question as identity metadata: %s", question => {
+    const result = buildAnswerBasedReview(input({ schoolName: "", questionAnswers: [answer(question, "自分から勉強を始めるようになりました。", "TEXT")] }));
+    expect(result).toBe("自分から勉強を始めるようになりました。");
+    expect(result).not.toContain("に通");
+  });
   it.each(["STUDENT", "PARENT"] as const)("composes a complete four-part %s review without one sentence per choice", respondentType => {
     const result = buildAnswerBasedReview(input({ respondentType, questionAnswers: fullAnswers }));
     const intro = respondentType === "STUDENT"
