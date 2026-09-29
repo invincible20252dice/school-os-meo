@@ -149,6 +149,7 @@ export default function SurveyClient({
     getPublicSurveyReviewDestinationUrl(initialData?.googleReviewUrl),
   );
   const [reviews, setReviews] = useState<string[]>([]);
+  const [isAnswerBasedReview, setIsAnswerBasedReview] = useState(false);
   const [rating, setRating] = useState(5);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copyNotice, setCopyNotice] = useState("");
@@ -380,6 +381,7 @@ export default function SurveyClient({
     setError("");
     setResponseNotice("");
     setReviews([]);
+    setIsAnswerBasedReview(false);
     setCopiedIndex(null);
     setCopyNotice("");
     const normalizedRating = normalizePublicSurveyRating(rating);
@@ -431,7 +433,7 @@ export default function SurveyClient({
         throw new Error(typeof failure.message === "string" ? failure.message : "生成に失敗しました");
       }
 
-      const data = (await response.json()) as { review?: unknown } | null;
+      const data = (await response.json()) as { review?: unknown; generationSource?: string } | null;
       if (typeof data?.review !== "string" || !data.review.trim()) {
         throw new Error("生成結果を確認できませんでした。再度お試しください。");
       }
@@ -458,6 +460,7 @@ export default function SurveyClient({
       }
 
       setReviews(generatedReviews);
+      setIsAnswerBasedReview(data.generationSource === "answers");
       setResponseNotice("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "口コミ生成または回答保存に失敗しました。入力内容を確認して再度お試しください。");
@@ -638,6 +641,7 @@ export default function SurveyClient({
                     <span className={styles.copiedBadge}>コピー済み</span>
                   ) : null}
                 </div>
+                {isAnswerBasedReview ? <p className={styles.helpText}>回答内容から作成した下書き</p> : null}
                 <p>{review}</p>
                 <button
                   type="button"

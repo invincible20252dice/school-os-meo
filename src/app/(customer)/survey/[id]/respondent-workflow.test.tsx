@@ -69,17 +69,35 @@ describe("public respondent workflow", () => {
     expect(boundary.provider).not.toHaveBeenCalled();
     expect(boundary.persist.mock.calls[0][1].questionAnswers[0].value).toBe("生徒ご本人様");
   });
-  it("preserves typed answers on provider failure without saving a fabricated draft", async () => {
+  it("saves only answered facts when the provider fails and labels the non-AI draft", async () => {
     boundary.provider.mockResolvedValue(new Response("rejected", { status: 429 }));
     render(<SurveyClient schoolId="s1" surveyId="v1" initialData={initialData} />);
     fireEvent.click(screen.getByRole("radio", { name: "生徒ご本人様" }));
     fireEvent.change(screen.getByRole("textbox", { name: "高校はどこですか？" }), { target: { value: "済々黌" } });
     fireEvent.click(screen.getByRole("button", { name: "回答を送信する" }));
-    await screen.findByText("口コミの生成に失敗しました。時間をおいて再度お試しください。");
-    expect(boundary.persist).not.toHaveBeenCalled();
+    await screen.findByText("アンケート回答を保存しました。口コミ投稿用の文章を確認してください。");
+    expect(boundary.persist).toHaveBeenCalledTimes(1);
+    expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual(["私が実校舎で学んでいます。私は済々黌に通っています。"]);
+    expect(screen.getByText("回答内容から作成した下書き")).toBeTruthy();
     expect((screen.getByRole("textbox", { name: "高校はどこですか？" }) as HTMLTextAreaElement).value).toBe("済々黌");
     expect((screen.getByRole("radio", { name: "生徒ご本人様" }) as HTMLInputElement).checked).toBe(true);
     await waitFor(() => expect((screen.getByRole("button", { name: "回答を送信する" }) as HTMLButtonElement).disabled).toBe(false));
+  });
+  it.each(["生徒ご本人様", "保護者様"])("completes generation and persistence for %s without an API key", async value => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    render(<SurveyClient schoolId="s1" surveyId="v1" initialData={initialData} />);
+    fireEvent.click(screen.getByRole("radio", { name: value }));
+    fireEvent.change(screen.getByRole("textbox", { name: "高校はどこですか？" }), { target: { value: "九州学院" } });
+    fireEvent.click(screen.getByRole("radio", { name: "質問しやすい" }));
+    fireEvent.click(screen.getByRole("button", { name: "回答を送信する" }));
+    await screen.findByText("回答内容から作成した下書き");
+    expect(boundary.provider).not.toHaveBeenCalled();
+    const subject = value === "生徒ご本人様" ? "私" : "子ども";
+    const draft = `${subject}が実校舎で学んでいます。${subject}は九州学院に通っています。質問しやすいと感じています。`;
+    expect(boundary.persist.mock.calls[0][1].generatedReviews).toEqual([draft]);
+    expect(screen.getByText(draft)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "コピーして投稿画面へ" })).toBeTruthy();
+    expect(screen.queryByText(/接続設定が未完了/)).toBeNull();
   });
   it("rejects direct answer-save requests without identity before persistence", async () => {
     const response = await saveResponse(new Request("https://school.test/api/survey-responses", { method: "POST", body: JSON.stringify({ schoolId: "s1", questionAnswers: [] }) }));

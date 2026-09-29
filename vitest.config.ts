@@ -49,6 +49,7 @@ export default defineConfig({
         "src/lib/survey-persistence.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/survey-responses/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/review-generator.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/review-template.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/generate-review/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/dashboard/reviews/analytics/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
       },

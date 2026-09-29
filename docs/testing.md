@@ -35,6 +35,7 @@ cannot hide missing coverage in the covered workflows:
 - `src/lib/survey-respondent.ts`
 - `src/lib/public-survey-answers.ts`
 - `src/lib/review-generator.ts`
+- `src/lib/review-template.ts`
 - `src/lib/survey-persistence.ts`
 - `src/app/api/generate-review/route.ts`
 - `src/app/api/survey-responses/route.ts`
@@ -158,15 +159,29 @@ not prove that every live LLM output is natural or factually correct.
 
 The HTTP Responses API reads message content from `output`, not the SDK-only
 `output_text` convenience property (official reference:
-https://developers.openai.com/api/docs/guides/text). Missing API credentials,
-provider refusals, malformed output and outages return explicit 503/502 errors;
-the old fabricated parent-template fallback is removed. `OPENAI_API_KEY` must be
-configured for production generation. No credentials are committed.
+https://developers.openai.com/api/docs/guides/text). When the OpenAI key is absent,
+or the provider fails, refuses, times out, or returns invalid output, generation
+uses the answer-based composer in `review-template.ts`. Responses explicitly
+identify `generationSource: "ai" | "answers"`; the latter is labelled on the
+public form and must not be presented as a successful external AI call.
+`OPENAI_API_KEY` is required only for external AI generation. Gemini credentials
+are not substituted for an OpenAI key. No credentials are committed.
+
+The composer uses the required respondent identity, actual school name and
+answered choices/text only. It does not manufacture academic improvement,
+facilities, family gender, SEO facts or a target length. Known choices have exact
+sentence mappings; other choices are quoted, and free text is preserved. Negative
+questions are not converted to praise. Structured answers take precedence over
+their duplicated aggregate fields. Identity-only or invalid input remains a 400,
+not a generic positive review. Short answers can produce short drafts: no padding
+with unreported experiences. The same existing answer-save flow persists the
+draft only after generation, without schema changes.
 
 `respondent-workflow.test.tsx` drives the actual public DOM and generation/save
 routes, substituting only provider HTTP and persistence. It verifies unselected
 Q1 blocking, both roles, high-school text context, stored identity in both rating
-paths, and preservation of input on provider errors. Generator, respondent
+paths, key-free generation for both roles, and answer-based persistence on
+provider errors. Generator, answer-based composer, respondent
 contract, generation route, public client, answer aggregation, persistence, and
 response-save route each have independent 95% coverage gates.
 

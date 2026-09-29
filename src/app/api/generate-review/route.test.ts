@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { RESPONDENT_QUESTION_ID } from "@/lib/survey-respondent";
 
-const request = (body: unknown = { questionAnswers: [{ questionId: RESPONDENT_QUESTION_ID, value: "生徒ご本人様" }] }) => new Request("https://school.test/api/generate-review", { method: "POST", body: JSON.stringify(body) });
+const request = (body: unknown = { selectedReasons: ["質問しやすい"], questionAnswers: [{ questionId: RESPONDENT_QUESTION_ID, value: "生徒ご本人様" }] }) => new Request("https://school.test/api/generate-review", { method: "POST", body: JSON.stringify(body) });
 const output = (text: string) => ({ status: "completed", output: [{ type: "reasoning" }, { type: "message", content: [{ type: "output_text", text }] }] });
 beforeEach(() => {
   vi.stubEnv("OPENAI_API_KEY", "test-key");
@@ -20,7 +20,7 @@ describe("POST /api/generate-review", () => {
       { questionId: "school", question: "高校はどこですか？", type: "TEXT", value: "九州学院" },
     ] }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ review: draft, reviews: [draft] });
+    expect(await response.json()).toEqual({ success: true, generationSource: "ai", review: draft, reviews: [draft] });
     expect(fetch).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({ method: "POST", signal: expect.any(AbortSignal), headers: { Authorization: "Bearer test-key", "Content-Type": "application/json" } }));
     const payload = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(payload.store).toBe(false);
@@ -37,31 +37,39 @@ describe("POST /api/generate-review", () => {
   it("rejects malformed request JSON", async () => {
     expect((await POST(new Request("https://school.test", { method: "POST", body: "{" }))).status).toBe(400);
   });
-  it("returns 503 without a provider key, never a parent template", async () => {
+  it("returns an answer-based draft without a provider key and without making an external call", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const response = await POST(request());
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ message: "AI生成の接続設定が未完了です。管理者にお問い合わせください。" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, generationSource: "answers", review: "質問しやすいと感じています。", reviews: ["質問しやすいと感じています。"] });
     expect(fetch).not.toHaveBeenCalled();
   });
-  it.each([403, 429, 500])("returns an explicit failure for provider HTTP %s", async status => {
+  it.each([401, 403, 429, 500])("returns a labelled answer-based draft for provider HTTP %s", async status => {
     vi.mocked(fetch).mockResolvedValue(new Response("private provider details", { status }));
     const response = await POST(request());
-    expect(response.status).toBe(502);
-    expect(await response.json()).not.toHaveProperty("review");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, generationSource: "answers", review: "質問しやすいと感じています。" });
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private provider");
   });
   it.each([{}, { status: "incomplete", output: [] }, { status: "completed", output: {} }, output("{"), output("{}"), output('{"review":3}'), output('{"review":" "}'),
     { status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "no" }] }] },
     { status: "completed", output: [] },
-  ])("rejects incomplete or malformed generation without fallback %#", async payload => {
+  ])("replaces incomplete or malformed generation with grounded answer text %#", async payload => {
     vi.mocked(fetch).mockResolvedValue(Response.json(payload));
     const response = await POST(request());
-    expect(response.status).toBe(502);
-    expect(await response.json()).not.toHaveProperty("reviews");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ generationSource: "answers", review: "質問しやすいと感じています。" });
   });
-  it("returns a failure when the provider times out", async () => {
+  it("returns the answer-based draft when the provider times out", async () => {
     vi.mocked(fetch).mockRejectedValue(new DOMException("timeout", "TimeoutError"));
-    expect((await POST(request())).status).toBe(502);
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ generationSource: "answers" });
+  });
+  it("rejects identity-only input instead of inventing a generic positive experience", async () => {
+    const response = await POST(request({ questionAnswers: [{ questionId: RESPONDENT_QUESTION_ID, value: "保護者様" }] }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ message: "通塾についての選択肢または自由記述を入力してください。" });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

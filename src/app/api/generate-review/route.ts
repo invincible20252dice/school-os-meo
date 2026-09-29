@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildAnswerBasedReview } from "@/lib/review-template";
 import {
   buildReviewPromptUserContent,
   type GenerateReviewRequest,
@@ -77,18 +78,26 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ message: "ご回答者様（保護者様 / 生徒ご本人様）を選択し、回答内容を確認してください。" }, { status: 400 });
   }
+  const answerBasedReview = buildAnswerBasedReview(input);
+  if (!answerBasedReview) {
+    return NextResponse.json({ message: "通塾についての選択肢または自由記述を入力してください。" }, { status: 400 });
+  }
   try {
     const review = await generateWithOpenAI(input);
     return NextResponse.json({
+      success: true,
+      generationSource: "ai",
       review,
       reviews: [review],
     });
   } catch (error) {
     const unconfigured = error instanceof Error && error.message === "NOT_CONFIGURED";
     console.error("[Generate Review]", { code: unconfigured ? "NOT_CONFIGURED" : "PROVIDER_FAILED" });
-    return NextResponse.json(
-      { message: unconfigured ? "AI生成の接続設定が未完了です。管理者にお問い合わせください。" : "口コミの生成に失敗しました。時間をおいて再度お試しください。" },
-      { status: unconfigured ? 503 : 502 },
-    );
+    return NextResponse.json({
+      success: true,
+      generationSource: "answers",
+      review: answerBasedReview,
+      reviews: [answerBasedReview],
+    });
   }
 }
