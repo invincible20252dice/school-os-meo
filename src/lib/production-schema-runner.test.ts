@@ -11,6 +11,7 @@ beforeEach(() => {
   writeFileSync(join(cwd, "runner.mjs"), script);
   mkdirSync(join(cwd, "prisma"));
   writeFileSync(join(cwd, "prisma/review-status-alignment.sql"), readFileSync("prisma/review-status-alignment.sql"));
+  writeFileSync(join(cwd, "prisma/review-status-enum.sql"), readFileSync("prisma/review-status-enum.sql"));
 });
 afterEach(() => { rmSync(cwd, { recursive: true, force: true }); });
 function run(environment: string, databaseUrl = "") {
@@ -25,6 +26,7 @@ function fakePrisma(fail: boolean) {
   writeFileSync(join(path, "index.js"), `import {writeFileSync} from 'node:fs';
     export class PrismaClient {
       constructor(options) { writeFileSync('connection.json', JSON.stringify(options)); }
+      async $executeRawUnsafe(sql) {writeFileSync('enum.sql', sql);}
       async $transaction(fn, options) {
         writeFileSync('transaction.json', JSON.stringify(options));
         return fn({$executeRawUnsafe: async sql => {
@@ -50,6 +52,7 @@ describe("production deployment schema gate", () => {
     const result = run("production", "postgresql://user:pass@localhost/db?pgbouncer=true");
     expect(result.status).toBe(0);
     expect(readFileSync(join(cwd, "migration.sql"), "utf8")).toBe(readFileSync("prisma/review-status-alignment.sql", "utf8"));
+    expect(readFileSync(join(cwd, "enum.sql"), "utf8")).toBe(readFileSync("prisma/review-status-enum.sql", "utf8"));
     expect(JSON.parse(readFileSync(join(cwd, "transaction.json"), "utf8"))).toEqual({ maxWait: 15000, timeout: 45000 });
     expect(JSON.parse(readFileSync(join(cwd, "query.json"), "utf8"))).toEqual({ where: { source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } } });
     const url = new URL(JSON.parse(readFileSync(join(cwd, "connection.json"), "utf8")).datasources.db.url);

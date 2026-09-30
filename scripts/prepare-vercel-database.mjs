@@ -10,6 +10,7 @@ if (process.env.VERCEL_ENV === "production") {
   const prisma = new PrismaClient({ datasources: { db: { url: url.toString() } } });
   try {
     console.log("Checking Review.status schema alignment...");
+    await prisma.$executeRawUnsafe(readFileSync("prisma/review-status-enum.sql", "utf8"));
     // Use the same pooled connection as the app, not the migration engine's direct-connection protocol.
     await prisma.$transaction(async tx => {
       await tx.$executeRawUnsafe(readFileSync("prisma/review-status-alignment.sql", "utf8"));

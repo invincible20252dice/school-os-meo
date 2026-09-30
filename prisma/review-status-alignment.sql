@@ -20,8 +20,8 @@ BEGIN
   SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder) INTO actual_labels
   FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid JOIN pg_namespace n ON n.oid = t.typnamespace
   WHERE n.nspname = 'public' AND t.typname = 'ReviewStatus';
-  IF actual_labels IS DISTINCT FROM expected_labels THEN
-    RAISE EXCEPTION 'ReviewStatus enum differs from the Prisma schema; alignment aborted';
+  IF actual_labels IS NULL OR NOT (expected_labels <@ actual_labels) THEN
+    RAISE EXCEPTION 'ReviewStatus enum is missing Prisma values; alignment aborted';
   END IF;
 
   SELECT udt_schema || '.' || udt_name INTO status_type FROM information_schema.columns

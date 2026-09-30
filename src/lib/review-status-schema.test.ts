@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const alignment = readFileSync("prisma/review-status-alignment.sql", "utf8");
+const enumAlignment = readFileSync("prisma/review-status-enum.sql", "utf8");
 const statuses = Object.values(ReviewStatus);
 let db: PGlite;
 const list = 'SELECT id, status::text AS status FROM public."Review" WHERE status NOT IN ($1::public."ReviewStatus", $2::public."ReviewStatus", $3::public."ReviewStatus") ORDER BY id';
@@ -62,8 +63,33 @@ describe("Review.status production schema alignment", () => {
   });
 
   it("does not proceed when the database enum and generated Prisma enum differ", async () => {
-    await db.exec('DROP TYPE public."ReviewStatus"; CREATE TYPE public."ReviewStatus" AS ENUM (\'PENDING\'); CREATE TABLE public."Review" (status text);');
-    await expect(db.exec(alignment)).rejects.toThrow("enum differs from the Prisma schema");
+    await db.exec('DROP TYPE public."ReviewStatus"; CREATE TYPE public."ReviewStatus" AS ENUM (\'PENDING\'); CREATE TABLE public."Review" (id text, status text);');
+    await expect(db.exec(alignment)).rejects.toThrow("enum is missing Prisma values");
+    await db.exec(enumAlignment);
+    await db.exec(alignment);
+    expect((await db.query(list, excluded)).rows).toEqual([]);
+  });
+
+  it("preserves legacy enum ordering and existing data while adding all missing Prisma values", async () => {
+    await db.exec('DROP TYPE public."ReviewStatus"; CREATE TYPE public."ReviewStatus" AS ENUM (\'REPLIED\',\'DRAFT\',\'PENDING\',\'LEGACY_UNUSED\'); CREATE TABLE public."Review" (id text, status text);');
+    await db.query('INSERT INTO public."Review" VALUES ($1,$2)', ["legacy", "REPLIED"]);
+    await db.exec(enumAlignment);
+    await db.exec(alignment);
+    await db.exec(enumAlignment);
+    await db.exec(alignment);
+    expect((await db.query(list, excluded)).rows).toEqual([{ id: "legacy", status: "REPLIED" }]);
+    const labels = (await db.query<{ value: string }>('SELECT unnest(enum_range(NULL::public."ReviewStatus"))::text AS value')).rows.map(r => r.value);
+    expect(labels.slice(0, 4)).toEqual(["REPLIED", "DRAFT", "PENDING", "LEGACY_UNUSED"]);
+    expect(labels).toEqual(expect.arrayContaining(statuses));
+  });
+
+  it("creates the full enum when it is absent and refuses unknown data before additive changes", async () => {
+    await db.exec('DROP TYPE public."ReviewStatus"; CREATE TABLE public."Review" (status text); INSERT INTO public."Review" VALUES (\'UNKNOWN\');');
+    await expect(db.exec(enumAlignment)).rejects.toThrow("null or unsupported values");
+    expect((await db.query("SELECT typname FROM pg_type WHERE typname='ReviewStatus'")).rows).toEqual([]);
+    await db.exec('DELETE FROM public."Review";');
+    await db.exec(enumAlignment);
+    expect((await db.query<{ value: string }>('SELECT unnest(enum_range(NULL::public."ReviewStatus"))::text AS value')).rows.map(r => r.value)).toEqual(statuses);
   });
 
   it.each(["integer", "missing"])("rejects unexpected status column definition: %s", async type => {
