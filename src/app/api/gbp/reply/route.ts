@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const review = await prisma.review.findUnique({
       where: { id: reviewId },
       select: {
-        id: true, schoolId: true, googleReviewId: true, gbpReviewId: true,
+        id: true, schoolId: true, source: true, googleReviewId: true, gbpReviewId: true,
         authorName: true, parentName: true, originalText: true, comment: true, rating: true,
         school: {
           select: {
@@ -61,6 +61,9 @@ export async function POST(request: Request) {
     if (!review) throw new DirectReplyError("NOT_FOUND", "対象の口コミが見つかりませんでした。", 404);
     if (!canAccessSchool(accessResult.access, review.schoolId)) {
       throw new DirectReplyError("FORBIDDEN", "この校舎の口コミには返信できません。", 403);
+    }
+    if (review.source !== "GOOGLE") {
+      throw new DirectReplyError("INVALID_REQUEST", "Googleへの投稿を確認できていないアンケート回答には返信できません。", 400);
     }
     const requestedSchoolId = stringValue(payload.schoolId);
     if (requestedSchoolId && requestedSchoolId !== review.schoolId) {

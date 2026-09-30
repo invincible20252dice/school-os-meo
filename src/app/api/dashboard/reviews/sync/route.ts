@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
-import { syncGbpReviewsForSchool } from "@/lib/gbp-reviews-sync";
+import { GbpSyncError, syncGbpReviewsForSchool } from "@/lib/gbp-reviews-sync";
+import { canAccessSchool } from "@/lib/auth-access";
 import { prisma } from "@/lib/prisma";
 import {
   buildScopedSchoolFilter,
@@ -10,6 +11,7 @@ import {
 type SyncRequestBody = {
   schoolId?: string;
 };
+export const maxDuration = 300;
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -32,6 +34,16 @@ export async function POST(request: Request) {
       normalizeString(url.searchParams.get("schoolId"));
     const accessResult = await resolveRequestAccess(request, url);
 
+    if (!accessResult.isAuthenticated) {
+      return NextResponse.json({ success: false, error: "ログイン後に同期してください。" }, { status: 401 });
+    }
+    if (!requestedSchoolId || requestedSchoolId === "all") {
+      return NextResponse.json({ success: false, error: "同期する校舎を選択してください。" }, { status: 400 });
+    }
+    if (!canAccessSchool(accessResult.access, requestedSchoolId)) {
+      return NextResponse.json({ success: false, error: "この校舎を同期する権限がありません。" }, { status: 403 });
+    }
+
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         {
@@ -53,6 +65,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(summary);
   } catch (error) {
+    if (error instanceof GbpSyncError) {
+      console.error("[GBP Reviews Sync]", { status: error.status });
+      return NextResponse.json({ success: false, error: error.message, code: "GOOGLE_SYNC_FAILED" }, { status: error.status });
+    }
     console.error("[GBP Reviews Sync Error]:", error);
     const message =
       error instanceof Error

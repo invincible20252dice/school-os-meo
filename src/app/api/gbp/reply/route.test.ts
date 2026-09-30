@@ -18,7 +18,7 @@ const access = {
 };
 function review() {
   return {
-    id: "review-1", schoolId: "school-1", googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real",
+    id: "review-1", schoolId: "school-1", source: "GOOGLE", googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real",
     authorName: "投稿者", parentName: null, originalText: "口コミ本文", comment: null, rating: 5,
     school: {
       gbpAccountId: "accounts/1", gbpLocationId: "locations/old",
@@ -44,6 +44,12 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("GBP direct reply API", () => {
+  it("never posts a survey draft even if a caller supplies its record id", async () => {
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({ ...review(), source: "SURVEY" } as never);
+    expect((await POST(request())).status).toBe(400);
+    expect(publishDirectGbpReply).not.toHaveBeenCalled();
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
   it.each(["", "?reviewId=review-1"])("GET never publishes and redirects to the editor %s", async (query) => {
     const response = await GET(new Request(`https://example.com/api/gbp/reply${query}`));
     expect(response.status).toBe(307);

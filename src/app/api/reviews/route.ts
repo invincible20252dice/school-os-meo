@@ -69,6 +69,8 @@ async function resolveScopedReview(request: Request, reviewId: string) {
     return { error: "FORBIDDEN" as const };
   }
 
+  if (review.source !== "GOOGLE") return { error: "FORBIDDEN" as const };
+
   return { review };
 }
 
@@ -108,6 +110,10 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const requestedSchoolId = url.searchParams.get("schoolId")?.trim() || undefined;
+    const source = url.searchParams.get("source") || "GOOGLE";
+    if (source !== "GOOGLE" && source !== "SURVEY") {
+      return NextResponse.json({ message: "口コミの取得元を確認してください。" }, { status: 400 });
+    }
     const accessResult = await resolveRequestAccess(request, url);
 
     if (!accessResult.isAuthenticated) {
@@ -136,9 +142,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "担当校舎の権限を確認できません。管理者に校舎の割り当てを確認してください。" }, { status: 403 });
     }
     const reviews = await prisma.review.findMany({
-      where: scopedSchool.effectiveSchoolId
-        ? { schoolId: scopedSchool.effectiveSchoolId }
-        : {},
+      where: {
+        ...(scopedSchool.effectiveSchoolId ? { schoolId: scopedSchool.effectiveSchoolId } : {}),
+        source,
+        status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] },
+        ...(source === "GOOGLE" ? {
+          OR: [{ googleReviewId: { not: null } }, { gbpReviewId: { not: null } }],
+          AND: ["test_", "mock", "manual-"].flatMap(prefix => [
+            { OR: [{ googleReviewId: null }, { NOT: { googleReviewId: { startsWith: prefix } } }] },
+            { OR: [{ gbpReviewId: null }, { NOT: { gbpReviewId: { startsWith: prefix } } }] },
+          ]),
+        } : { comment: { not: "" } }),
+      },
       select: {
         id: true,
         schoolId: true,

@@ -217,6 +217,21 @@
   gap: 10px;
 }
 
+.sourceTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dde5e1;
+}
+
+.sourceTabs [aria-selected="true"] {
+  border-color: #147d68;
+  background: #e5f6ef;
+  color: #126b59;
+}
+
 .repliedBadge,
 .pendingBadge {
   border-radius: 999px;

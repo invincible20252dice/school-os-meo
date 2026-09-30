@@ -7,6 +7,7 @@ import {
 } from "./gbp-reviews-sync";
 
 const originalEnv = process.env;
+vi.mock("./gbp-review-draft", () => ({ generateReviewReplyDraft: vi.fn(async () => "iスクール予備校への口コミをありがとうございます。") }));
 
 vi.mock("./google-gbp-oauth", () => ({
   refreshGoogleAccessToken: vi.fn(async () => "access-token"),
@@ -18,6 +19,57 @@ afterEach(() => {
 });
 
 describe("gbp-reviews-sync", () => {
+  function database() {
+    return {
+      schoolSetting: {
+        findFirst: vi.fn(async () => ({ schoolId: "school-1", googleAccountId: "accounts/123", selectedGbpLocationId: "locations/456", googleRefreshToken: "refresh", school: { name: "対象校舎" } })),
+        update: vi.fn(),
+      },
+      review: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    };
+  }
+
+  it("loads every page and preserves an edited draft while generating missing drafts", async () => {
+    const prisma = database();
+    prisma.review.findFirst.mockResolvedValueOnce({ id: "existing", aiReplyDraft: "編集済みの返信" }).mockResolvedValue(null);
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ reviews: [{ reviewId: "1", reviewer: { displayName: "実投稿者1" }, starRating: "FIVE" }], nextPageToken: "page 2" }))
+      .mockResolvedValueOnce(Response.json({ reviews: [{ reviewId: "2", comment: "丁寧です", starRating: "FOUR" }, { reviewId: "3", comment: "", starRating: "THREE" }] }));
+    expect(await syncGbpReviewsForSchool({ prisma, schoolId: "school-1", fetchImpl: fetcher })).toMatchObject({ count: 3 });
+    expect(fetcher.mock.calls[1][0]).toContain("pageToken=page+2");
+    expect(prisma.review.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ aiReplyDraft: "編集済みの返信", authorName: "実投稿者1", googleReviewId: "accounts/123/locations/456/reviews/1" }) }));
+    expect(prisma.review.create).toHaveBeenCalledTimes(2);
+    expect(prisma.review.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ schoolId: "school-1", source: "GOOGLE" }) }));
+  });
+
+  it.each([403, 429])("does not write a partially fetched list when a later page fails (%s)", async status => {
+    const prisma = database();
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ reviews: [{ reviewId: "1" }], nextPageToken: "next" }))
+      .mockResolvedValueOnce(Response.json({ error: "restricted" }, { status }));
+    await expect(syncGbpReviewsForSchool({ prisma, schoolId: "school-1", fetchImpl: fetcher })).rejects.toMatchObject({ status });
+    expect(prisma.review.create).not.toHaveBeenCalled();
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { reviews: {} }, { error: "bad-data" }, { reviews: [{}] },
+  ])("rejects invalid upstream review data (%j)", async data => {
+    const prisma = database();
+    await expect(syncGbpReviewsForSchool({ prisma, fetchImpl: vi.fn().mockResolvedValue(Response.json(data)) })).rejects.toMatchObject({ status: 502 });
+    expect(prisma.review.create).not.toHaveBeenCalled();
+  });
+
+  it("detects a looping page token", async () => {
+    const prisma = database();
+    await expect(syncGbpReviewsForSchool({ prisma, fetchImpl: vi.fn().mockImplementation(async () => Response.json({ nextPageToken: "same" })) })).rejects.toMatchObject({ status: 502 });
+    expect(prisma.review.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing school name rather than inventing one", async () => {
+    const prisma = database();
+    prisma.schoolSetting.findFirst.mockResolvedValueOnce({ schoolId: "school-1", googleAccountId: "123", selectedGbpLocationId: "456", googleRefreshToken: "refresh", school: null } as never);
+    await expect(syncGbpReviewsForSchool({ prisma, fetchImpl: vi.fn().mockResolvedValue(Response.json({ reviews: [{ reviewId: "1" }] })) })).rejects.toThrow("校舎名");
+    expect(prisma.review.create).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY;
   });
@@ -326,7 +378,7 @@ describe("gbp-reviews-sync", () => {
         schoolId: "school-1",
         fetchImpl: vi.fn(async () => new Response("account quota exceeded", { status: 429 })),
       }),
-    ).rejects.toThrow("account quota exceeded");
+    ).rejects.toMatchObject({ status: 429 });
     expect(prisma.schoolSetting.update).not.toHaveBeenCalled();
   });
 
@@ -444,7 +496,7 @@ describe("gbp-reviews-sync", () => {
             }),
         ),
       }),
-    ).rejects.toThrow("quota exceeded");
+    ).rejects.toMatchObject({ status: 429 });
   });
 
   it("adds the Google response status when the reviews API error body is empty", async () => {
@@ -472,7 +524,7 @@ describe("gbp-reviews-sync", () => {
         schoolId: "school-1",
         fetchImpl: vi.fn(async () => new Response("", { status: 500 })),
       }),
-    ).rejects.toThrow("status=500");
+    ).rejects.toMatchObject({ status: 500 });
   });
 
   it("surfaces non-JSON Google API errors without hiding the upstream response", async () => {
@@ -500,7 +552,7 @@ describe("gbp-reviews-sync", () => {
         schoolId: "school-1",
         fetchImpl: vi.fn(async () => new Response("upstream unavailable", { status: 503 })),
       }),
-    ).rejects.toThrow("upstream unavailable");
+    ).rejects.toMatchObject({ status: 503 });
   });
 
   it("returns a zero-count sync when Google returns an empty body", async () => {

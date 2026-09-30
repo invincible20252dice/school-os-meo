@@ -14,6 +14,7 @@ type ReviewRow = {
   id: string;
   schoolId: string;
   schoolName: string;
+  source: string;
   googleReviewManagementUrl: string | null;
   status: string;
   parentName: string;
@@ -103,6 +104,7 @@ function copyTextWithDocument(text: string) {
 export default function ReviewsClient() {
   const searchParams = useSearchParams();
   const selectedSchoolId = searchParams.get("schoolId") || "";
+  const [selectedSource, setSelectedSource] = useState<"GOOGLE" | "SURVEY">("GOOGLE");
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "error" | "warning">(
@@ -140,6 +142,7 @@ export default function ReviewsClient() {
       if (selectedSchoolId) {
         params.set("schoolId", selectedSchoolId);
       }
+      if (selectedSource === "SURVEY") params.set("source", "SURVEY");
 
       const headers = await buildAuthHeaders();
 
@@ -298,10 +301,16 @@ export default function ReviewsClient() {
         success?: boolean;
         count?: number;
         error?: string;
+        code?: string;
       };
       if (version !== loadVersion.current) return;
 
       if (!response.ok || !body.success) {
+        if (body.code === "GOOGLE_SYNC_FAILED" && (response.status === 429 || response.status === 403)) {
+          setStatus("warning");
+          setMessage(body.error || "Googleとの同期は完了していません。取得済みの口コミを表示しています。");
+          return;
+        }
         throw new Error(body.error || "Google口コミを同期できませんでした。");
       }
 
@@ -324,7 +333,7 @@ export default function ReviewsClient() {
   useEffect(() => {
     void loadReviews();
     return () => { loadVersion.current += 1; };
-  }, [selectedSchoolId]);
+  }, [selectedSchoolId, selectedSource]);
 
   useEffect(() => {
     if (!highlightedReviewId || status === "loading") {
@@ -358,6 +367,13 @@ export default function ReviewsClient() {
           <RefreshIcon />
           GBP口コミを同期
         </button>
+      </div>
+
+      <div role="tablist" aria-label="口コミの取得元" className={styles.sourceTabs}>
+        <button type="button" role="tab" aria-selected={selectedSource === "GOOGLE"} disabled={mutating}
+          className={styles.secondaryButton} onClick={() => setSelectedSource("GOOGLE")}>Google口コミ</button>
+        <button type="button" role="tab" aria-selected={selectedSource === "SURVEY"} disabled={mutating}
+          className={styles.secondaryButton} onClick={() => setSelectedSource("SURVEY")}>アンケート回答</button>
       </div>
 
       {message ? (
@@ -401,6 +417,7 @@ export default function ReviewsClient() {
             <label className={styles.replyEditor}>
               <span>AI返信案</span>
               <textarea
+                readOnly={review.source === "SURVEY"}
                 disabled={mutating || status === "loading"}
                 ref={(element) => {
                   textareaRefs.current[review.id] = element;
@@ -416,9 +433,9 @@ export default function ReviewsClient() {
             </label>
             <div className={styles.reviewActions}>
               <span className={review.repliedAt ? styles.repliedBadge : styles.pendingBadge}>
-                {review.repliedAt ? "返信済" : "未返信"}
+                {review.source === "SURVEY" ? "Google投稿未確認" : review.repliedAt ? "返信済" : "未返信"}
               </span>
-              <div className={styles.actionButtons}>
+              {review.source !== "SURVEY" && <div className={styles.actionButtons}>
                 <button
                   type="button"
                   className={styles.primaryButton}
@@ -466,7 +483,7 @@ export default function ReviewsClient() {
                   <CheckIcon />
                   返信済みにする
                 </button>
-              </div>
+              </div>}
             </div>
           </article>
         ))}

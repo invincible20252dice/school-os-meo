@@ -14,6 +14,7 @@ import type {
 } from "./survey-builder";
 import { normalizeSurveyItemOrder } from "./survey-builder";
 import { requireRespondentType } from "./survey-respondent";
+import { generateReviewReplyDraft } from "./gbp-review-draft";
 
 type SurveyPersistenceItemInput = {
   id?: string;
@@ -260,22 +261,44 @@ export async function persistSurveyResponse(
   prisma: Pick<PrismaSurveyPersistenceClient, "review" | "school" | "user">,
   input: ReturnType<typeof normalizeSurveyResponseInput>,
 ) {
-  const school = await ensureSchoolForPersistence(prisma, input.schoolId);
+  const school = await prisma.school.findUnique({
+    where: { id: input.schoolId },
+    select: { id: true, name: true, schoolSetting: { select: {
+      promptSystemRole: true, promptReviewTone: true, promptMustKeywords: true,
+      promptForbiddenWords: true, promptTargetLength: true, promptAutoReplyApproval: true,
+    } } },
+  }) as { id: string; name: string; schoolSetting: Parameters<typeof generateReviewReplyDraft>[0]["promptSetting"] } | null;
+  if (!school) throw new Error("保存先の校舎情報を確認できませんでした。");
+  const comment = input.generatedReviews[0];
+  if (!comment) throw new Error("生成された口コミ本文を確認してください。");
+  const respondentType = requireRespondentType(input.questionAnswers);
+  const authorName = respondentType === "STUDENT" ? "アンケート回答者（生徒本人）" : "アンケート回答者（保護者）";
+  const aiReplyDraft = await generateReviewReplyDraft({
+    schoolName: school.name, rating: input.rating, reviewText: comment, promptSetting: school.schoolSetting,
+  });
 
   return prisma.review.create({
     data: {
       schoolId: school.id,
       source: "SURVEY",
-      status: "GENERATED" satisfies ReviewStatus,
+      status: "PENDING" satisfies ReviewStatus,
+      authorName,
+      parentName: authorName,
+      comment,
+      selectedReviewText: comment,
+      aiReplyDraft,
+      aiReplyText: aiReplyDraft,
+      aiReplyGeneratedAt: new Date(),
       rating: input.rating || null,
       surveyAnswers: {
+        respondentType,
         surveyId: input.surveyId,
         schoolName: input.schoolName,
         selectedReasons: input.selectedReasons,
         freeText: input.freeText,
         questionAnswers: input.questionAnswers,
       },
-      originalText: input.freeText || null,
+      originalText: comment,
       generatedPatterns: input.generatedReviews,
     },
   });

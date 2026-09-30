@@ -62,6 +62,35 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 describe("GET /api/reviews", () => {
+  it("uses a separate survey source and refuses unknown sources", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    expect((await GET(new Request("https://app.example.com/api/reviews?source=SURVEY"))).status).toBe(200);
+    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ source: "SURVEY", comment: { not: "" } }) }));
+    vi.mocked(prisma.review.findMany).mockClear();
+    expect((await GET(new Request("https://app.example.com/api/reviews?source=MANUAL"))).status).toBe(400);
+    expect(prisma.review.findMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps star-only real reviews and filters test identifiers without a length cutoff", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([{ ...reviewRow, originalText: "", comment: "" }] as never);
+    const response = await GET(new Request("https://app.example.com/api/reviews"));
+    expect((await response.json()).reviews[0].comment).toBe("");
+    const where = vi.mocked(prisma.review.findMany).mock.calls[0][0]?.where;
+    expect(where).toMatchObject({ source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } });
+    expect(JSON.stringify(where)).toContain('"startsWith":"test_"');
+    expect(JSON.stringify(where)).toContain('"startsWith":"mock"');
+    expect(where).not.toHaveProperty("comment");
+  });
+
+  it("does not mark an unpublished survey draft as a replied Google review", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { PATCH } = await import("./route");
+    vi.mocked(prisma.review.findUnique).mockResolvedValueOnce({ id: "survey-1", schoolId: "school-1", source: "SURVEY" } as never);
+    const response = await PATCH(new Request("https://app.example.com/api/reviews", { method: "PATCH", body: JSON.stringify({ reviewId: "survey-1", replyText: "返信" }) }));
+    expect(response.status).toBe(403);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -83,7 +112,7 @@ describe("GET /api/reviews", () => {
   it.each(["", "?schoolId=all", "?schoolId=school-1"])("uses the real scope resolver to restrict managers (%s)", async query => {
     const { prisma } = await import("@/lib/prisma");
     expect((await GET(new Request(`https://app.example.com/api/reviews${query}`))).status).toBe(200);
-    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { schoolId: "school-1" } }));
+    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ schoolId: "school-1", source: "GOOGLE" }) }));
   });
 
   it("rejects a manager's explicit request for another school", async () => {
@@ -124,7 +153,7 @@ describe("GET /api/reviews", () => {
     });
     expect(prisma.review.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { schoolId: "school-1" },
+        where: expect.objectContaining({ schoolId: "school-1", source: "GOOGLE" }),
         select: expect.objectContaining({
           comment: true,
           gbpReviewId: true,
@@ -248,7 +277,7 @@ describe("GET /api/reviews", () => {
 
     expect(response.status).toBe(200);
     expect(prisma.review.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: {} }),
+      expect.objectContaining({ where: expect.objectContaining({ source: "GOOGLE" }) }),
     );
   });
 

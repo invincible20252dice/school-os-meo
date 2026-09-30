@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+vi.mock("./gbp-review-draft", () => ({ generateReviewReplyDraft: vi.fn(async () => "回答ありがとうございます。") }));
 import {
   DEFAULT_SCHOOL_ID,
   ensureSchoolForPersistence,
@@ -325,7 +326,9 @@ describe("survey-persistence", () => {
       data: expect.objectContaining({
         schoolId: "school-own",
         source: "SURVEY",
-        status: "GENERATED",
+        status: "PENDING",
+        comment: "口コミ案",
+        aiReplyDraft: "回答ありがとうございます。",
         rating: 5,
         generatedPatterns: ["口コミ案"],
         surveyAnswers: expect.objectContaining({
@@ -343,7 +346,31 @@ describe("survey-persistence", () => {
     expect(() => normalizeSurveyResponseInput({ schoolId: "school-own" })).toThrow("ご回答者様");
   });
 
-  it("creates a school before saving a response when the school is missing", async () => {
+  it("persists the parent's real generated text and role without claiming Google publication", async () => {
+    const prisma = {
+      user: { upsert: vi.fn() }, school: { findUnique: vi.fn(async () => ({ id: "school-1", name: "実校舎", schoolSetting: null })), upsert: vi.fn() },
+      review: { create: vi.fn() },
+    };
+    const input = normalizeSurveyResponseInput({ schoolId: "school-1", rating: 4, generatedReviews: ["子どもが質問しやすいと話しています。"], questionAnswers: [{ questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "保護者様" }] });
+    await persistSurveyResponse(prisma, input);
+    expect(prisma.review.create).toHaveBeenCalledWith({ data: expect.objectContaining({ source: "SURVEY", status: "PENDING", authorName: "アンケート回答者（保護者）", comment: input.generatedReviews[0], surveyAnswers: expect.objectContaining({ respondentType: "PARENT" }) }) });
+    expect(prisma.review.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ googleReviewId: expect.anything() }) });
+  });
+
+  it("does not save empty cards or claim success when AI draft generation fails", async () => {
+    const { generateReviewReplyDraft } = await import("./gbp-review-draft");
+    const prisma = {
+      user: { upsert: vi.fn() }, school: { findUnique: vi.fn(async () => ({ id: "school-1", name: "実校舎", schoolSetting: null })), upsert: vi.fn() },
+      review: { create: vi.fn() },
+    };
+    const input = normalizeSurveyResponseInput({ schoolId: "school-1", questionAnswers: [{ questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "生徒ご本人様" }] });
+    await expect(persistSurveyResponse(prisma, input)).rejects.toThrow("生成された口コミ本文");
+    vi.mocked(generateReviewReplyDraft).mockRejectedValueOnce(new Error("AI unavailable"));
+    await expect(persistSurveyResponse(prisma, { ...input, generatedReviews: ["回答の本文です。"] })).rejects.toThrow("AI unavailable");
+    expect(prisma.review.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing school without creating dummy school or review records", async () => {
     const prisma = {
       user: {
         upsert: vi.fn(async () => ({ id: "system-user" })),
@@ -357,29 +384,13 @@ describe("survey-persistence", () => {
       },
     };
 
-    await persistSurveyResponse(
+    await expect(persistSurveyResponse(
       prisma,
       normalizeSurveyResponseInput({ schoolId: "school-missing", questionAnswers: [{ questionId: "system-respondent-type", question: "ご回答者様を選択してください", type: "SINGLE_SELECT", value: "保護者様" }] }),
-    );
-
-    expect(prisma.user.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "system-user" },
-      }),
-    );
-    expect(prisma.school.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "school-missing" },
-        create: expect.objectContaining({
-          id: "school-missing",
-          ownerId: "system-user",
-          name: "デフォルト校舎",
-        }),
-      }),
-    );
-    expect(prisma.review.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ schoolId: "school-missing" }),
-    });
+    )).rejects.toThrow("保存先の校舎情報");
+    expect(prisma.user.upsert).not.toHaveBeenCalled();
+    expect(prisma.school.upsert).not.toHaveBeenCalled();
+    expect(prisma.review.create).not.toHaveBeenCalled();
   });
 
   it("ensures the default school when no school id is passed", async () => {

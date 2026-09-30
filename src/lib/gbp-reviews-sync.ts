@@ -1,4 +1,4 @@
-import { generateGbpReviewReply } from "./gbp-webhook";
+import { generateReviewReplyDraft } from "./gbp-review-draft";
 import { resolveGbpAccessToken } from "./gbp-reply";
 
 type FetchLike = typeof fetch;
@@ -21,6 +21,7 @@ type SchoolSettingRecord = {
 
 type ReviewRecord = {
   id: string;
+  aiReplyDraft?: string | null;
 };
 
 type PrismaGbpReviewsSyncClient = {
@@ -57,6 +58,16 @@ type GbpReviewsApiItem = {
 type GbpAccountApiItem = {
   name?: string;
 };
+
+export class GbpSyncError extends Error {
+  constructor(readonly status: number) {
+    super(status === 429
+      ? "Google APIの利用上限に達したため同期できませんでした。取得済みの口コミを表示しています。"
+      : status === 403
+        ? "Google APIのアクセス権限を確認してください。取得済みの口コミを表示しています。"
+        : "Google口コミを取得できませんでした。取得済みの口コミは変更していません。");
+  }
+}
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -150,12 +161,8 @@ async function fetchFirstGbpAccountResource({
   );
   const data = await readJsonResponse(response);
 
-  console.info("[GBP Accounts API Response]:", JSON.stringify(data, null, 2));
-
   if (!response.ok) {
-    throw new Error(
-      data.error?.message || `Googleアカウント一覧を取得できませんでした。status=${response.status}`,
-    );
+    throw new GbpSyncError(response.status);
   }
 
   const accounts = Array.isArray(data.accounts) ? data.accounts : [];
@@ -271,6 +278,7 @@ async function readJsonResponse(response: Response) {
   try {
     return JSON.parse(text) as {
       reviews?: GbpReviewsApiItem[];
+      nextPageToken?: string;
       accounts?: GbpAccountApiItem[];
       error?: { message?: string };
     };
@@ -331,46 +339,47 @@ export async function syncGbpReviewsForSchool({
 
   console.info("[GBP Fetching Reviews]:", endpoint);
 
-  const response = await fetchImpl(endpoint, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const data = await readJsonResponse(response);
+  // Finish all pages before updating records, so quota failure cannot look like a complete sync.
+  const gbpReviews: GbpReviewsApiItem[] = [];
+  const seenTokens = new Set<string>();
+  let pageToken = "";
+  do {
+    const url = new URL(endpoint);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const response = await fetchImpl(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new GbpSyncError(response.status);
+    const data = await readJsonResponse(response);
+    if (data.error || (data.reviews !== undefined && !Array.isArray(data.reviews))) throw new GbpSyncError(502);
+    gbpReviews.push(...(data.reviews ?? []));
+    pageToken = normalizeString(data.nextPageToken);
+    if (pageToken && seenTokens.has(pageToken)) throw new GbpSyncError(502);
+    seenTokens.add(pageToken);
+  } while (pageToken);
 
-  console.info("[GBP Reviews API Response]:", JSON.stringify(data, null, 2));
-
-  if (!response.ok) {
-    throw new Error(
-      data.error?.message || `Google口コミ一覧を取得できませんでした。status=${response.status}`,
-    );
+  const normalizedReviews = gbpReviews.map(normalizeGbpReviewsApiItem);
+  for (const review of normalizedReviews) {
+    if (!review.gbpReviewId) throw new GbpSyncError(502);
   }
-
-  const gbpReviews = Array.isArray(data.reviews) ? data.reviews : [];
-
-  for (const item of gbpReviews) {
-    const review = normalizeGbpReviewsApiItem(item);
-    const schoolName = setting.school?.name || "大学受験専門塾 iスクール予備校";
-    const aiReplyText =
-      review.status === "PENDING"
-        ? await generateGbpReviewReply(
-          {
-            schoolName,
-            rating: review.rating,
-            reviewText: review.originalText,
-            promptSetting: setting,
-          },
-          fetchImpl,
-        )
-        : "";
+  for (const review of normalizedReviews) {
+    review.googleReviewId = `${endpoint.replace("https://mybusiness.googleapis.com/v4/", "")}/${review.gbpReviewId}`;
     const existing = await prisma.review.findFirst({
       where: {
         schoolId: setting.schoolId,
+        source: "GOOGLE",
         OR: [
           { googleReviewId: review.googleReviewId },
           { gbpReviewId: review.gbpReviewId || review.googleReviewId },
         ],
       },
-      select: { id: true },
+      select: { id: true, aiReplyDraft: true },
     });
+    const schoolName = setting.school?.name;
+    if (!schoolName) throw new Error("校舎名を確認できませんでした。");
+    const aiReplyText = existing?.aiReplyDraft?.trim() || (review.status === "PENDING"
+      ? await generateReviewReplyDraft({ schoolName, rating: review.rating, reviewText: review.originalText, promptSetting: setting }, fetchImpl)
+      : "");
     const payload = {
       schoolId: setting.schoolId,
       source: "GOOGLE",

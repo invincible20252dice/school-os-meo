@@ -13,6 +13,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 const review = {
+  source: "GOOGLE",
   id: "review-1", schoolId: "school-1", schoolName: "対象校舎", authorName: "投稿者", parentName: "投稿者",
   rating: 5, originalText: "説明が丁寧でした。", status: "PENDING", aiReplyText: "投稿者様\\nありがとうございます。",
   googleReviewManagementUrl: "https://business.google.com/n/100/reviews", repliedAt: "", replyText: "",
@@ -29,6 +30,40 @@ function deferred() {
 }
 
 describe("ReviewsClient direct Google replies", () => {
+  it("separates unpublished survey drafts and hides Google posting controls", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(list())
+      .mockResolvedValueOnce(list([{ ...review, source: "SURVEY", authorName: "アンケート回答者（生徒本人）" }]))
+      .mockResolvedValueOnce(list());
+    vi.stubGlobal("fetch", fetcher);
+    render(<ReviewsClient />);
+    await screen.findByText("投稿者");
+    fireEvent.click(screen.getByRole("tab", { name: "アンケート回答" }));
+    await screen.findByText("アンケート回答者（生徒本人）");
+    expect(screen.getByText("Google投稿未確認")).toBeDefined();
+    expect(editor().readOnly).toBe(true);
+    expect(editor().value).toContain("ありがとうございます");
+    expect(screen.queryByRole("button", { name: "Googleに直接返信を送信" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "返信済みにする" })).toBeNull();
+    expect(fetcher.mock.calls[1][0]).toContain("source=SURVEY");
+    fireEvent.click(screen.getByRole("tab", { name: "Google口コミ" }));
+    await screen.findByText("投稿者");
+    expect(button()).toBeDefined();
+    expect(fetcher.mock.calls[2][0]).not.toContain("source=SURVEY");
+  });
+
+  it.each([403, 429])("retains the last list and edited draft when sync is blocked (%s)", async status => {
+    const fetcher = vi.fn().mockResolvedValueOnce(list()).mockResolvedValueOnce(Response.json({ success: false, code: "GOOGLE_SYNC_FAILED", error: "Googleから取得できません。取得済みデータを表示しています。" }, { status }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<ReviewsClient />);
+    await screen.findByText("投稿者");
+    fireEvent.change(editor(), { target: { value: "編集中の本文" } });
+    fireEvent.click(screen.getByRole("button", { name: "GBP口コミを同期" }));
+    await screen.findByText("Googleから取得できません。取得済みデータを表示しています。");
+    expect(screen.getByRole("status").className).toBe(styles.warningMessage);
+    expect(editor().value).toBe("編集中の本文");
+    expect(screen.getByText("投稿者")).toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     route.params = new URLSearchParams("schoolId=school-1");
     session.mockReset().mockResolvedValue({ data: { session: { access_token: "session-token" } } });

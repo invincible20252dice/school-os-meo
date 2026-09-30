@@ -26,7 +26,8 @@ vi.mock("@/lib/supabase-access", () => ({
   })),
 }));
 
-vi.mock("@/lib/gbp-reviews-sync", () => ({
+vi.mock("@/lib/gbp-reviews-sync", async () => ({
+  ...await vi.importActual<typeof import("@/lib/gbp-reviews-sync")>("@/lib/gbp-reviews-sync"),
   syncGbpReviewsForSchool: vi.fn(async () => ({
     success: true,
     count: 2,
@@ -35,6 +36,30 @@ vi.mock("@/lib/gbp-reviews-sync", () => ({
 }));
 
 describe("POST /api/dashboard/reviews/sync", () => {
+  it.each(["", "all", "school-2"])("rejects invalid or unauthorized school %s without syncing", async schoolId => {
+    const { POST } = await import("./route");
+    const { syncGbpReviewsForSchool } = await import("@/lib/gbp-reviews-sync");
+    const response = await POST(new Request("https://app.example.com/api/dashboard/reviews/sync", { method: "POST", body: JSON.stringify({ schoolId }) }));
+    expect(response.status).toBe(schoolId === "school-2" ? 403 : 400);
+    expect(syncGbpReviewsForSchool).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const access = await import("@/lib/supabase-access");
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, isAuthenticated: false });
+    const { POST } = await import("./route");
+    expect((await POST(new Request("https://app.example.com/api/dashboard/reviews/sync", { method: "POST", body: "{}" }))).status).toBe(401);
+  });
+
+  it.each([403, 429, 502])("reports Google failure %s without a fabricated success", async status => {
+    const { GbpSyncError, syncGbpReviewsForSchool } = await import("@/lib/gbp-reviews-sync");
+    vi.mocked(syncGbpReviewsForSchool).mockRejectedValueOnce(new GbpSyncError(status));
+    const { POST } = await import("./route");
+    const response = await POST(new Request("https://app.example.com/api/dashboard/reviews/sync", { method: "POST", body: JSON.stringify({ schoolId: "school-1" }) }));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ success: false, code: "GOOGLE_SYNC_FAILED" });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -65,7 +90,7 @@ describe("POST /api/dashboard/reviews/sync", () => {
 
     const response = await POST(
       new Request(
-        "https://app.example.com/api/dashboard/reviews/sync?schoolId=school-2",
+        "https://app.example.com/api/dashboard/reviews/sync?schoolId=school-1",
         {
           method: "POST",
           body: "{invalid-json",
@@ -76,7 +101,7 @@ describe("POST /api/dashboard/reviews/sync", () => {
     expect(response.status).toBe(200);
     expect(syncGbpReviewsForSchool).toHaveBeenCalledWith({
       prisma: {},
-      schoolId: "school-2",
+      schoolId: "school-1",
     });
   });
 

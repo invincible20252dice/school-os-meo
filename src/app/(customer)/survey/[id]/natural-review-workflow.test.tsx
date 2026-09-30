@@ -15,6 +15,7 @@ const boundary = vi.hoisted(() => ({
   school: { findUnique: vi.fn(), upsert: vi.fn() }, user: { upsert: vi.fn() },
   review: { create: vi.fn<(args: { data: StoredAnswer }) => Promise<{ id: string }>>() },
   provider: vi.fn<typeof fetch>(),
+  replyProvider: vi.fn<typeof fetch>(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: boundary }));
 function item(id: string, title: string, options: string[], order: number, type = "multiple") {
@@ -44,13 +45,15 @@ beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("OPENAI_API_KEY", "test-key");
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.spyOn(console, "log").mockImplementation(() => undefined);
-  boundary.school.findUnique.mockResolvedValue({ id: "actual-school" });
+  boundary.school.findUnique.mockResolvedValue({ id: "actual-school", name: "実校舎", schoolSetting: null });
   boundary.review.create.mockResolvedValue({ id: "saved-answer" });
   boundary.provider.mockImplementation(async () => providerResult(defaultDraft));
+  boundary.replyProvider.mockImplementation(async () => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "ご回答ありがとうございます。" }] }] }));
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
     if (url === "/api/generate-review") return generate(new Request("https://school.test/api/generate-review", init));
     if (url === "/api/survey-responses") return saveResponse(new Request("https://school.test/api/survey-responses", init));
-    if (url === "https://api.openai.com/v1/responses") return boundary.provider(url, init);
+    if (url === "https://api.openai.com/v1/responses") return JSON.parse(String(init?.body)).model === "gpt-4o"
+      ? boundary.replyProvider(url, init) : boundary.provider(url, init);
     throw new Error(`Unexpected URL: ${url}`);
   }));
 });
@@ -116,9 +119,9 @@ describe("universal generation and persistence contract", () => {
     expect(data.answers.find((a: { questionId: string }) => a.questionId === "new-choice").value).toEqual(questions[2].options);
     expect(boundary.review.create).toHaveBeenCalledTimes(1);
     const stored = boundary.review.create.mock.calls[0][0].data;
-    expect(stored).toMatchObject({ schoolId: "actual-school", source: "SURVEY", status: "GENERATED", rating: 5, generatedPatterns: [draft], surveyAnswers: { surveyId: "actual-survey" } });
+    expect(stored).toMatchObject({ schoolId: "actual-school", source: "SURVEY", status: "PENDING", rating: 5, comment: draft, aiReplyDraft: "ご回答ありがとうございます。", generatedPatterns: [draft], surveyAnswers: { surveyId: "actual-survey", respondentType: role === "生徒ご本人様" ? "STUDENT" : "PARENT" } });
     expect(stored.surveyAnswers.questionAnswers[0]).toMatchObject({ questionId: RESPONDENT_QUESTION_ID, value: role });
-    expect(boundary.school.findUnique).toHaveBeenCalledWith({ where: { id: "actual-school" }, select: { id: true } });
+    expect(boundary.school.findUnique).toHaveBeenCalledWith({ where: { id: "actual-school" }, select: expect.objectContaining({ id: true, name: true }) });
     expect(boundary.school.upsert).not.toHaveBeenCalled();
     expect(boundary.user.upsert).not.toHaveBeenCalled();
     expect(screen.getByText(draft)).toBeTruthy();
