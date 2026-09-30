@@ -46,6 +46,25 @@ describe("Review.status production schema alignment", () => {
     expect((await db.query(list, excluded)).rows).toEqual([{ id: "existing", status: "APPROVED" }]);
   });
 
+  it("does not acquire an exclusive table lock when production is already aligned", async () => {
+    await db.exec('CREATE TABLE public."Review" (id text, status public."ReviewStatus" NOT NULL DEFAULT \'DRAFT\');');
+    await db.exec('BEGIN;');
+    try {
+      await db.exec(alignment);
+      const locks = await db.query("SELECT mode FROM pg_locks WHERE relation = 'public.\"Review\"'::regclass AND mode = 'AccessExclusiveLock'");
+      expect(locks.rows).toEqual([]);
+    } finally {
+      await db.exec('ROLLBACK;');
+    }
+  });
+
+  it.each(["nullable", "wrong-default"])("repairs an enum column with %s without skipping required DDL", async variant => {
+    await db.exec(`CREATE TABLE public."Review" (id text, status public."ReviewStatus" ${variant === "nullable" ? "" : "NOT NULL"} DEFAULT '${variant === "wrong-default" ? "PENDING" : "DRAFT"}');`);
+    await db.exec(alignment);
+    expect((await db.query("SELECT is_nullable, column_default FROM information_schema.columns WHERE table_name='Review' AND column_name='status'")).rows)
+      .toEqual([{ is_nullable: "NO", column_default: "'DRAFT'::\"ReviewStatus\"" }]);
+  });
+
   it("creates the schema enum for an empty legacy table", async () => {
     await db.exec('DROP TYPE public."ReviewStatus"; CREATE TABLE public."Review" (id text, status text);');
     await db.exec(alignment);
