@@ -1,13 +1,22 @@
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 // Preview builds must never migrate a shared production database.
 if (process.env.VERCEL_ENV === "production") {
   if (!process.env.DATABASE_URL) throw new Error("Production DATABASE_URL is required for schema alignment");
-  const result = spawnSync(process.execPath, [
-    "node_modules/prisma/build/index.js", "db", "execute",
-    "--file", "prisma/review-status-alignment.sql", "--schema", "prisma/schema.prisma",
-  ], { stdio: "inherit" });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
-  console.log("Review.status schema alignment completed.");
+  const { PrismaClient } = await import("@prisma/client");
+  const url = new URL(process.env.DATABASE_URL);
+  url.searchParams.set("connect_timeout", "15");
+  url.searchParams.set("socket_timeout", "45");
+  const prisma = new PrismaClient({ datasources: { db: { url: url.toString() } } });
+  try {
+    console.log("Checking Review.status schema alignment...");
+    // Use the same pooled connection as the app, not the migration engine's direct-connection protocol.
+    await prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe(readFileSync("prisma/review-status-alignment.sql", "utf8"));
+      await tx.review.count({ where: { source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } } });
+    }, { maxWait: 15000, timeout: 45000 });
+    console.log("Review.status schema alignment and Prisma query verification completed.");
+  } finally {
+    await prisma.$disconnect();
+  }
 }
