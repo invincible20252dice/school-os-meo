@@ -36,6 +36,44 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("real component -> API -> OAuth/Google -> persistence -> list workflow", () => {
+  it("renders three stored legacy Google cards and keeps survey drafts in their own tab", async () => {
+    const school = { name: "対象校舎", schoolSetting: { selectedGbpLocationId: "locations/100" } };
+    const rows = [
+      reviewFixture({ id: "legacy-1", schoolId: "school-1", source: "GOOGLE", authorName: "投稿者A", comment: "保存済み口コミA", aiReplyDraft: "返信案A", school }),
+      reviewFixture({ id: "legacy-2", schoolId: "school-1", source: "GOOGLE", authorName: "投稿者B", comment: "保存済み口コミB", googleReviewId: "manual-imported-2", aiReplyDraft: "返信案B", school }),
+      reviewFixture({ id: "legacy-3", schoolId: "school-1", source: "GOOGLE", authorName: "投稿者C", comment: "保存済み口コミC", gbpReviewId: "gbp_003", aiReplyDraft: "返信案C", school }),
+    ];
+    const survey = reviewFixture({ id: "survey-draft", schoolId: "school-1", source: "SURVEY", authorName: "アンケート回答者", comment: "未投稿の回答", aiReplyDraft: "回答への返信案", school });
+    reviewDb.findMany.mockImplementation(async args => {
+      expect(args.where?.schoolId).toBe("school-1");
+      if (args.where?.source === "SURVEY") return [survey];
+      expect(args.where?.source).toBe("GOOGLE");
+      expect(args.where).not.toHaveProperty("OR");
+      expect(JSON.stringify(args.where)).not.toContain("manual-");
+      return rows;
+    });
+    const network = vi.fn<typeof fetch>(async (url, init) => {
+      expect(String(url)).toMatch(/^\/api\/dashboard\/reviews\?/);
+      expect(init?.headers).toMatchObject({ authorization: "Bearer session-token" });
+      return listReviews(new Request(`https://example.com${url}`, init));
+    });
+    vi.stubGlobal("fetch", network);
+    render(<ReviewsClient />);
+    await screen.findByText("投稿者C");
+    for (const row of rows) expect(screen.getByText(row.authorName!)).toBeDefined();
+    expect(screen.getAllByRole("textbox", { name: "AI返信案" }).map(node => (node as HTMLTextAreaElement).value)).toEqual(["返信案A", "返信案B", "返信案C"]);
+    expect(screen.queryByText("この校舎の口コミはまだありません。")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "アンケート回答" }));
+    await screen.findByText("アンケート回答者");
+    expect(screen.queryByText("投稿者A")).toBeNull();
+    expect(screen.getByText("Google投稿未確認")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Googleに直接返信を送信" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Google口コミ" }));
+    await screen.findByText("投稿者C");
+    expect(screen.queryByText("アンケート回答者")).toBeNull();
+    expect(network).toHaveBeenCalledTimes(3);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
   it.each([403, 429, 500])("keeps remote publication distinct from local persistence (Google=%s)", async refusal => {
     const stored = reviewFixture({
       id: "review-1", schoolId: "school-1", source: "GOOGLE", status: "PENDING",

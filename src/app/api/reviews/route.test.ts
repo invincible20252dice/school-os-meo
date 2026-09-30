@@ -65,6 +65,30 @@ vi.mock("@/lib/prisma", () => ({
 describe("GET /api/reviews", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each([
+    [null, null], ["manual-imported-review", "manual-imported-review"],
+    ["real_gbp_003", null], [null, "gbp_003"],
+  ])("lists persisted Google reviews independently of provider identifier format (%s, %s)", async (googleReviewId, gbpReviewId) => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      reviewFixture({ ...reviewRow, googleReviewId, gbpReviewId }),
+    ]);
+    const response = await GET(new Request("https://app.example.com/api/dashboard/reviews?schoolId=school-1"));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.reviews).toHaveLength(1);
+    expect(body.reviews[0]).toMatchObject({ id: reviewRow.id, source: "GOOGLE", authorName: reviewRow.authorName, aiReplyDraft: reviewRow.aiReplyDraft });
+    const where = vi.mocked(prisma.review.findMany).mock.calls[0][0]?.where;
+    expect(where).toMatchObject({ schoolId: "school-1", source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } });
+    expect(where).not.toHaveProperty("OR");
+    expect(JSON.stringify(where)).not.toContain("manual-");
+    expect(where?.AND).toEqual(["test_", "mock", "local_test_review_"].flatMap(prefix => [
+      { NOT: { id: { startsWith: prefix } } },
+      { OR: [{ googleReviewId: null }, { NOT: { googleReviewId: { startsWith: prefix } } }] },
+      { OR: [{ gbpReviewId: null }, { NOT: { gbpReviewId: { startsWith: prefix } } }] },
+    ]));
+  });
+
   it.each([403, 429, 503])("returns stored reviews without making Google requests during an upstream %s outage", async status => {
     const network = vi.fn<typeof fetch>(async () => new Response("upstream unavailable", { status }));
     vi.stubGlobal("fetch", network);

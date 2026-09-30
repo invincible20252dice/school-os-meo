@@ -147,8 +147,9 @@ export async function GET(request: Request) {
         source,
         status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] },
         ...(source === "GOOGLE" ? {
-          OR: [{ googleReviewId: { not: null } }, { gbpReviewId: { not: null } }],
-          AND: ["test_", "mock", "manual-"].flatMap(prefix => [
+          // Provider identifiers are needed for API replies, not for displaying imported reviews.
+          AND: ["test_", "mock", "local_test_review_"].flatMap(prefix => [
+            { NOT: { id: { startsWith: prefix } } },
             { OR: [{ googleReviewId: null }, { NOT: { googleReviewId: { startsWith: prefix } } }] },
             { OR: [{ gbpReviewId: null }, { NOT: { gbpReviewId: { startsWith: prefix } } }] },
           ]),
