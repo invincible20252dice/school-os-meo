@@ -1,5 +1,5 @@
 import { reviewFixture } from "@/test/db-fixtures";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
 vi.mock("@/lib/supabase-access", async () => ({
@@ -63,6 +63,40 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 describe("GET /api/reviews", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([403, 429, 503])("returns stored reviews without making Google requests during an upstream %s outage", async status => {
+    const network = vi.fn<typeof fetch>(async () => new Response("upstream unavailable", { status }));
+    vi.stubGlobal("fetch", network);
+    const { GET: list } = await import("../dashboard/reviews/route");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
+      reviewFixture(reviewRow),
+      reviewFixture({ ...reviewRow, id: "short-review", comment: "良い塾です", originalText: "良い塾です" }),
+      reviewFixture({ ...reviewRow, id: "star-only", comment: null, originalText: null }),
+    ]);
+    const response = await list(new Request("https://app.example.com/api/dashboard/reviews?schoolId=school-1"));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ success: true, source: "DATABASE" });
+    expect(body.reviews.map((r: { id: string; comment: string }) => [r.id, r.comment])).toEqual([
+      [reviewRow.id, reviewRow.originalText], ["short-review", "良い塾です"], ["star-only", ""],
+    ]);
+    expect(network).not.toHaveBeenCalled();
+    expect(prisma.review.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns an empty database result without inventing reviews or requesting Google", async () => {
+    const network = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", network);
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([]);
+    const response = await GET(new Request("https://app.example.com/api/dashboard/reviews?schoolId=school-1"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, source: "DATABASE", reviews: [] });
+    expect(network).not.toHaveBeenCalled();
+  });
+
   it("uses a separate survey source and refuses unknown sources", async () => {
     const { prisma } = await import("@/lib/prisma");
     expect((await GET(new Request("https://app.example.com/api/reviews?source=SURVEY"))).status).toBe(200);
@@ -325,6 +359,8 @@ describe("GET /api/reviews", () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
+    expect(body.success).toBe(false);
+    expect(body).not.toHaveProperty("reviews");
     expect(body.message).toBe("口コミ一覧を取得できませんでした。");
     consoleErrorSpy.mockRestore();
   });

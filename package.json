@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev -H 127.0.0.1 -p 3030",
     "build": "npm run prisma:generate && next build",
-    "vercel-build": "npm run build",
+    "vercel-build": "node scripts/prepare-vercel-database.mjs && npm run build",
     "db:deploy": "prisma db execute --file prisma/production-schema.sql --schema prisma/schema.prisma",
     "postinstall": "prisma generate",
     "start": "next start",
@@ -30,6 +30,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^22.13.0",
     "@types/react": "^19.0.0",

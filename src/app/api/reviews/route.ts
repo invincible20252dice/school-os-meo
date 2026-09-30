@@ -185,6 +185,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
+      source: "DATABASE",
       reviews: reviews.map(serializeReview),
       access: {
         role: accessResult.access.role,
@@ -195,7 +196,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[GET /api/dashboard/reviews]", error);
     return NextResponse.json(
-      { message: "口コミ一覧を取得できませんでした。" },
+      { success: false, message: "口コミ一覧を取得できませんでした。" },
       { status: 500 },
     );
   }
