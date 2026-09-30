@@ -1,4 +1,9 @@
+import { schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma, type TargetKeyword } from "@prisma/client";
+
+const createKeyword = vi.hoisted(() => vi.fn<(args: { data: Prisma.TargetKeywordUncheckedCreateInput }) => Promise<TargetKeyword>>());
+const findKeywords = vi.hoisted(() => vi.fn<(args: Prisma.TargetKeywordFindManyArgs) => Promise<Prisma.TargetKeywordGetPayload<{ include: { rankHistories: true; aioScoreHistories: true } }>[]>>());
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -6,8 +11,8 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
     },
     targetKeyword: {
-      findMany: vi.fn(),
-      create: vi.fn(),
+      findMany: findKeywords,
+      create: createKeyword,
     },
     keywordRank: {
       findMany: vi.fn(),
@@ -41,15 +46,15 @@ describe("/api/dashboard/rankings", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValue({
+    vi.mocked(prisma.school.findUnique).mockResolvedValue(schoolFixture({
       id: "school-1",
       name: "大学受験専門塾 iスクール予備校",
       prefecture: "熊本県",
       city: "熊本市中央区",
       addressLine: "下通1丁目12-27",
       googlePlaceId: "place-ischool",
-    });
-    vi.mocked(prisma.targetKeyword.findMany).mockResolvedValue([
+    }));
+    findKeywords.mockResolvedValue([
       {
         id: "keyword-1",
         schoolId: "school-1",
@@ -57,8 +62,8 @@ describe("/api/dashboard/rankings", () => {
         location: "熊本市中央区下通",
         nearestStation: "通町筋駅",
         municipality: "熊本市中央区",
-        latitude: "32.801600",
-        longitude: "130.709500",
+        latitude: new Prisma.Decimal("32.801600"),
+        longitude: new Prisma.Decimal("130.709500"),
         radiusMeters: 1500,
         isActive: true,
         createdAt: new Date("2026-08-29T00:00:00.000Z"),
@@ -78,12 +83,15 @@ describe("/api/dashboard/rankings", () => {
       },
     ]);
     vi.mocked(prisma.keywordRank.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.targetKeyword.create).mockImplementation(async ({ data }) => ({
+    createKeyword.mockImplementation(async ({ data }) => ({
+      ...data,
       id: "keyword-new",
       isActive: true,
       createdAt: new Date("2026-08-29T00:00:00.000Z"),
       updatedAt: new Date("2026-08-29T00:00:00.000Z"),
-      ...data,
+      latitude: data.latitude == null ? null : new Prisma.Decimal(data.latitude.toString()),
+      longitude: data.longitude == null ? null : new Prisma.Decimal(data.longitude.toString()),
+      radiusMeters: data.radiusMeters ?? 1500,
     }));
   });
 
@@ -113,7 +121,7 @@ describe("/api/dashboard/rankings", () => {
     const { prisma } = await import("@/lib/prisma");
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
-      requestedSchoolId: null,
+      requestedSchoolId: "",
       effectiveSchoolId: undefined,
       role: "admin",
       canSwitchSchool: true,

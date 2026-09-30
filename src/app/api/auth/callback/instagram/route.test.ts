@@ -1,3 +1,4 @@
+import { schoolSettingFixture, instagramSettingFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
@@ -34,10 +35,10 @@ describe("GET /api/auth/callback/instagram", () => {
 
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValue(null);
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(schoolSettingFixture({
       instagramMetaAppId: "saved-meta-app-id",
       instagramMetaAppSecret: "saved-meta-secret",
-    });
+    }));
   });
 
   it("saves Instagram token and redirects to settings", async () => {
@@ -84,14 +85,14 @@ describe("GET /api/auth/callback/instagram", () => {
       META_APP_ID: "env-app-id",
       META_APP_SECRET: "env-secret",
     };
-    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValue({
+    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValue(instagramSettingFixture({
       metaAppId: "instagram-setting-app-id",
       metaAppSecret: "instagram-setting-secret",
-    });
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+    }));
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(schoolSettingFixture({
       instagramMetaAppId: "school-setting-app-id",
       instagramMetaAppSecret: "school-setting-secret",
-    });
+    }));
 
     await GET(
       new Request(

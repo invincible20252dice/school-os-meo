@@ -96,7 +96,7 @@ describe("survey editor persistence integration", () => {
     const choices = screen.getAllByRole("textbox", { name: "選択肢（改行区切り）" }) as HTMLTextAreaElement[];
     expect(choices.at(-1)?.value).toBe("対策A\n対策B");
     const preview = within(screen.getByRole("complementary"));
-    expect(preview.getByRole("button", { name: "対策A", exact: true })).toBeDefined();
+    expect(preview.getByRole("button", { name: "対策A" })).toBeDefined();
     expect(preview.getAllByRole("heading", { level: 3 }).map(el => el.textContent)).toEqual(["ご回答者様を選択してください", ...stored.items.map(item => item.question)]);
     expect(within(screen.getByRole("article", { name: "必須の回答者設問" })).queryByRole("button")).toBeNull();
     const published = serializePublicSurvey(stored);

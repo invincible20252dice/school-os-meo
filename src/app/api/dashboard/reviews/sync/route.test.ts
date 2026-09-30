@@ -46,7 +46,7 @@ describe("POST /api/dashboard/reviews/sync", () => {
 
   it("rejects unauthenticated requests", async () => {
     const access = await import("@/lib/supabase-access");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, isAuthenticated: false });
     const { POST } = await import("./route");
     expect((await POST(new Request("https://app.example.com/api/dashboard/reviews/sync", { method: "POST", body: "{}" }))).status).toBe(401);

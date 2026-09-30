@@ -19,6 +19,7 @@ const managerAccess = {
     name: "教室長",
     email: "manager@example.com",
     source: "profiles" as const,
+    status: "active" as const,
   },
   isAuthenticated: true,
 };
@@ -31,6 +32,7 @@ const adminAccess = {
     name: "本部",
     email: "admin@example.com",
     source: "profiles" as const,
+    status: "active" as const,
   },
   isAuthenticated: true,
 };

@@ -4,20 +4,28 @@ import { DirectReplyError, publishDirectGbpReply } from "@/lib/gbp-direct-reply"
 import { prisma } from "@/lib/prisma";
 import { resolveRequestAccess } from "@/lib/supabase-access";
 import { GET as getReviews } from "../../reviews/route";
+import type { Prisma, Review } from "@prisma/client";
+import { reviewFixture } from "@/test/db-fixtures";
+
+const reviewDb = vi.hoisted(() => ({
+  findMany: vi.fn<(args: Prisma.ReviewFindManyArgs) => Promise<Review[]>>(),
+  findUnique: vi.fn<(args: Prisma.ReviewFindUniqueArgs) => Promise<Review | null>>(),
+  update: vi.fn<(args: Prisma.ReviewUpdateArgs) => Promise<Review>>(),
+}));
 
 vi.mock("@/lib/supabase-access", async () => ({ ...await vi.importActual<typeof import("@/lib/supabase-access")>("@/lib/supabase-access"), resolveRequestAccess: vi.fn() }));
 vi.mock("@/lib/gbp-direct-reply", async () => ({
   ...await vi.importActual<typeof import("@/lib/gbp-direct-reply")>("@/lib/gbp-direct-reply"),
   publishDirectGbpReply: vi.fn(),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: { review: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { review: reviewDb } }));
 
 const access = {
   isAuthenticated: true,
   access: { userId: "manager-1", role: "manager" as const, schoolId: "school-1", schoolIds: ["school-1"], name: "Manager", email: "manager@example.com", status: "active" as const, source: "profiles" as const },
 };
 function review() {
-  return {
+  return reviewFixture({
     id: "review-1", schoolId: "school-1", source: "GOOGLE", googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real",
     authorName: "投稿者", parentName: null, originalText: "口コミ本文", comment: null, rating: 5,
     school: {
@@ -25,7 +33,7 @@ function review() {
       schoolSetting: { googleRefreshToken: "setting-token", selectedGbpLocationId: "locations/100", googleAccountId: "owner@example.com" },
       googleAccount: { refreshToken: "account-token", locationId: "locations/200" },
     },
-  };
+  });
 }
 const payload = { reviewId: "review-1", schoolId: "school-1", replyText: "  ありがとうございます。\\n今後ともよろしくお願いします。  " };
 const normalizedReply = "ありがとうございます。\n今後ともよろしくお願いします。";
@@ -171,20 +179,20 @@ describe("GBP direct reply API", () => {
   });
 
   it("does not downgrade an already published reply when an attempted edit is refused", async () => {
-    const stored = { ...review(), status: "REPLIED", replyText: "以前の公開本文", repliedAt: new Date("2026-09-01T00:00:00Z") };
+    const stored = reviewFixture({ ...review(), status: "REPLIED", replyText: "以前の公開本文", repliedAt: new Date("2026-09-01T00:00:00Z") });
     vi.mocked(prisma.review.findUnique).mockResolvedValue(stored as never);
     vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_ERROR", "quota", 429, 429));
-    vi.mocked(prisma.review.update).mockImplementation(async args => Object.assign(stored, args.data) as never);
+    reviewDb.update.mockImplementation(async args => Object.assign(stored, args.data));
     await POST(request());
     expect(stored).toMatchObject({ status: "REPLIED", replyText: "以前の公開本文", repliedAt: new Date("2026-09-01T00:00:00Z"), aiReplyDraft: normalizedReply });
   });
 
   it("round-trips a quota-saved draft through the real reviews list serializer", async () => {
     const row = review();
-    const stored = { ...row, school: { ...row.school, name: "対象校舎" }, source: "GOOGLE", status: "PENDING", aiReplyText: "元のドラフト", aiReplyDraft: "元のドラフト", replyText: null, repliedAt: null, aiReplyGeneratedAt: null, createdAt: new Date("2026-09-01T00:00:00Z") };
+    const stored = reviewFixture({ ...row, school: { ...row.school, name: "対象校舎" }, source: "GOOGLE", status: "PENDING", aiReplyText: "元のドラフト", aiReplyDraft: "元のドラフト", replyText: null, repliedAt: null, aiReplyGeneratedAt: null, createdAt: new Date("2026-09-01T00:00:00Z") });
     vi.mocked(prisma.review.findUnique).mockResolvedValue(stored as never);
-    vi.mocked(prisma.review.findMany).mockImplementation(async () => [stored] as never);
-    vi.mocked(prisma.review.update).mockImplementation(async args => Object.assign(stored, args.data) as never);
+    reviewDb.findMany.mockImplementation(async () => [stored]);
+    reviewDb.update.mockImplementation(async args => Object.assign(stored, args.data));
     vi.mocked(publishDirectGbpReply).mockRejectedValue(new DirectReplyError("GOOGLE_QUOTA_EXCEEDED", "quota", 429, 429));
     expect((await (await POST(request())).json()).draftSaved).toBe(true);
     const response = await getReviews(new Request("https://example.com/api/dashboard/reviews?schoolId=school-1"));

@@ -1,3 +1,4 @@
+import { schoolSettingFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
@@ -88,9 +89,9 @@ describe("GET /api/auth/callback/google", () => {
   it("passes existing refresh token when Google omits a new one", async () => {
     const { prisma } = await import("@/lib/prisma");
     const google = await import("@/lib/google-gbp-oauth");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(schoolSettingFixture({
       googleRefreshToken: "saved-refresh-token",
-    });
+    }));
 
     await GET(
       new Request(

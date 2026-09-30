@@ -42,7 +42,7 @@ describe("gbp-webhook", () => {
 
   it("uses OpenAI generated review replies when configured", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ output_text: "  丁寧な返信案です。  " }), {
         status: 200,
       }),
@@ -71,7 +71,7 @@ describe("gbp-webhook", () => {
 
   it("injects school prompt settings into OpenAI reply generation", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ output_text: "設定を反映した返信案です。" }), {
         status: 200,
       }),
@@ -112,7 +112,7 @@ describe("gbp-webhook", () => {
 
   it("falls back when OpenAI returns an empty reply", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ output_text: "   " }), { status: 200 }),
     );
 
@@ -172,7 +172,7 @@ describe("gbp-webhook", () => {
         update: vi.fn(),
       },
     };
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status: 200 }));
 
     const result = await processGbpReviews({
       reviews: [
@@ -295,7 +295,7 @@ describe("gbp-webhook", () => {
         update: vi.fn(),
       },
     };
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>();
 
     const result = await processGbpReviews({
       reviews: [
@@ -389,7 +389,7 @@ describe("gbp-webhook", () => {
         update: vi.fn(),
       },
     };
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status: 200 }));
 
     const result = await processGbpReviews({
       reviews: [
@@ -418,7 +418,7 @@ describe("gbp-webhook", () => {
   it("fetches GBP reviews with an access token", async () => {
     process.env.GBP_API_REVIEWS_URL = "https://gbp.example/reviews";
     process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           reviews: [
@@ -445,7 +445,7 @@ describe("gbp-webhook", () => {
     process.env.GBP_API_REVIEWS_URL =
       "https://mybusiness.googleapis.com/v4/accounts/10/locations/20/reviews";
     process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           reviews: [
@@ -487,7 +487,7 @@ describe("gbp-webhook", () => {
 
   it("normalizes anonymous and legacy-shaped GBP review fields safely", async () => {
     process.env.GBP_API_REVIEWS_URL = "https://gbp.example/reviews";
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           reviews: [
@@ -652,7 +652,7 @@ describe("gbp-webhook", () => {
   it("returns an empty list when GBP response does not contain an array", async () => {
     process.env.GBP_API_REVIEWS_URL = "https://gbp.example/reviews";
     delete process.env.GBP_API_ACCESS_TOKEN;
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ reviews: null }), { status: 200 }),
     );
 

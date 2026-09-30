@@ -1,5 +1,8 @@
+import { schoolSettingFixture, schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH, POST } from "./route";
+
+const rawQuery = vi.hoisted(() => vi.fn<(sql: string, tableName?: string) => Promise<Record<string, unknown>[]>>(async () => []));
 
 vi.mock("@/lib/supabase-access", () => ({
   resolveRequestAccess: vi.fn(async () => ({
@@ -25,7 +28,7 @@ vi.mock("@/lib/supabase-access", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    $queryRawUnsafe: vi.fn(async () => []),
+    $queryRawUnsafe: rawQuery,
     school: {
       findUnique: vi.fn(async () => ({
         id: "school-1",
@@ -118,10 +121,10 @@ describe("/api/dashboard/settings/line", () => {
 
   it("saves LINE settings with canonical columns from alias request keys", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineChannelAccessToken: "",
       lineDestinationId: "",
-    });
+    }));
 
     const response = await POST(
       new Request(
@@ -162,10 +165,10 @@ describe("/api/dashboard/settings/line", () => {
 
   it("preserves existing LINE credentials when an untouched form submits empty strings", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineChannelAccessToken: "saved-token",
       lineDestinationId: "saved-user",
-    });
+    }));
 
     const response = await PATCH(
       new Request(
@@ -205,10 +208,10 @@ describe("/api/dashboard/settings/line", () => {
 
   it("clears LINE credentials only when the fields are explicitly touched", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineChannelAccessToken: "saved-token",
       lineDestinationId: "saved-user",
-    });
+    }));
 
     const response = await PATCH(
       new Request(
@@ -270,10 +273,10 @@ describe("/api/dashboard/settings/line", () => {
   it("returns a Japanese error when LINE setting save fails", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.spyOn(console, "error").mockImplementationOnce(() => {});
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineChannelAccessToken: "",
       lineDestinationId: "",
-    });
+    }));
     vi.mocked(prisma.schoolSetting.upsert).mockRejectedValueOnce(
       new Error("DB write failed"),
     );
@@ -299,14 +302,14 @@ describe("/api/dashboard/settings/line", () => {
   it("syncs the latest existing SchoolSetting credentials to the requested school", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.schoolSetting.findFirst).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findFirst).mockResolvedValueOnce(schoolSettingFixture({
       lineNotifyEnabled: true,
       lineChannelAccessToken: "latest-school-token",
       lineDestinationId: "latest-school-user",
       notifyOnNewReview: true,
       notifyOnLowRating: false,
       updatedAt: new Date("2026-08-22T06:46:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request(
@@ -337,14 +340,14 @@ describe("/api/dashboard/settings/line", () => {
 
   it("hydrates saved values from legacy raw SchoolSetting columns", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineNotifyEnabled: true,
       lineChannelAccessToken: null,
       lineDestinationId: null,
       notifyOnNewReview: true,
       notifyOnLowRating: true,
       updatedAt: new Date("2026-08-22T06:46:00.000Z"),
-    });
+    }));
     vi.mocked(prisma.$queryRawUnsafe)
       .mockResolvedValueOnce([
         { column_name: "schoolId" },
@@ -379,14 +382,14 @@ describe("/api/dashboard/settings/line", () => {
 
   it("prefers the dedicated LineSetting table when it contains saved values", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineNotifyEnabled: true,
       lineChannelAccessToken: null,
       lineDestinationId: null,
       notifyOnNewReview: false,
       notifyOnLowRating: false,
       updatedAt: new Date("2026-08-22T06:46:00.000Z"),
-    });
+    }));
     vi.mocked(prisma.$queryRawUnsafe)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
@@ -516,7 +519,7 @@ describe("/api/dashboard/settings/line", () => {
   it("ignores fallback token records that do not include a destination column", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.$queryRawUnsafe).mockImplementation(
+    rawQuery.mockImplementation(
       async (sql: string, tableName?: string) => {
         if (sql.includes("information_schema") && tableName === "LineSetting") {
           return [{ column_name: "lineAccessToken" }];
@@ -549,7 +552,7 @@ describe("/api/dashboard/settings/line", () => {
   it("syncs fallback values from tables that use updated_at ordering", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.$queryRawUnsafe).mockImplementation(
+    rawQuery.mockImplementation(
       async (sql: string, tableName?: string) => {
         if (sql.includes("information_schema") && tableName === "settings") {
           return [
@@ -642,14 +645,14 @@ describe("/api/dashboard/settings/line", () => {
 
   it("keeps explicit disabled notification flags from the database", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       lineNotifyEnabled: false,
       lineChannelAccessToken: "",
       lineDestinationId: "",
       notifyOnNewReview: false,
       notifyOnLowRating: false,
       updatedAt: new Date("2026-08-22T06:46:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request(
@@ -743,11 +746,11 @@ describe("/api/dashboard/settings/line", () => {
 
   it("returns a Japanese 404 when the school is inactive", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(schoolFixture({
       id: "school-1",
       name: "停止校舎",
-      status: "INACTIVE",
-    });
+      status: "ARCHIVED",
+    }));
 
     const response = await GET(
       new Request(

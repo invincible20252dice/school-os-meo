@@ -1,3 +1,4 @@
+import { schoolSettingFixture, instagramSettingFixture, schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH } from "./route";
 
@@ -121,7 +122,7 @@ describe("/api/settings/school", () => {
 
   it("falls back to Instagram OAuth setting values when SchoolSetting is sparse", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       id: "setting-1",
       schoolId: "school-1",
       googleConnected: false,
@@ -142,7 +143,7 @@ describe("/api/settings/school", () => {
       promptForbiddenWords: [],
       promptMustKeywords: [],
       updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/school?schoolId=school-1"),
@@ -160,7 +161,7 @@ describe("/api/settings/school", () => {
 
   it("keeps Instagram fields empty when neither setting has credentials", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       id: "setting-1",
       schoolId: "school-1",
       googleConnected: false,
@@ -181,14 +182,14 @@ describe("/api/settings/school", () => {
       promptForbiddenWords: [],
       promptMustKeywords: [],
       updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-    });
-    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValueOnce({
+    }));
+    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValueOnce(instagramSettingFixture({
       metaAppId: null,
       metaAppSecret: null,
       instagramAccessToken: "",
       instagramBusinessAccountId: "",
       updatedAt: new Date("2026-07-30T09:00:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/school?schoolId=school-1"),
@@ -451,11 +452,11 @@ describe("/api/settings/school", () => {
     );
     expect(missingResponse.status).toBe(404);
 
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(schoolFixture({
       id: "school-1",
       name: "iスクール予備校",
       status: "ARCHIVED",
-    });
+    }));
 
     const archivedResponse = await GET(
       new Request("https://app.example.com/api/settings/school?schoolId=school-1"),

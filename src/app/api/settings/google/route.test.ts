@@ -1,3 +1,4 @@
+import { googleAccountFixture, schoolSettingFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "./route";
 
@@ -179,7 +180,7 @@ describe("GET /api/settings/google", () => {
   it("hydrates Google settings from the persisted GoogleAccount record", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce(googleAccountFixture({
         id: "google-account-1",
         schoolId: "school-1",
         email: "ischool.yobiko@gmail.com",
@@ -188,7 +189,7 @@ describe("GET /api/settings/google", () => {
         reviewUrl: "https://g.page/r/CcECT8Glzr4bEBM/review",
         status: "CONNECTED",
         updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-      });
+      }));
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
@@ -208,7 +209,7 @@ describe("GET /api/settings/google", () => {
   it("recognizes a legacy account with a saved location even without status or timestamp", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce(googleAccountFixture({
       id: "google-account-legacy",
       schoolId: "school-1",
       email: null,
@@ -217,7 +218,7 @@ describe("GET /api/settings/google", () => {
       reviewUrl: null,
       status: null,
       updatedAt: null,
-    });
+    }));
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/google?schoolId=school-1"),
@@ -237,7 +238,7 @@ describe("GET /api/settings/google", () => {
 
   it("serializes empty Google fields for a newly created setting", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       id: "setting-1",
       schoolId: "school-1",
       googleConnected: false,
@@ -246,7 +247,7 @@ describe("GET /api/settings/google", () => {
       selectedGbpLocationId: null,
       googleReviewUrl: null,
       updatedAt: new Date("2026-07-30T10:00:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request("https://app.example.com/api/settings/google?schoolId=school-1"),

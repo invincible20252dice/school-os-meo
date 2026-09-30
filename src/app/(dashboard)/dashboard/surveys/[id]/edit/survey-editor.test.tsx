@@ -31,7 +31,7 @@ function deferred<T>() {
 }
 
 const change = (name: string, value: string, role = "textbox") =>
-  fireEvent.change(screen.getByRole(role, { name, exact: true }), { target: { value } });
+  fireEvent.change(screen.getByRole(role, { name }), { target: { value } });
 const savedCard = (title: string) => within(screen.getByText(title, { selector: "article strong" }).closest("article")!);
 
 describe("survey editor workflow", () => {
@@ -115,9 +115,9 @@ describe("survey editor workflow", () => {
     change("最小文字数", "150", "spinbutton");
     change("最大文字数", "250", "spinbutton");
     fireEvent.click(screen.getByRole("checkbox", { name: "アンケートを有効化" }));
-    fireEvent.click(screen.getByRole("button", { name: "月", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "土", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "特典をつける", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "月" }));
+    fireEvent.click(screen.getByRole("button", { name: "土" }));
+    fireEvent.click(screen.getByRole("button", { name: "特典をつける" }));
     expect(screen.getByText("特典名未設定")).toBeDefined();
     expect(screen.getByText("表示タイミング未設定")).toBeDefined();
     change("特典", "資料配布");
@@ -136,19 +136,19 @@ describe("survey editor workflow", () => {
     await act(async () => pending.resolve(Response.json({ survey: { id: "survey-1" } })));
     expect(savedCard(survey.title).getByText("特典あり")).toBeDefined();
     expect(savedCard(survey.title).getByText("適用中")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "特典をつけない", exact: true }));
-    expect(screen.queryByRole("textbox", { name: "特典", exact: true })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "特典をつけない" }));
+    expect(screen.queryByRole("textbox", { name: "特典" })).toBeNull();
   });
 
   it("adds and moves questions, edits free-text hints, and previews the new order", async () => {
     render(<SurveyEditor surveyId="new" />);
     await screen.findByText("新規アンケート作成");
     fireEvent.click(screen.getByRole("button", { name: "設問を追加" }));
-    const questions = screen.getAllByRole("textbox", { name: "設問文", exact: true }) as HTMLInputElement[];
+    const questions = screen.getAllByRole("textbox", { name: "設問文" }) as HTMLInputElement[];
     expect(questions).toHaveLength(3);
     fireEvent.change(questions[2], { target: { value: "追加した質問" } });
     fireEvent.click(screen.getByRole("button", { name: "設問 4 を上に移動" }));
-    expect(screen.getAllByRole("textbox", { name: "設問文", exact: true }).map(el => (el as HTMLInputElement).value)).toEqual([
+    expect(screen.getAllByRole("textbox", { name: "設問文" }).map(el => (el as HTMLInputElement).value)).toEqual([
       "良かったと感じた点を選んでください", "追加した質問", "印象に残っている変化を教えてください",
     ]);
     change("入力例（プレースホルダー）", "体験を入力してください");
@@ -168,7 +168,7 @@ describe("survey editor workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "編集内容を破棄" }));
     expect(screen.getByText("新規作成モードに切り替えました。")).toBeDefined();
     expect(textareas()[0].value).not.toContain("未保存");
-    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "編集", exact: true }));
+    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "編集" }));
     expect(textareas()[0].value).toBe("受験対策\n学習習慣");
     expect(screen.getByText(`${survey.title}を編集中です。`)).toBeDefined();
   });
@@ -184,7 +184,7 @@ describe("survey editor workflow", () => {
     await screen.findByText("アンケート設定をDBへ保存しました。");
     expect(JSON.parse(network.mock.calls[1][1].body)).toMatchObject({ id: "new", schoolId: "school-1", items: [{ options: ["A", "B"] }, { type: "TEXT" }] });
     fireEvent.click(screen.getByRole("button", { name: "編集内容を破棄" }));
-    fireEvent.click(savedCard("作成テスト").getByRole("button", { name: "編集", exact: true }));
+    fireEvent.click(savedCard("作成テスト").getByRole("button", { name: "編集" }));
     expect(textareas()[0].value).toBe("A\nB");
     expect(screen.getByRole("button", { name: "更新する" })).toBeDefined();
   });
@@ -270,12 +270,12 @@ describe("survey editor workflow", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<SurveyEditor surveyId="survey-1" />);
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
-    fireEvent.click(savedCard(other.title).getByRole("button", { name: "選択", exact: true }));
+    fireEvent.click(savedCard(other.title).getByRole("button", { name: "選択" }));
     expect(savedCard(other.title).getByText("適用中")).toBeDefined();
     expect(within(screen.getByRole("complementary")).getByText("停止中")).toBeDefined();
-    fireEvent.click(savedCard(other.title).getByRole("button", { name: "削除", exact: true }));
+    fireEvent.click(savedCard(other.title).getByRole("button", { name: "削除" }));
     expect(screen.getByText("適用中のアンケートは削除できません。先に別のアンケートを選択してください。")).toBeDefined();
-    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "選択", exact: true }));
+    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "選択" }));
     expect(savedCard(survey.title).getByText("適用中")).toBeDefined();
     expect(within(screen.getByRole("complementary")).getByText("公開中")).toBeDefined();
   });
@@ -286,13 +286,13 @@ describe("survey editor workflow", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
     render(<SurveyEditor surveyId="survey-1" />);
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
-    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "削除", exact: true }));
+    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "削除" }));
     expect(confirm).toHaveBeenCalledWith("このアンケートを削除してもよろしいですか？");
     expect(savedCard(survey.title)).toBeDefined();
-    fireEvent.click(savedCard(other.title).getByRole("button", { name: "削除", exact: true }));
+    fireEvent.click(savedCard(other.title).getByRole("button", { name: "削除" }));
     expect(screen.queryByText(other.title, { selector: "article strong" })).toBeNull();
     expect((screen.getByRole("textbox", { name: "アンケート名" }) as HTMLInputElement).value).toBe(survey.title);
-    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "削除", exact: true }));
+    fireEvent.click(savedCard(survey.title).getByRole("button", { name: "削除" }));
     expect(screen.queryByText(survey.title, { selector: "article strong" })).toBeNull();
     expect(screen.getByText("新規アンケート作成")).toBeDefined();
   });
@@ -311,8 +311,8 @@ describe("survey option editing", () => {
     fireEvent.blur(textareas()[index]);
     expect(textareas()[index].value).toBe(original + "\n\n  新しい選択肢  \n");
     const preview = within(screen.getByRole("complementary"));
-    expect(preview.getByRole("button", { name: "新しい選択肢", exact: true })).toBeDefined();
-    expect(preview.queryByRole("button", { name: "", exact: true })).toBeNull();
+    expect(preview.getByRole("button", { name: "新しい選択肢" })).toBeDefined();
+    expect(preview.queryByRole("button", { name: "" })).toBeNull();
   });
 
   it("keeps leading spaces, blank lines, and IME composition text while editing", async () => {
@@ -325,7 +325,7 @@ describe("survey option editing", () => {
     expect(textareas()[0].value).toBe(raw);
     fireEvent.change(screen.getByRole("textbox", { name: "アンケート名" }), { target: { value: "変更後" } });
     expect(textareas()[0].value).toBe(raw);
-    expect(within(screen.getByRole("complementary")).getByRole("button", { name: "大学受験", exact: true })).toBeDefined();
+    expect(within(screen.getByRole("complementary")).getByRole("button", { name: "大学受験" })).toBeDefined();
   });
 
   it("keeps each option draft attached to its question when reordering and deleting", async () => {
@@ -335,7 +335,7 @@ describe("survey option editing", () => {
     fireEvent.change(textareas()[1], { target: { value: "二番目の設問\n" } });
     fireEvent.click(screen.getByRole("button", { name: "設問 2 を下に移動" }));
     expect(textareas().map(area => area.value)).toEqual(["二番目の設問\n", "先頭の設問\n\n"]);
-    fireEvent.click(within(textareas()[0].closest("article")!).getByRole("button", { name: "削除", exact: true }));
+    fireEvent.click(within(textareas()[0].closest("article")!).getByRole("button", { name: "削除" }));
     expect(textareas()).toHaveLength(1);
     expect(textareas()[0].value).toBe("先頭の設問\n\n");
   });

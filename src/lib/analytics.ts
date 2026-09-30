@@ -107,7 +107,7 @@ export async function upsertGbpMetric(
 }
 
 export async function buildLookerStudioRows(
-  prisma: Pick<PrismaMetricClient, "gbpMetric">,
+  prisma: { gbpMetric: Pick<PrismaMetricClient["gbpMetric"], "findMany"> },
   query: LookerStudioQuery,
 ) {
   const rows = await prisma.gbpMetric.findMany({

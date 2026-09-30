@@ -62,7 +62,7 @@ function buildInvitationClient() {
   }));
   const profileUpsert = vi.fn(() => ({
     select: vi.fn(() => ({
-      maybeSingle: vi.fn(async () => ({
+      maybeSingle: vi.fn<() => Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }>>(async () => ({
         data: {
           role: "manager",
           school_id: "school-invited",
@@ -114,7 +114,7 @@ function buildInvitationClient() {
   };
 }
 
-function buildInvitationVariantClient(invitation: unknown, invitationError = null) {
+function buildInvitationVariantClient(invitation: unknown, invitationError: { message: string } | null = null) {
   const profileSelect = vi.fn(() => ({
     eq: vi.fn(() => ({
       maybeSingle: vi.fn(async () => ({

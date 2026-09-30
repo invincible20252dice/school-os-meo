@@ -1,3 +1,4 @@
+import { reviewFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
@@ -21,8 +22,8 @@ vi.mock("@/lib/supabase-access", async () => ({
 const reviewRow = {
   id: "review-1",
   schoolId: "school-1",
-  source: "GOOGLE",
-  status: "PENDING",
+  source: "GOOGLE" as const,
+  status: "PENDING" as const,
   parentName: "旧投稿者名",
   authorName: "佐藤英樹",
   rating: 5,
@@ -102,7 +103,7 @@ describe("GET /api/reviews", () => {
   ])("denies inconsistent manager assignments without broadening the database query (%j)", async assignment => {
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, ...assignment } });
     const response = await GET(new Request("https://app.example.com/api/reviews?schoolId=all"));
     expect(response.status).toBe(403);
@@ -124,7 +125,7 @@ describe("GET /api/reviews", () => {
   it("rejects unauthenticated listing before reading review data", async () => {
     const { resolveRequestAccess } = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const authenticated = await resolveRequestAccess(new Request("https://app.example.com"));
+    const authenticated = await resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ ...authenticated, isAuthenticated: false });
     const response = await GET(new Request("https://app.example.com/api/reviews?role=admin"));
     expect(response.status).toBe(401);
@@ -172,7 +173,7 @@ describe("GET /api/reviews", () => {
   it("uses the current schema fallback fields only when canonical values are empty", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
-      {
+      reviewFixture({
         ...reviewRow,
         id: "review-2",
         authorName: null,
@@ -181,7 +182,7 @@ describe("GET /api/reviews", () => {
         aiReplyDraft: null,
         replyText: "返信済みです。",
         repliedAt: new Date("2026-08-01T11:00:00.000Z"),
-      },
+      }),
     ]);
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
@@ -200,8 +201,8 @@ describe("GET /api/reviews", () => {
   it("returns actual line breaks for stored escaped drafts and replies", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
-      { ...reviewRow, aiReplyDraft: "佐藤様\\n\\nありがとうございます。", replyText: "冒頭\\r\\n本文" },
-      { ...reviewRow, id: "review-2", aiReplyDraft: null, aiReplyText: "一ノ瀬様\\n\\nありがとうございます。" },
+      reviewFixture({ ...reviewRow, aiReplyDraft: "佐藤様\\n\\nありがとうございます。", replyText: "冒頭\\r\\n本文" }),
+      reviewFixture({ ...reviewRow, id: "review-2", aiReplyDraft: null, aiReplyText: "一ノ瀬様\\n\\nありがとうございます。" }),
     ]);
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
@@ -217,13 +218,13 @@ describe("GET /api/reviews", () => {
   it("binds each review link to its own school and leaves unconfigured schools unset", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
-      reviewRow,
-      { ...reviewRow, id: "review-2", schoolId: "school-2", school: {
+      reviewFixture(reviewRow),
+      reviewFixture({ ...reviewRow, id: "review-2", schoolId: "school-2", school: {
         name: "別校舎", schoolSetting: { selectedGbpLocationId: "locations/987" },
-      } },
-      { ...reviewRow, id: "review-3", schoolId: "school-3", school: {
+      } }),
+      reviewFixture({ ...reviewRow, id: "review-3", schoolId: "school-3", school: {
         name: "未設定校舎", schoolSetting: null,
-      } },
+      } }),
     ]);
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
@@ -238,7 +239,7 @@ describe("GET /api/reviews", () => {
   it("serializes nullable review data without inventing school data", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.review.findMany).mockResolvedValueOnce([
-      {
+      reviewFixture({
         ...reviewRow,
         authorName: null,
         parentName: null,
@@ -251,7 +252,7 @@ describe("GET /api/reviews", () => {
         aiReplyDraft: null,
         replyText: null,
         aiReplyGeneratedAt: null,
-      },
+      }),
     ]);
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
@@ -270,7 +271,7 @@ describe("GET /api/reviews", () => {
   it("allows admins to list all schools when no school is selected", async () => {
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, role: "admin", schoolId: "", schoolIds: [] } });
 
     const response = await GET(new Request("https://app.example.com/api/reviews"));
@@ -338,7 +339,7 @@ describe("PATCH /api/reviews", () => {
     const { PATCH } = await import("./route");
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, role: "admin", schoolId: "", schoolIds: [] } });
     const response = await PATCH(new Request("https://app.example.com/api/reviews", { method: "PATCH", body: JSON.stringify({ reviewId: "review-1", replyText: "投稿済み本文" }) }));
     expect(response.status).toBe(200);
@@ -353,7 +354,7 @@ describe("PATCH /api/reviews", () => {
     const { PATCH } = await import("./route");
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, ...assignment } });
     const response = await PATCH(new Request("https://app.example.com/api/reviews", { method: "PATCH", body: JSON.stringify({ reviewId: "review-1", replyText: "投稿済み本文" }) }));
     expect(response.status).toBe(403);
@@ -499,7 +500,7 @@ describe("PATCH /api/reviews", () => {
     const { PATCH } = await import("./route");
     const access = await import("@/lib/supabase-access");
     const { prisma } = await import("@/lib/prisma");
-    const current = await access.resolveRequestAccess(new Request("https://app.example.com"));
+    const current = await access.resolveRequestAccess(new Request("https://app.example.com"), new URL("https://app.example.com"));
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...current, access: { ...current.access, schoolId: "school-2", schoolIds: ["school-2"] } });
 
     const response = await PATCH(

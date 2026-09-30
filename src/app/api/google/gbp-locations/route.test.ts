@@ -1,3 +1,4 @@
+import { schoolSettingFixture, googleAccountFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
@@ -117,10 +118,10 @@ describe("GET /api/google/gbp-locations", () => {
 
   it("includes and selects the known location when none is saved", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       googleRefreshToken: "refresh-token",
       selectedGbpLocationId: null,
-    });
+    }));
 
     const response = await GET(
       new Request(
@@ -139,10 +140,10 @@ describe("GET /api/google/gbp-locations", () => {
   it("uses the location and token from GoogleAccount when SchoolSetting is empty", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.googleAccount.findUnique).mockResolvedValueOnce(googleAccountFixture({
       refreshToken: "account-refresh-token",
       locationId: "6467241578381534467",
-    });
+    }));
 
     const response = await GET(
       new Request(
@@ -246,10 +247,10 @@ describe("GET /api/google/gbp-locations", () => {
 
   it("normalizes a fully qualified saved location resource", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       googleRefreshToken: "",
       selectedGbpLocationId: "accounts/1/locations/6467241578381534467",
-    });
+    }));
 
     const response = await GET(
       new Request(

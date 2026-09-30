@@ -1,3 +1,4 @@
+import { schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PATCH, POST } from "./route";
 
@@ -254,10 +255,10 @@ describe("PATCH /api/settings/google-review-url", () => {
     );
     expect(missingResponse.status).toBe(404);
 
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(schoolFixture({
       id: "school-1",
       status: "ARCHIVED",
-    });
+    }));
 
     const archivedResponse = await PATCH(
       new Request("https://app.example.com/api/settings/google-review-url", {

@@ -36,13 +36,15 @@ export type AioDashboardData = {
   mentions: AioMentionRow[];
 };
 
+type NullableFields<T> = { [K in keyof T]?: T[K] | null };
+
 export type NullableAioDashboardData = {
   schoolName?: string | null;
   subtitle?: string | null;
-  metrics?: Array<Partial<AioMetricCard> | null> | null;
-  trend?: Array<Partial<AioTrendPoint> | null> | null;
-  radar?: Array<Partial<AioRadarAxis> | null> | null;
-  mentions?: Array<Partial<AioMentionRow> | null> | null;
+  metrics?: Array<NullableFields<AioMetricCard> | null> | null;
+  trend?: Array<NullableFields<AioTrendPoint> | null> | null;
+  radar?: Array<NullableFields<AioRadarAxis> | null> | null;
+  mentions?: Array<NullableFields<AioMentionRow> | null> | null;
 };
 
 const fallbackData: AioDashboardData = {

@@ -1,3 +1,4 @@
+import { schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const profilesSelectSingle = vi.fn();
@@ -454,10 +455,10 @@ describe("/api/admin/users", () => {
 
   it("rejects an inactive school assignment before inviting", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(schoolFixture({
       id: "school-archived",
       status: "ARCHIVED",
-    });
+    }));
     const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/admin/users", {

@@ -200,6 +200,7 @@ describe("dashboard-query-analytics", () => {
           ctr: "0.0%",
           growthRate: "0%",
           intent: "地域",
+          actionSuggestion: "",
         },
       ]),
     ).toEqual([

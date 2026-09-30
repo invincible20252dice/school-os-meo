@@ -23,6 +23,8 @@ export type MonthlyReportData = {
   actions: ReportAction[];
 };
 
+type NullableFields<T> = { [K in keyof T]?: T[K] | null };
+
 export type NullableMonthlyReportData = {
   schoolName?: string | null;
   period?: string | null;
@@ -30,8 +32,8 @@ export type NullableMonthlyReportData = {
   rank?: MonthlyReportData["rank"] | null;
   monthOverMonth?: string | null;
   aiComment?: string | null;
-  metrics?: Array<Partial<ReportMetric> | null> | null;
-  actions?: Array<Partial<ReportAction> | null> | null;
+  metrics?: Array<NullableFields<ReportMetric> | null> | null;
+  actions?: Array<NullableFields<ReportAction> | null> | null;
 };
 
 const fallbackReportData: MonthlyReportData = {

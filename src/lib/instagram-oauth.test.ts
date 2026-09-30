@@ -181,7 +181,7 @@ describe("instagram-oauth", () => {
   });
 
   it("exchanges an OAuth code for an access token", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({ access_token: "instagram-access-token" }),
     );
 
@@ -199,7 +199,7 @@ describe("instagram-oauth", () => {
 
   it("uses the fixed Meta App ID when exchanging a code without configured app id", async () => {
     process.env = { ...process.env, META_APP_ID: "" };
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({ access_token: "instagram-access-token" }),
     );
 
@@ -216,7 +216,7 @@ describe("instagram-oauth", () => {
 
   it("uses the hardcoded Meta App Secret fallback when exchanging a code", async () => {
     process.env = { ...process.env, META_APP_ID: "", META_APP_SECRET: "" };
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({ access_token: "instagram-access-token" }),
     );
 
@@ -242,7 +242,7 @@ describe("instagram-oauth", () => {
       META_APP_SECRET: "",
       NEXT_PUBLIC_META_APP_SECRET: "public-env-secret",
     };
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({ access_token: "instagram-access-token" }),
     );
 
@@ -281,7 +281,7 @@ describe("instagram-oauth", () => {
   });
 
   it("fetches Instagram Business Account ID from Meta pages", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({
         data: [
           {
@@ -302,7 +302,7 @@ describe("instagram-oauth", () => {
   });
 
   it("skips pages without Instagram Business Account IDs", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       Response.json({
         data: [
           {},

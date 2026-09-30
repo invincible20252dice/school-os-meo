@@ -12,7 +12,7 @@ afterEach(() => {
 
 describe("supabase", () => {
   it("fails fast when public Supabase env vars are missing", () => {
-    process.env = {};
+    process.env = { NODE_ENV: "test" };
 
     expect(() => createBrowserSupabaseClient()).toThrow(
       "Supabase public environment variables are not configured.",
@@ -21,6 +21,7 @@ describe("supabase", () => {
 
   it("fails fast when server Supabase env vars are missing", () => {
     process.env = {
+      NODE_ENV: "test",
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
     };
 
@@ -31,6 +32,7 @@ describe("supabase", () => {
 
   it("creates browser and server clients when required env vars exist", () => {
     process.env = {
+      NODE_ENV: "test",
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
       SUPABASE_SERVICE_ROLE_KEY: "service-role-key",

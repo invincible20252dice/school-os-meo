@@ -167,7 +167,7 @@ describe("line", () => {
   it("pushes the notification to LINE Messaging API", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response("{}", {
           status: 200,
@@ -202,7 +202,7 @@ describe("line", () => {
         }),
       }),
     );
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(body.to).toBe("line-group-id");
     expect(body.messages).toHaveLength(1);
   });
@@ -213,7 +213,7 @@ describe("line", () => {
       reviewId: "review-1",
       userCustomText: "修正後の返信文です。",
     });
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response("{}", {
           status: 200,
@@ -237,14 +237,14 @@ describe("line", () => {
         }),
       }),
     );
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(body.replyToken).toBe("line-reply-token");
     expect(body.messages[0]).toEqual(message);
   });
 
   it("replies with a plain text message through LINE Messaging API", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response("{}", {
           status: 200,
@@ -262,7 +262,7 @@ describe("line", () => {
       status: 200,
       requestId: "text-reply-request-1",
     });
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(body).toEqual({
       replyToken: "line-reply-token",
       messages: [{ type: "text", text: "返信文を受け付けました。" }],
@@ -271,7 +271,7 @@ describe("line", () => {
 
   it("replies with multiple plain text messages through LINE Messaging API", async () => {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "line-token";
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response("{}", {
           status: 200,
@@ -289,7 +289,7 @@ describe("line", () => {
       status: 200,
       requestId: "multi-text-reply-request-1",
     });
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(body.messages).toEqual([
       { type: "text", text: "以下の文章をコピーして編集してください。" },
       { type: "text", text: "AI返信ドラフトです。" },
@@ -346,7 +346,7 @@ describe("line", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(
           JSON.stringify({
@@ -387,7 +387,7 @@ describe("line", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const fetchMock = vi.fn(async () => new Response("plain error", { status: 429 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("plain error", { status: 429 }));
 
     await expect(
       sendLineReviewNotification(
@@ -413,7 +413,7 @@ describe("line", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ message: "Invalid reply token" }), {
           status: 400,
@@ -446,7 +446,7 @@ describe("line", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ message: "Expired reply token" }), {
           status: 400,
@@ -476,7 +476,7 @@ describe("line", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    const fetchMock = vi.fn(async () => new Response("", { status: 500 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("", { status: 500 }));
 
     await expect(
       sendLineReviewNotification(

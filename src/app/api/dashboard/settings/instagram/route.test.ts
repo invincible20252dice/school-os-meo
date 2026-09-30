@@ -1,3 +1,4 @@
+import { instagramSettingFixture, schoolSettingFixture, schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "./route";
 
@@ -127,7 +128,7 @@ describe("/api/dashboard/settings/instagram", () => {
 
   it("falls back to SchoolSetting Meta credentials when InstagramSetting is sparse", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.instagramSetting.findUnique).mockResolvedValueOnce(instagramSettingFixture({
       id: "instagram-setting-1",
       metaAppId: null,
       metaAppSecret: null,
@@ -135,14 +136,14 @@ describe("/api/dashboard/settings/instagram", () => {
       instagramBusinessAccountId: "",
       autoSyncEnabled: false,
       lastSyncedAt: null,
-      updatedAt: null,
-    });
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce({
+      updatedAt: new Date("2026-08-22T06:40:00.000Z"),
+    }));
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(schoolSettingFixture({
       instagramConnected: true,
       instagramMetaAppId: "school-meta-app",
       instagramMetaAppSecret: "school-meta-secret",
       updatedAt: new Date("2026-08-22T06:40:00.000Z"),
-    });
+    }));
 
     const response = await GET(
       new Request(
@@ -340,11 +341,11 @@ describe("/api/dashboard/settings/instagram", () => {
 
   it("returns not found when the selected school is inactive", async () => {
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(schoolFixture({
       id: "school-1",
       name: "iスクール予備校",
-      status: "INACTIVE",
-    });
+      status: "ARCHIVED",
+    }));
 
     const response = await GET(
       new Request(

@@ -6,6 +6,14 @@ import styles from "./page.module.css";
 import { GET as listReviews } from "@/app/api/reviews/route";
 import { POST as reply } from "@/app/api/gbp/reply/route";
 import { prisma } from "@/lib/prisma";
+import type { Prisma, Review } from "@prisma/client";
+import { reviewFixture } from "@/test/db-fixtures";
+
+const reviewDb = vi.hoisted(() => ({
+  findMany: vi.fn<(args: Prisma.ReviewFindManyArgs) => Promise<Review[]>>(),
+  findUnique: vi.fn<(args: Prisma.ReviewFindUniqueArgs) => Promise<Review | null>>(),
+  update: vi.fn<(args: Prisma.ReviewUpdateArgs) => Promise<Review>>(),
+}));
 
 // Only external boundaries are replaced: session identity, PostgreSQL, and Google HTTP.
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("schoolId=school-1") }));
@@ -17,7 +25,7 @@ vi.mock("@/lib/supabase-access", async () => ({
     status: "active", name: "Manager", email: "manager@example.com", source: "profiles",
   } }),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: { review: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() } } }));
+vi.mock("@/lib/prisma", () => ({ prisma: { review: reviewDb } }));
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -29,7 +37,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.uns
 
 describe("real component -> API -> OAuth/Google -> persistence -> list workflow", () => {
   it.each([403, 429, 500])("keeps remote publication distinct from local persistence (Google=%s)", async refusal => {
-    const stored = {
+    const stored = reviewFixture({
       id: "review-1", schoolId: "school-1", source: "GOOGLE", status: "PENDING",
       authorName: "投稿者", parentName: null, originalText: "丁寧な指導でした。", comment: null, rating: 5,
       googleReviewId: "accounts/1/locations/100/reviews/real", gbpReviewId: "real",
@@ -37,10 +45,10 @@ describe("real component -> API -> OAuth/Google -> persistence -> list workflow"
       aiReplyGeneratedAt: null, repliedAt: null, createdAt: new Date("2026-09-01T00:00:00Z"),
       school: { name: "対象校舎", gbpAccountId: "accounts/1", gbpLocationId: "locations/100",
         schoolSetting: { googleAccountId: "accounts/1", googleRefreshToken: "school-token", selectedGbpLocationId: "locations/100" }, googleAccount: null },
-    };
-    vi.mocked(prisma.review.findMany).mockImplementation(async () => [stored] as never);
-    vi.mocked(prisma.review.findUnique).mockImplementation(async () => stored as never);
-    vi.mocked(prisma.review.update).mockImplementation(async args => Object.assign(stored, args.data) as never);
+    });
+    reviewDb.findMany.mockImplementation(async () => [stored]);
+    reviewDb.findUnique.mockImplementation(async () => stored);
+    reviewDb.update.mockImplementation(async args => Object.assign(stored, args.data));
     let googleAttempts = 0;
     const edited = "編集済みの返信です。\nありがとうございました。";
     const network = vi.fn<typeof fetch>(async (input, init) => {

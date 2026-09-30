@@ -1,3 +1,4 @@
+import { schoolFixture, schoolSettingFixture, surveyFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GOOGLE_REVIEW_URL,
@@ -5,6 +6,13 @@ import {
 } from "@/lib/google-review-url";
 import { findSchoolSettingGoogleReviewUrl } from "@/lib/public-survey-query";
 import { GET } from "./route";
+import type { Prisma } from "@prisma/client";
+
+function surveyItemSelection(args: Pick<Prisma.SurveyFindUniqueArgs, "include"> | undefined) {
+  const items = args?.include?.items;
+  if (!items || typeof items !== "object") throw new Error("Expected an explicit survey item selection");
+  return items.select;
+}
 
 function buildSchool(overrides: Record<string, unknown> = {}) {
   return {
@@ -22,7 +30,7 @@ function buildSchool(overrides: Record<string, unknown> = {}) {
 }
 
 function buildSurvey(overrides: Record<string, unknown> = {}) {
-  return {
+  return surveyFixture({
     id: "survey-1",
     schoolId: "school-1",
     title: "予備校下通り校",
@@ -43,7 +51,7 @@ function buildSurvey(overrides: Record<string, unknown> = {}) {
       },
     ],
     ...overrides,
-  };
+  });
 }
 
 vi.mock("@/lib/prisma", () => ({
@@ -65,13 +73,13 @@ describe("GET /api/public/survey-school", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValue(buildSchool());
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+    vi.mocked(prisma.school.findUnique).mockResolvedValue(schoolFixture(buildSchool()));
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(schoolSettingFixture({
       googleReviewUrl:
         "https://search.google.com/local/writereview?placeid=setting-url",
-    });
-    vi.mocked(prisma.survey.findUnique).mockResolvedValue(buildSurvey());
-    vi.mocked(prisma.survey.findFirst).mockResolvedValue(buildSurvey());
+    }));
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue(surveyFixture(buildSurvey()));
+    vi.mocked(prisma.survey.findFirst).mockResolvedValue(surveyFixture(buildSurvey()));
   });
 
   it("returns the public school name and saved Google review URL", async () => {
@@ -115,7 +123,7 @@ describe("GET /api/public/survey-school", () => {
   it("normalizes all stored survey item types for the public JSON contract", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(
-      buildSurvey({
+      surveyFixture(buildSurvey({
         items: [
           {
             id: "q1",
@@ -142,7 +150,7 @@ describe("GET /api/public/survey-school", () => {
             order: 3,
           },
         ],
-      }),
+      })),
     );
 
     const response = await GET(
@@ -166,7 +174,7 @@ describe("GET /api/public/survey-school", () => {
   it("returns JSON-string questions as a top-level pure questions array", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(
-      buildSurvey({
+      surveyFixture(buildSurvey({
         items: [],
         questionsJson: JSON.stringify([
           {
@@ -177,7 +185,7 @@ describe("GET /api/public/survey-school", () => {
             options: JSON.stringify(["説明が丁寧", "料金が明確", "通いやすい"]),
           },
         ]),
-      }),
+      })),
     );
 
     const response = await GET(
@@ -268,20 +276,20 @@ describe("GET /api/public/survey-school", () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
-      buildSurvey({
+      surveyFixture(buildSurvey({
         school: buildSchool({
           googleMapsUrl:
             "https://search.google.com/local/writereview?placeid=school-url",
         }),
-      }),
+      })),
     );
     vi.mocked(prisma.survey.findFirst).mockResolvedValueOnce(
-      buildSurvey({
+      surveyFixture(buildSurvey({
         school: buildSchool({
           googlePlaceId: "place-school",
           googleMapsUrl: null,
         }),
-      }),
+      })),
     );
 
     const schoolUrlResponse = await GET(
@@ -310,12 +318,12 @@ describe("GET /api/public/survey-school", () => {
     error.code = "P2022";
     vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValueOnce(error);
     vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(
-      buildSurvey({
+      surveyFixture(buildSurvey({
         school: buildSchool({
           googleMapsUrl:
             "https://search.google.com/local/writereview?placeid=school-url",
         }),
-      }),
+      })),
     );
 
     const response = await GET(
@@ -413,8 +421,8 @@ describe("GET /api/public/survey-school", () => {
       type: "text",
       placeholder: "例: 熊本高校、済々黌高校、第一高校 など",
     });
-    expect(firstCall?.include?.items?.select).toHaveProperty("placeholder", true);
-    expect(secondCall?.include?.items?.select).not.toHaveProperty("placeholder");
+    expect(surveyItemSelection(firstCall)).toHaveProperty("placeholder", true);
+    expect(surveyItemSelection(secondCall)).not.toHaveProperty("placeholder");
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       "[PublicSurveyQuery] SurveyItem.placeholder is missing. Retrying public survey lookup without the optional column.",
       expect.objectContaining({
@@ -464,8 +472,8 @@ describe("GET /api/public/survey-school", () => {
     expect(response.status).toBe(200);
     expect(body.survey.id).toBe("latest-survey");
     expect(body.questions).toHaveLength(1);
-    expect(firstCall?.include?.items?.select).toHaveProperty("placeholder", true);
-    expect(secondCall?.include?.items?.select).not.toHaveProperty("placeholder");
+    expect(surveyItemSelection(firstCall)).toHaveProperty("placeholder", true);
+    expect(surveyItemSelection(secondCall)).not.toHaveProperty("placeholder");
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       "[PublicSurveyQuery] SurveyItem.placeholder is missing. Retrying public survey lookup without the optional column.",
       expect.objectContaining({
@@ -548,7 +556,7 @@ describe("GET /api/public/survey-school", () => {
   it("keeps rendering questions when a survey-id lookup has no joined school row", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.survey.findUnique).mockResolvedValueOnce(
-      buildSurvey({ school: undefined }),
+      surveyFixture(buildSurvey({ school: undefined })),
     );
 
     const response = await GET(

@@ -1,3 +1,4 @@
+import { schoolSettingFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
@@ -83,9 +84,9 @@ describe("GET /api/auth/instagram", () => {
   it("uses saved SchoolSetting Meta App ID when the query value is missing", async () => {
     const { prisma } = await import("@/lib/prisma");
     process.env = { ...process.env, DATABASE_URL: "postgresql://example" };
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue({
+    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValue(schoolSettingFixture({
       instagramMetaAppId: "saved-school-app-id",
-    });
+    }));
 
     const response = await GET(
       new Request(

@@ -1,3 +1,4 @@
+import { schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
@@ -54,10 +55,10 @@ describe("GET /api/dashboard/reports", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.school.findUnique).mockResolvedValue({
+    vi.mocked(prisma.school.findUnique).mockResolvedValue(schoolFixture({
       id: "school-1",
       name: "大学受験専門塾 iスクール予備校",
-    });
+    }));
     vi.mocked(prisma.monthlyReport.findUnique).mockResolvedValue({
       id: "report-1",
       schoolId: "school-1",
@@ -256,8 +257,8 @@ describe("GET /api/dashboard/reports", () => {
   it("uses the default report school and current month when query parameters are omitted", async () => {
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockImplementationOnce((_access, schoolId) => ({
-      requestedSchoolId: schoolId,
-      effectiveSchoolId: schoolId,
+      requestedSchoolId: schoolId ?? "",
+      effectiveSchoolId: schoolId ?? undefined,
       role: "admin",
       canSwitchSchool: true,
     }));
