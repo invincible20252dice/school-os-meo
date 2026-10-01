@@ -5,6 +5,7 @@ describe("dashboard navigation", () => {
   it("contains the required owner dashboard menu structure", () => {
     expect(dashboardNavItems.map((item) => item.href)).toEqual([
       "/dashboard",
+      "/dashboard/challenge",
       "/dashboard/surveys",
       "/dashboard/reviews",
       "/dashboard/rankings",
@@ -16,6 +17,10 @@ describe("dashboard navigation", () => {
   });
 
   it("contains hierarchical survey and settings items", () => {
+    expect(dashboardNavItems.find(item => item.href === "/dashboard/challenge")?.children).toEqual([
+      { label: "7日間チャレンジ", href: "/dashboard/challenge" },
+      { label: "今週のアクション", href: "/dashboard/challenge/weekly" },
+    ]);
     expect(
       dashboardNavItems.find((item) => item.href === "/dashboard")?.children,
     ).toEqual([

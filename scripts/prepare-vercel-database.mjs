@@ -17,6 +17,11 @@ if (process.env.VERCEL_ENV === "production") {
       await tx.review.count({ where: { source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } } });
     }, { maxWait: 15000, timeout: 45000 });
     console.log("Review.status schema alignment and Prisma query verification completed.");
+    await prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe(readFileSync("prisma/migrations/20261001090000_add_school_challenge/migration.sql", "utf8"));
+      await tx.schoolChallenge.count();
+    }, { maxWait: 15000, timeout: 45000 });
+    console.log("Additive SchoolChallenge schema and Prisma query verification completed.");
   } finally {
     await prisma.$disconnect();
   }

@@ -19,6 +19,15 @@ export const dashboardNavItems: DashboardNavItem[] = [
     ],
   },
   {
+    label: "集客チャレンジ",
+    href: "/dashboard/challenge",
+    icon: "ranking",
+    children: [
+      { label: "7日間チャレンジ", href: "/dashboard/challenge" },
+      { label: "今週のアクション", href: "/dashboard/challenge/weekly" },
+    ],
+  },
+  {
     label: "アンケート設定",
     href: "/dashboard/surveys",
     icon: "survey",
