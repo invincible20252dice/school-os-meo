@@ -403,7 +403,7 @@ describe("/api/dashboard/rankings", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("preserves Error messages when ranking data loading fails", async () => {
+  it("does not expose database details when ranking data loading fails", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -419,8 +419,24 @@ describe("/api/dashboard/rankings", () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body.error).toBe("rank table is unavailable");
+    expect(body.error).toBe("ランキングデータを取得できませんでした。");
+    expect(body.code).toBe("RANKING_FETCH_FAILED");
     consoleErrorSpy.mockRestore();
+  });
+
+  it.each(["P2022", "P2021"])("handles schema mismatch %s without fake results or retrying with guessed columns", async code => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    findKeywords.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("TargetKeyword.location is missing; private database details", { code, clientVersion: "6.19.3" }));
+    const { GET } = await import("./route");
+    const response = await GET(new Request("https://example.com/api/dashboard/rankings?schoolId=school-1"));
+    const body = await response.json();
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ success: false, code: "RANKING_SCHEMA_UNAVAILABLE" });
+    expect(body.error).not.toContain("private");
+    expect(body).not.toHaveProperty("keywords");
+    expect(findKeywords).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
   });
 
   it("returns the default POST message for non-Error create failures", async () => {

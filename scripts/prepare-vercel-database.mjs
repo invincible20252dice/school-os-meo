@@ -22,6 +22,11 @@ if (process.env.VERCEL_ENV === "production") {
       await tx.schoolChallenge.count();
     }, { maxWait: 15000, timeout: 45000 });
     console.log("Additive SchoolChallenge schema and Prisma query verification completed.");
+    await prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe(readFileSync("prisma/migrations/20261002060000_add_target_keyword_location/migration.sql", "utf8"));
+      await tx.targetKeyword.findMany({ take: 1, include: { rankHistories: { take: 1 }, aioScoreHistories: { take: 1 } } });
+    }, { maxWait: 15000, timeout: 45000 });
+    console.log("TargetKeyword schema alignment and Prisma query verification completed.");
   } finally {
     await prisma.$disconnect();
   }

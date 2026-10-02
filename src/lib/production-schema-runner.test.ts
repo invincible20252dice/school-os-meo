@@ -14,6 +14,8 @@ beforeEach(() => {
   writeFileSync(join(cwd, "prisma/review-status-enum.sql"), readFileSync("prisma/review-status-enum.sql"));
   mkdirSync(join(cwd, "prisma/migrations/20261001090000_add_school_challenge"), { recursive: true });
   writeFileSync(join(cwd, "prisma/migrations/20261001090000_add_school_challenge/migration.sql"), readFileSync("prisma/migrations/20261001090000_add_school_challenge/migration.sql"));
+  mkdirSync(join(cwd, "prisma/migrations/20261002060000_add_target_keyword_location"), { recursive: true });
+  writeFileSync(join(cwd, "prisma/migrations/20261002060000_add_target_keyword_location/migration.sql"), readFileSync("prisma/migrations/20261002060000_add_target_keyword_location/migration.sql"));
 });
 afterEach(() => { rmSync(cwd, { recursive: true, force: true }); });
 function run(environment: string, databaseUrl = "") {
@@ -21,7 +23,7 @@ function run(environment: string, databaseUrl = "") {
     ...process.env, VERCEL_ENV: environment, DATABASE_URL: databaseUrl,
   } });
 }
-function fakePrisma(fail: boolean) {
+function fakePrisma(fail: boolean, failKeyword = false) {
   const path = join(cwd, "node_modules/@prisma/client");
   mkdirSync(path, { recursive: true });
   writeFileSync(join(path, "package.json"), JSON.stringify({ type: "module", main: "index.js" }));
@@ -32,9 +34,9 @@ function fakePrisma(fail: boolean) {
       async $transaction(fn, options) {
         writeFileSync('transaction.json', JSON.stringify(options));
         return fn({$executeRawUnsafe: async sql => {
-          writeFileSync(sql.includes('SchoolChallenge') ? 'challenge.sql' : 'migration.sql', sql);
+          writeFileSync(sql.includes('SchoolChallenge') ? 'challenge.sql' : sql.includes('TargetKeyword') ? 'keyword.sql' : 'migration.sql', sql);
           if (${fail}) throw new Error('alignment failed');
-        }, review: {count: async args => {writeFileSync('query.json', JSON.stringify(args)); return 3;}}, schoolChallenge: {count: async () => {writeFileSync('challenge-checked', 'true'); return 0;}}});
+        }, review: {count: async args => {writeFileSync('query.json', JSON.stringify(args)); return 3;}}, schoolChallenge: {count: async () => {writeFileSync('challenge-checked', 'true'); return 0;}}, targetKeyword: {findMany: async args => {if (${failKeyword}) throw new Error('keyword schema still invalid'); writeFileSync('keyword-query.json', JSON.stringify(args)); return [];}}});
       }
       async $disconnect() {writeFileSync('disconnected', 'true');}
     }`);
@@ -57,6 +59,8 @@ describe("production deployment schema gate", () => {
     expect(readFileSync(join(cwd, "enum.sql"), "utf8")).toBe(readFileSync("prisma/review-status-enum.sql", "utf8"));
     expect(readFileSync(join(cwd, "challenge.sql"), "utf8")).toBe(readFileSync("prisma/migrations/20261001090000_add_school_challenge/migration.sql", "utf8"));
     expect(readFileSync(join(cwd, "challenge-checked"), "utf8")).toBe("true");
+    expect(readFileSync(join(cwd, "keyword.sql"), "utf8")).toBe(readFileSync("prisma/migrations/20261002060000_add_target_keyword_location/migration.sql", "utf8"));
+    expect(JSON.parse(readFileSync(join(cwd, "keyword-query.json"), "utf8"))).toEqual({ take: 1, include: { rankHistories: { take: 1 }, aioScoreHistories: { take: 1 } } });
     expect(JSON.parse(readFileSync(join(cwd, "transaction.json"), "utf8"))).toEqual({ maxWait: 15000, timeout: 45000 });
     expect(JSON.parse(readFileSync(join(cwd, "query.json"), "utf8"))).toEqual({ where: { source: "GOOGLE", status: { notIn: ["DRAFT", "GENERATED", "ARCHIVED"] } } });
     const url = new URL(JSON.parse(readFileSync(join(cwd, "connection.json"), "utf8")).datasources.db.url);
@@ -74,6 +78,14 @@ describe("production deployment schema gate", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).not.toContain("Prisma query verification completed");
     expect(result.stderr).toContain("alignment failed");
+    expect(readFileSync(join(cwd, "disconnected"), "utf8")).toBe("true");
+  });
+  it("blocks production when a related keyword column is still inconsistent", () => {
+    fakePrisma(false, true);
+    const result = run("production", "postgresql://localhost/test");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("keyword schema still invalid");
+    expect(result.stdout).not.toContain("TargetKeyword schema alignment and Prisma query verification completed");
     expect(readFileSync(join(cwd, "disconnected"), "utf8")).toBe("true");
   });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { isApprovedAccess } from "@/lib/access-control";
 import { canAccessSchool } from "@/lib/auth-access";
 import {
@@ -126,15 +127,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, ...data });
   } catch (error) {
     console.error("[GET /api/dashboard/rankings Error]:", error);
+    const schemaMismatch = error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2022" || error.code === "P2021");
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "ランキングデータを取得できませんでした。",
+        code: schemaMismatch ? "RANKING_SCHEMA_UNAVAILABLE" : "RANKING_FETCH_FAILED",
+        error: schemaMismatch
+          ? "順位データの保存設定に不整合があります。管理者にお問い合わせください。"
+          : "ランキングデータを取得できませんでした。",
       },
-      { status: 500 },
+      { status: schemaMismatch ? 503 : 500 },
     );
   }
 }
