@@ -8,6 +8,9 @@ import { POST as reply } from "@/app/api/gbp/reply/route";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, Review } from "@prisma/client";
 import { reviewFixture } from "@/test/db-fixtures";
+import { resolveRequestAccess } from "@/lib/supabase-access";
+
+const routeState = vi.hoisted(() => ({ schoolId: "school-1" }));
 
 const reviewDb = vi.hoisted(() => ({
   findMany: vi.fn<(args: Prisma.ReviewFindManyArgs) => Promise<Review[]>>(),
@@ -16,19 +19,21 @@ const reviewDb = vi.hoisted(() => ({
 }));
 
 // Only external boundaries are replaced: session identity, PostgreSQL, and Google HTTP.
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("schoolId=school-1") }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams({ schoolId: routeState.schoolId }) }));
 vi.mock("@/lib/supabase", () => ({ createBrowserSupabaseClient: () => ({ auth: { getSession: async () => ({ data: { session: { access_token: "session-token" } } }) } }) }));
 vi.mock("@/lib/supabase-access", async () => ({
   ...await vi.importActual<typeof import("@/lib/supabase-access")>("@/lib/supabase-access"),
-  resolveRequestAccess: async () => ({ isAuthenticated: true, access: {
-    userId: "manager-1", role: "manager", schoolId: "school-1", schoolIds: ["school-1"],
-    status: "active", name: "Manager", email: "manager@example.com", source: "profiles",
-  } }),
+  resolveRequestAccess: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: { review: reviewDb } }));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  routeState.schoolId = "school-1";
+  vi.mocked(resolveRequestAccess).mockResolvedValue({ isAuthenticated: true, access: {
+    userId: "manager-1", role: "manager", schoolId: "school-1", schoolIds: ["school-1"],
+    status: "active", name: "Manager", email: "manager@example.com", source: "profiles",
+  } });
   vi.stubEnv("GOOGLE_CLIENT_ID", "test-client");
   vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-secret");
   for (const level of ["info", "warn", "error"] as const) vi.spyOn(console, level).mockImplementation(() => undefined);
@@ -36,6 +41,54 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("real component -> API -> OAuth/Google -> persistence -> list workflow", () => {
+  function connectListApi() {
+    const network = vi.fn<typeof fetch>(async (url, init) => {
+      expect(String(url)).toMatch(/^\/api\/dashboard\/reviews\?/);
+      return listReviews(new Request(`https://example.com${url}`, init));
+    });
+    vi.stubGlobal("fetch", network);
+    return network;
+  }
+
+  it.each([
+    ["unauthenticated", "ログイン後に口コミ一覧を確認してください。"],
+    ["unapproved", "アカウント承認後に口コミ一覧を確認できます。"],
+    ["other-school", "担当校舎の権限を確認できません。管理者に校舎の割り当てを確認してください。"],
+  ])("shows %s as an access error, not an empty review list", async (scenario, message) => {
+    const identity = await resolveRequestAccess(new Request("https://example.com"), new URL("https://example.com"));
+    if (scenario === "unauthenticated") identity.isAuthenticated = false;
+    if (scenario === "unapproved") identity.access.status = "pending";
+    if (scenario === "other-school") routeState.schoolId = "school-2";
+    vi.mocked(resolveRequestAccess).mockResolvedValue(identity);
+    const network = connectListApi();
+    render(<ReviewsClient />);
+    await screen.findByText(message);
+    expect(screen.queryByText("この校舎の口コミはまだありません。")).toBeNull();
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
+    expect(reviewDb.findMany).not.toHaveBeenCalled();
+    expect(reviewDb.update).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a database failure and recovers through an explicit reload without Google requests", async () => {
+    reviewDb.findMany.mockRejectedValueOnce(new Error("database unavailable"))
+      .mockResolvedValueOnce([reviewFixture({
+        id: "stored-review", schoolId: "school-1", source: "GOOGLE", authorName: "保存済み投稿者",
+        comment: "保存済み本文", aiReplyDraft: "保存済み返信案",
+        school: { name: "対象校舎", schoolSetting: null },
+      })]);
+    const network = connectListApi();
+    render(<ReviewsClient />);
+    await screen.findByText("口コミ一覧を取得できませんでした。");
+    expect(screen.queryByText("この校舎の口コミはまだありません。")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "再読み込み" }));
+    await screen.findByText("保存済み投稿者");
+    expect(screen.queryByText("口コミ一覧を取得できませんでした。")).toBeNull();
+    expect((screen.getByRole("textbox", { name: "AI返信案" }) as HTMLTextAreaElement).value).toBe("保存済み返信案");
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(reviewDb.update).not.toHaveBeenCalled();
+  });
+
   it("renders three stored legacy Google cards and keeps survey drafts in their own tab", async () => {
     const school = { name: "対象校舎", schoolSetting: { selectedGbpLocationId: "locations/100" } };
     const rows = [
