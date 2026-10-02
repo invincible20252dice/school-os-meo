@@ -13,6 +13,7 @@ export default defineConfig({
         "src/app/api/**/*.ts",
         "src/components/dashboard/navigation.ts",
         "src/app/**/reviews/reviews-client.tsx",
+        "src/app/**/rank-tracker/ranking-client.tsx",
         "src/app/**/dashboard/overview-client.tsx",
         "src/app/**/surveys/**/survey-editor.tsx",
         "src/app/**/review-analytics-client.tsx",
@@ -28,6 +29,9 @@ export default defineConfig({
         "src/app/api/**/route.test.ts",
       ],
       thresholds: {
+        "src/app/**/rank-tracker/ranking-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/dashboard-rankings.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/dashboard/rankings/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/challenge-next-actions.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/challenge/next-actions.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/challenge.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },

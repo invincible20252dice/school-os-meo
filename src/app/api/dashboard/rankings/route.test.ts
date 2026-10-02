@@ -20,7 +20,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-vi.mock("@/lib/supabase-access", () => ({
+vi.mock("@/lib/supabase-access", async () => ({
+  ...await vi.importActual<typeof import("@/lib/supabase-access")>("@/lib/supabase-access"),
   resolveRequestAccess: vi.fn(async () => ({
     access: {
       userId: "manager-1",
@@ -33,12 +34,6 @@ vi.mock("@/lib/supabase-access", () => ({
       source: "profiles",
     },
     isAuthenticated: true,
-  })),
-  buildScopedSchoolFilter: vi.fn((_access, schoolId) => ({
-    requestedSchoolId: schoolId,
-    effectiveSchoolId: schoolId || "school-1",
-    role: "manager",
-    canSwitchSchool: false,
   })),
 }));
 
@@ -117,15 +112,11 @@ describe("/api/dashboard/rankings", () => {
     );
   });
 
-  it("loads all ranking data when no school is selected", async () => {
+  it("requires admins to select a school instead of mixing every school's rankings", async () => {
     const { prisma } = await import("@/lib/prisma");
     const access = await import("@/lib/supabase-access");
-    vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
-      requestedSchoolId: "",
-      effectiveSchoolId: undefined,
-      role: "admin",
-      canSwitchSchool: true,
-    });
+    const identity = await access.resolveRequestAccess(new Request("https://example.com"), new URL("https://example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...identity, access: { ...identity.access, role: "admin" } });
     const { GET } = await import("./route");
 
     const response = await GET(
@@ -133,14 +124,42 @@ describe("/api/dashboard/rankings", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.success).toBe(true);
+    expect(response.status).toBe(400);
+    expect(body.success).toBe(false);
     expect(prisma.school.findUnique).not.toHaveBeenCalled();
-    expect(prisma.targetKeyword.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: undefined,
-      }),
-    );
+    expect(prisma.targetKeyword.findMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["GET", "POST"])("rejects unauthenticated %s before DB access", async method => {
+    const access = await import("@/lib/supabase-access");
+    const identity = await access.resolveRequestAccess(new Request("https://example.com"), new URL("https://example.com"));
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({ ...identity, isAuthenticated: false });
+    const routes = await import("./route");
+    const response = await (method === "GET" ? routes.GET : routes.POST)(new Request("https://example.com/api/dashboard/rankings", { method, ...(method === "POST" ? { body: JSON.stringify({ schoolId: "school-1", keyword: "test" }) } : {}) }));
+    expect(response.status).toBe(401);
+    expect(findKeywords).not.toHaveBeenCalled();
+    expect(createKeyword).not.toHaveBeenCalled();
+  });
+
+  it.each(["GET", "POST"])("rejects another school's %s request using real scope logic", async method => {
+    const routes = await import("./route");
+    const response = await (method === "GET" ? routes.GET : routes.POST)(new Request("https://example.com/api/dashboard/rankings?schoolId=other-school", { method, ...(method === "POST" ? { body: JSON.stringify({ schoolId: "other-school", keyword: "test" }) } : {}) }));
+    expect(response.status).toBe(403);
+    expect(findKeywords).not.toHaveBeenCalled();
+    expect(createKeyword).not.toHaveBeenCalled();
+  });
+
+  it("supports the ranking alias and returns 404 for an unknown keyword", async () => {
+    const { GET } = await import("../keywords/ranking/route");
+    const response = await GET(new Request("https://example.com/api/dashboard/keywords/ranking?schoolId=school-1&keywordId=unknown"));
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 for an unknown school", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.school.findUnique).mockResolvedValueOnce(null);
+    const { GET } = await import("./route");
+    expect((await GET(new Request("https://example.com/api/dashboard/rankings?schoolId=school-1"))).status).toBe(404);
   });
 
   it("creates a keyword with explicit location parameters", async () => {

@@ -1,7 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { buildDashboardRankingData } from "./dashboard-rankings";
+import { buildDashboardRankingData, type DashboardTargetKeywordRecord } from "./dashboard-rankings";
+
+const baseKeyword: DashboardTargetKeywordRecord = {
+  id: "k1", schoolId: "s1", keyword: "対象語句", location: "計測地点", nearestStation: "駅",
+  municipality: "市", radiusMeters: 1500, isActive: true, createdAt: "2026-10-01",
+};
 
 describe("dashboard-rankings", () => {
+  it("preserves latest out-of-range results, derives previous rank from history and sorts dates", () => {
+    const data = buildDashboardRankingData({ school: null, keywords: [{ ...baseKeyword, rankHistories: [
+      { id: "old", rank: 5, checkedAt: "2026-09-29" },
+      { id: "new", rank: null, checkedAt: "2026-10-02", competitorData: [] },
+    ] }], keywordRanks: [{ id: "legacy", schoolId: "s1", keyword: "対象語句", searchArea: "計測地点", rank: 1, previousRank: 2, measuredAt: "2026-09-01", competitorData: [{ name: "古い競合" }] }] });
+    expect(data.currentRank).toBeNull();
+    expect(data.previousRank).toBe(5);
+    expect(data.measuredAt).toBe("2026-10-02T00:00:00.000Z");
+    expect(data.history).toEqual([{ date: "2026-09-29", rank: 5 }, { date: "2026-10-02", rank: null }]);
+    expect(data.competitors).toEqual([]);
+  });
+
+  it("isolates the selected keyword and distinguishes absent measurements from out-of-range", () => {
+    const keywords = [{ ...baseKeyword, rankHistories: [{ id: "r1", rank: 1, checkedAt: "2026-10-02" }] }, { ...baseKeyword, id: "k2", keyword: "別語句", latitude: null, longitude: null, rankHistories: [] }];
+    const data = buildDashboardRankingData({ school: null, keywords, keywordId: "k2", keywordRanks: [
+      { id: "other-school", schoolId: "other", keyword: "別語句", searchArea: "計測地点", rank: 2, previousRank: 3, measuredAt: "2026-10-02" },
+      { id: "other-location", schoolId: "s1", keyword: "別語句", searchArea: "別地点", rank: 3, previousRank: 4, measuredAt: "2026-10-02" },
+    ] });
+    expect(data.currentKeyword).toBe("別語句");
+    expect(data.currentRank).toBeNull();
+    expect(data.measuredAt).toBeNull();
+    expect(data.history).toEqual([]);
+    expect(data.selectedKeyword?.latitude).toBeUndefined();
+    expect(buildDashboardRankingData({ school: null, keywords, keywordId: "unknown" }).selectedKeyword).toBeNull();
+  });
+
+  it("reads matching legacy measurements when the relation is an empty array", () => {
+    const data = buildDashboardRankingData({ school: null, keywords: [{ ...baseKeyword, rankHistories: [] }], keywordRanks: [
+      { id: "old", schoolId: "s1", keyword: "対象語句", searchArea: "計測地点", rank: 7, previousRank: 8, measuredAt: "2026-09-30" },
+      { id: "new", schoolId: "s1", keyword: "対象語句", searchArea: "計測地点", rank: 4, previousRank: 7, measuredAt: "2026-10-01" },
+    ] });
+    expect(data.currentRank).toBe(4);
+    expect(data.previousRank).toBe(7);
+    expect(data.history.map(row => row.rank)).toEqual([7, 4]);
+  });
   it("builds ranking and AIO dashboard data from TargetKeyword records", () => {
     const checkedAt = new Date("2026-08-29T01:00:00.000Z");
     const data = buildDashboardRankingData({
@@ -220,10 +260,7 @@ describe("dashboard-rankings", () => {
       reviewCount: 2,
       isOwnSchool: true,
     });
-    expect(data.competitors[1]).toMatchObject({
-      name: "競合 2",
-      rank: 2,
-    });
+    expect(data.competitors).toHaveLength(1);
     expect(data.aio.keywordRows[0].status).toBe("未言及");
     expect(data.aio.mentions.gemini).toBe("Geminiの回答");
   });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isApprovedAccess } from "@/lib/access-control";
+import { canAccessSchool } from "@/lib/auth-access";
 import {
   buildDashboardRankingData,
   type DashboardKeywordRankRecord,
@@ -51,7 +52,7 @@ function normalizeRadius(value: unknown) {
   return Math.min(50000, Math.max(100, Math.trunc(parsed)));
 }
 
-async function loadRankingData(schoolId?: string) {
+async function loadRankingData(schoolId: string, keywordId?: string) {
   const school = schoolId
     ? await prisma.school.findUnique({
         where: { id: schoolId },
@@ -89,6 +90,7 @@ async function loadRankingData(schoolId?: string) {
     school: school as DashboardSchoolRecord | null,
     keywords: keywords as DashboardTargetKeywordRecord[],
     keywordRanks: keywordRanks as DashboardKeywordRankRecord[],
+    keywordId,
   });
 }
 
@@ -96,6 +98,8 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const accessResult = await resolveRequestAccess(request, url);
+
+    if (!accessResult.isAuthenticated) return NextResponse.json({ success: false, error: "ログイン後に順位データを確認してください。" }, { status: 401 });
 
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
@@ -108,7 +112,16 @@ export async function GET(request: Request) {
       accessResult.access,
       url.searchParams.get("schoolId"),
     );
-    const data = await loadRankingData(scopedSchool.effectiveSchoolId);
+    const schoolId = scopedSchool.effectiveSchoolId;
+    const requested = url.searchParams.get("schoolId");
+    if ((requested && requested !== "all" && !canAccessSchool(accessResult.access, requested)) ||
+      (schoolId && !canAccessSchool(accessResult.access, schoolId))) {
+      return NextResponse.json({ success: false, error: "この校舎の閲覧権限がありません。" }, { status: 403 });
+    }
+    if (!schoolId) return NextResponse.json({ success: false, error: "校舎を選択してください。" }, { status: 400 });
+    const keywordId = url.searchParams.get("keywordId") || undefined;
+    const data = await loadRankingData(schoolId, keywordId);
+    if (!data.school || (keywordId && !data.selectedKeyword)) return NextResponse.json({ success: false, error: "校舎またはキーワードが見つかりません。" }, { status: 404 });
 
     return NextResponse.json({ success: true, ...data });
   } catch (error) {
@@ -132,6 +145,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CreateKeywordBody;
     const accessResult = await resolveRequestAccess(request, url);
 
+    if (!accessResult.isAuthenticated) return NextResponse.json({ success: false, error: "ログイン後にキーワードを追加してください。" }, { status: 401 });
+
     if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         { success: false, error: "アカウント承認後にキーワードを追加できます。" },
@@ -146,6 +161,11 @@ export async function POST(request: Request) {
       requestedSchoolId,
     );
     const schoolId = scopedSchool.effectiveSchoolId;
+
+    if ((requestedSchoolId && requestedSchoolId !== "all" && !canAccessSchool(accessResult.access, requestedSchoolId)) ||
+      (schoolId && !canAccessSchool(accessResult.access, schoolId))) {
+      return NextResponse.json({ success: false, error: "この校舎の編集権限がありません。" }, { status: 403 });
+    }
 
     if (!schoolId || !keyword) {
       return NextResponse.json(

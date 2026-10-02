@@ -105,6 +105,8 @@ export type DashboardRankingData = {
   keywords: DashboardRankingKeyword[];
   rankingLogs: DashboardRankingLog[];
   currentKeyword: string;
+  selectedKeyword: DashboardRankingKeyword | null;
+  measuredAt: string | null;
   currentRank: number | null;
   previousRank: number | null;
   searchLabel: string;
@@ -141,6 +143,7 @@ function text(value: unknown) {
 }
 
 function numeric(value: unknown) {
+  if (value === null || value === undefined || value === "") return undefined;
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
@@ -161,14 +164,14 @@ function numeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function dateLabel(value: Date | string | undefined) {
+function dateLabel(value: Date | string | undefined, full = false) {
   const date = value instanceof Date ? value : value ? new Date(value) : null;
 
   if (!date || Number.isNaN(date.getTime())) {
     return "";
   }
 
-  return date.toISOString().slice(0, 10);
+  return full ? date.toISOString() : date.toISOString().slice(0, 10);
 }
 
 function fullAddress(school: DashboardSchoolRecord | null) {
@@ -181,12 +184,13 @@ function fullAddress(school: DashboardSchoolRecord | null) {
 function normalizeCompetitorData(value: unknown, school: DashboardSchoolRecord | null) {
   const items = Array.isArray(value) ? value : [];
 
-  return items.slice(0, 20).map((item, index) => {
+  return items.slice(0, 20).flatMap((item, index) => {
     const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-    const name = text(row.name) || text(row.title) || `競合 ${index + 1}`;
+    const name = text(row.name) || text(row.title);
+    if (!name) return [];
     const placeId = text(row.placeId) || text(row.googlePlaceId);
 
-    return {
+    return [{
       rank: numeric(row.rank) ?? index + 1,
       name,
       rating: numeric(row.rating) ?? null,
@@ -195,7 +199,7 @@ function normalizeCompetitorData(value: unknown, school: DashboardSchoolRecord |
       isOwnSchool:
         Boolean(placeId && school?.googlePlaceId && placeId === school.googlePlaceId) ||
         Boolean(school?.name && name === school.name),
-    };
+    }];
   });
 }
 
@@ -257,10 +261,12 @@ export function buildDashboardRankingData({
   school,
   keywords,
   keywordRanks = [],
+  keywordId,
 }: {
   school: DashboardSchoolRecord | null;
   keywords: DashboardTargetKeywordRecord[];
   keywordRanks?: DashboardKeywordRankRecord[];
+  keywordId?: string;
 }): DashboardRankingData {
   const activeKeywords = keywords.filter((keyword) => keyword.isActive);
   const normalizedKeywords = activeKeywords.map((keyword) => ({
@@ -274,16 +280,23 @@ export function buildDashboardRankingData({
     radiusMeters: keyword.radiusMeters,
     isActive: keyword.isActive,
   }));
-  const currentKeyword = activeKeywords[0];
-  const latestRankHistory = currentKeyword?.rankHistories?.[0] || null;
-  const latestKeywordRank =
-    keywordRanks.find((rank) => rank.keyword === currentKeyword?.keyword) || null;
-  const currentRank = latestRankHistory?.rank ?? latestKeywordRank?.rank ?? null;
-  const previousRank = latestKeywordRank?.previousRank ?? null;
-  const history = currentKeyword?.rankHistories?.slice(0, 7).reverse().map((rank) => ({
+  const currentKeyword = keywordId ? activeKeywords.find(keyword => keyword.id === keywordId) : activeKeywords[0];
+  const rankHistories = [...(currentKeyword?.rankHistories || [])].sort((a, b) =>
+    new Date(b.checkedAt!).getTime() - new Date(a.checkedAt!).getTime());
+  const matchingLegacyRanks = keywordRanks.filter(rank => currentKeyword &&
+    rank.schoolId === currentKeyword.schoolId && rank.keyword === currentKeyword.keyword &&
+    rank.searchArea === currentKeyword.location).sort((a, b) =>
+    new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
+  const latestRankHistory = rankHistories[0];
+  const latestKeywordRank = matchingLegacyRanks[0];
+  // A measured null rank means out of range; it must not revive an older ranked result.
+  const currentRank = latestRankHistory ? latestRankHistory.rank : latestKeywordRank?.rank ?? null;
+  const previousRank = latestRankHistory ? rankHistories[1]?.rank ?? null : latestKeywordRank?.previousRank ?? null;
+  const measuredAt = latestRankHistory ? dateLabel(latestRankHistory.checkedAt, true) : latestKeywordRank ? dateLabel(latestKeywordRank.measuredAt, true) : null;
+  const history = rankHistories.length ? rankHistories.slice(0, 7).reverse().map((rank) => ({
     date: dateLabel(rank.checkedAt),
     rank: rank.rank,
-  })) ?? keywordRanks.slice(0, 7).reverse().map((rank) => ({
+  })) : matchingLegacyRanks.slice(0, 7).reverse().map((rank) => ({
     date: dateLabel(rank.measuredAt),
     rank: rank.rank,
   }));
@@ -309,7 +322,7 @@ export function buildDashboardRankingData({
   ].slice(0, 20);
   const competitors =
     normalizeCompetitorData(
-      latestRankHistory?.competitorData || latestKeywordRank?.competitorData,
+      latestRankHistory ? latestRankHistory.competitorData : latestKeywordRank?.competitorData,
       school,
     );
   const aioRows = activeKeywords.map((keyword) => {
@@ -357,6 +370,8 @@ export function buildDashboardRankingData({
     keywords: normalizedKeywords,
     rankingLogs: latestLogRecords,
     currentKeyword: currentKeyword?.keyword || "",
+    selectedKeyword: normalizedKeywords.find(keyword => keyword.id === currentKeyword?.id) || null,
+    measuredAt,
     currentRank,
     previousRank,
     searchLabel: safeRankSearchLabel(currentKeyword),
