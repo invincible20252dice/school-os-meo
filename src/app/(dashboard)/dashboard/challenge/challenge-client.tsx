@@ -9,6 +9,8 @@ import { challengeStatuses, missions, remainingChecks, statusLabels, type Challe
 import styles from "./page.module.css";
 import { DayCards, DayDetail, OverallProgress } from "./day-detail";
 import { ActionPanel, ChallengeGoal } from "./next-actions";
+import { deriveJourney, fieldAnchor } from "@/lib/challenge-journey";
+import { Journey } from "./journey";
 
 export type ChallengeView = {
   success: true; school: { id: string; name: string; phoneNumber: string | null; addressLine: string | null; websiteUrl: string | null };
@@ -27,28 +29,29 @@ function MissionForm({ progress, data, save, busy, notice }: { progress: Mission
   const [evidence, setEvidence] = useState<Evidence>(progress.evidence);
   const [note, setNote] = useState(progress.note);
   const [status, setStatus] = useState<ChallengeStatus>(progress.status === "NOT_STARTED" ? "IN_PROGRESS" : progress.status);
+  const noteRequired = status === "WAITING" || status === "DEFERRED" || status === "COMPLETED" && (mission.day !== 1 || Object.values(evidence).some(v => v === "要改善" || v === "後で対応"));
   return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status }); }}>
     <h3>実行記録</h3>
     <p className={styles.muted}>記録区分：手動申告 / 目安 {mission.minutes}分</p>
     {mission.day === 1 ? <p>全項目に回答し、最優先・重要項目を「はい」または「修正済み」にすると完了できます。残課題がある場合は理由を記録してください。全項目達成時の理由は任意です。</p> : null}
-    {mission.day === 1 ? <div className={styles.facts}>
+    {mission.day === 1 ? <details className={styles.details}><summary>登録済み基本情報を見る</summary><div className={styles.facts}>
       <h3>登録済み基本情報</h3>
       <ul>{[{ label: "電話番号", value: data.school.phoneNumber }, { label: "住所", value: data.school.addressLine }, { label: "Webサイト", value: data.school.websiteUrl }].map(item => <li key={item.label}>{item.label}：{item.value || "DB未設定"}（Google上の内容は手動確認）</li>)}</ul>
-    </div> : null}
+    </div></details> : null}
     {mission.day === 4 ? <p>追加依頼目標：{data.document!.additionalTarget}名 / DB内の未対応口コミ：{display(data.snapshot.reviews?.pending)}</p> : null}
     {mission.day === 3 ? <p>今回の依頼目標：{data.document!.requestTarget?.count ?? 10}名。0名の場合も実際の確認を行い、依頼人数0と確認内容を記録してください。</p> : null}
     {mission.day === 6 ? <div className={styles.facts}>{data.snapshot.comparisons?.length ? data.snapshot.comparisons.map(c => <div key={c.id}><h3>{c.keyword}</h3><p>計測：{c.at} / ID：{c.id}</p><ul>{c.competitors.map((row, i) => <li key={i}>{row.name} / 評価 {display(row.rating, "")} / 口コミ {display(row.reviewCount)}</li>)}</ul></div>) : <p>保存済み競合データがありません。順位計測・設定を確認してください。</p>}</div> : null}
     <div className={styles.links}>{mission.links.map(link => <Link key={link.path} href={scopedHref(link.path, data.school.id)}>{link.label} →</Link>)}</div>
     <fieldset disabled={busy}>
-      {mission.fields.map(field => field.question ? <fieldset className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div></fieldset> : <label key={field.key}>{field.label}
+      {mission.fields.map(field => field.question ? <fieldset id={fieldAnchor(mission.day, field.key)} tabIndex={-1} className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div></fieldset> : <label id={fieldAnchor(mission.day, field.key)} tabIndex={-1} key={field.key}>{field.label}
         {field.type === "select" ? <select aria-label={field.label} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">未確認</option>{field.options!.map(option => <option key={option}>{option}</option>)}
         </select> : field.key === "comparisonId" ? <select value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">計測を選択</option>{data.snapshot.comparisons?.map(c => <option key={c.id} value={c.id}>{c.keyword} / {c.at}</option>)}
         </select> : <input type={field.type === "number" ? "number" : "text"} min={0} max={10000} maxLength={2000} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: field.type === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))} />}
       </label>)}
-      <label>実行記録・残課題の理由<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label>
-      <label>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label>
+      <details className={styles.details} open={noteRequired || undefined}><summary>{noteRequired ? "メモ・確認内容を記録（この状態での保存に必要）" : note ? "メモを確認・編集" : "メモを追加する（任意）"}</summary><label>実行記録・残課題の理由<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label></details>
+      <label id={fieldAnchor(mission.day, "status")} tabIndex={-1}>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label>
       <button type="submit">実行記録を保存</button>
     </fieldset>
     {notice ? <p role="status" className={styles.notice}>{notice}</p> : null}
@@ -83,8 +86,10 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [savedDay, setSavedDay] = useState<{ schoolId: string; day: number } | null>(null);
+  const [taskTarget, setTaskTarget] = useState<{ schoolId: string; day: number; key: string; urlDay: number } | null>(null);
   const epoch = useRef(0);
   const saving = useRef(false);
+  useEffect(() => { setTaskTarget(null); }, [schoolId, day]);
   useEffect(() => {
     const controller = new AbortController();
     const generation = ++epoch.current;
@@ -131,7 +136,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
         setNotice("実行記録を保存しました。");
       }
     } catch (error) {
-      if (generation === epoch.current) setNotice(persisted ? "保存は完了しましたが、最新状態を取得できませんでした。「再取得」で確認してください。" : error instanceof Error ? error.message : "保存できませんでした。");
+      if (generation === epoch.current) setNotice(persisted ? "保存は完了しましたが、最新状態を取得できませんでした。「最新データに更新」で確認してください。" : error instanceof Error ? error.message : "保存できませんでした。");
     } finally {
       if (generation === epoch.current) { saving.current = false; setBusy(false); }
     }
@@ -145,33 +150,47 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
   }
   const doc = data?.document;
   const completed = doc?.missions.filter(m => m.status === "COMPLETED").length ?? 0;
-  const recommended = doc?.missions.find(m => m.status !== "COMPLETED" && m.status !== "DEFERRED") ?? doc?.missions.find(m => m.status !== "COMPLETED");
-  const selected = doc?.missions.find(m => m.day === (day || (savedDay?.schoolId === schoolId ? savedDay.day : 0))) ?? recommended;
+  const activeTarget = taskTarget?.schoolId === schoolId && taskTarget.urlDay === day ? taskTarget : null;
+  const journey = doc && data ? deriveJourney(doc, data.snapshot, activeTarget?.day || day || (savedDay?.schoolId === schoolId ? savedDay.day : 0)) : null;
+  const selected = journey?.viewingDay;
+  useEffect(() => {
+    if (!activeTarget) return;
+    const element = document.getElementById(fieldAnchor(activeTarget.day, activeTarget.key));
+    if (!element) return;
+    element.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+    element.focus({ preventScroll: true });
+    element.classList.add(styles.taskHighlight);
+    const timer = window.setTimeout(() => element.classList.remove(styles.taskHighlight), 2500);
+    return () => { window.clearTimeout(timer); element.classList.remove(styles.taskHighlight); };
+  }, [activeTarget]);
   const href = (path: string) => scopedHref(path, schoolId);
   return <main className={styles.page}>
-    <header><p className={styles.kicker}>集客チャレンジ</p><h1>{weekly ? "今週のアクション" : "7日間チャレンジ"}</h1><p>導入後7日以内に、Google経由の新規問い合わせ1件を目指す</p>{data ? <p>{data.school.name}</p> : null}</header>
-    <nav className={styles.tabs}><Link aria-current={!weekly ? "page" : undefined} href={href("/dashboard/challenge")}>7日間チャレンジ</Link><Link aria-current={weekly ? "page" : undefined} href={href("/dashboard/challenge/weekly")}>今週のアクション</Link><button type="button" disabled={busy} onClick={() => setRetry(v => v + 1)}>再取得</button></nav>
-    {current?.error ? <p role="alert" className={styles.error}>{current.error}</p> : !data ? <p role="status">集客チャレンジを読み込んでいます。</p> : null}
+    <header className={styles.pageHeader}><h1>{weekly ? "今週のアクション" : "7日間チャレンジ"}</h1><p>Googleからの問い合わせを増やす7日間の改善プログラム</p>{data ? <small>{data.school.name}</small> : null}</header>
+    <nav className={styles.tabs}><Link aria-current={!weekly ? "page" : undefined} href={href("/dashboard/challenge")}>7日間チャレンジ</Link><Link aria-current={weekly ? "page" : undefined} href={href("/dashboard/challenge/weekly")}>今週のアクション</Link><button type="button" disabled={busy} onClick={() => setRetry(v => v + 1)}>最新データに更新</button></nav>
+    {current?.error ? <p role="alert" className={styles.error}>{current.error}</p> : !data ? <p className={styles.loading} role="status">今日やることを確認しています…</p> : null}
     {notice && (weekly || !selected) ? <p role="status" className={styles.notice}>{notice}</p> : null}
     {data ? <>
-      {data.snapshot.errors.length ? <details role="alert" className={styles.warning}><summary>一部データを取得できませんでした（{data.snapshot.errors.length}件）</summary><ul>{data.snapshot.errors.map(error => <li key={error}>{error}</li>)}</ul><p>利用できるDAYは引き続き実行できます。「再取得」で保存済みデータを再確認してください。</p></details> : null}
+      {!weekly && doc ? <Journey doc={doc} snapshot={data.snapshot} viewingDay={selected?.day ?? 0} schoolId={schoolId} onTask={(targetDay, key) => setTaskTarget({ schoolId, day: targetDay, key, urlDay: day })} /> : null}
+      {data.snapshot.errors.length ? <details className={styles.warning}><summary>一部データ未取得（{data.snapshot.errors.length}件）</summary><ul>{data.snapshot.errors.map(error => <li key={error}>{error}</li>)}</ul><p>利用できるDAYは引き続き実行できます。「最新データに更新」で再確認してください。</p></details> : null}
+      <details className={styles.details}><summary>連携状況・取得情報</summary>
       <p className={styles.muted}>最終取得：{data.snapshot.at} / 再取得対象：DB内の進捗・連携設定・口コミ・投稿・競合計測</p>
       <p className={styles.muted}>Google連携：{data.snapshot.google === null ? "取得失敗" : data.snapshot.google ? "設定済み" : "未連携"} / Instagram：{data.snapshot.instagram === null ? "取得失敗" : data.snapshot.instagram ? "設定済み" : "未連携"}</p>
       {data.snapshot.google === false ? <Link href={href("/dashboard/settings/google")}>Googleアカウントを連携する →</Link> : null}
       {data.snapshot.instagram === false ? <Link className={styles.connectionLink} href={href("/dashboard/settings/instagram")}>Instagramを連携する →</Link> : null}
+      </details>
       {!doc ? <><form id="challenge-start" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "start", additionalTarget: target }); }}><h2>7つのミッションを始める</h2><p>同じ日に複数のミッションへ進めます。成果の件数と、行動の完了は別に記録します。</p><label>DAY4の追加依頼目標人数<input type="number" min={1} max={10000} required value={target} onChange={e => setTarget(Number(e.target.value))} disabled={busy} /></label><p>DAY3は10名、DAY4は別の{target}名へ依頼します。</p><button disabled={busy}>チャレンジを開始</button></form><DayCards doc={null} snapshot={data.snapshot} schoolId={schoolId} /></> : <>
-        <ChallengeGoal doc={doc} snapshot={data.snapshot} />
-        <ActionPanel doc={doc} snapshot={data.snapshot} schoolId={schoolId} day={day || undefined} weekly={weekly} save={save} busy={busy} />
-        <details key={`overview-${day}-${weekly}`} open={!day || weekly} className={styles.details}><summary>全体・DAY別の進捗一覧</summary><OverallProgress doc={doc} snapshot={data.snapshot} schoolId={schoolId} />
+        {weekly ? <><ChallengeGoal doc={doc} snapshot={data.snapshot} /><ActionPanel doc={doc} snapshot={data.snapshot} schoolId={schoolId} day={day || undefined} weekly save={save} busy={busy} /></> : null}
+        <details key={`overview-${day}-${weekly}`} open={weekly} className={styles.details}><summary>全体・DAY別の進捗一覧</summary>{weekly ? <OverallProgress doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : <p>7つのDAYのうち{completed}つ完了</p>}
         <section className={styles.progress}><p>開始：{doc.startedAt.slice(0, 10)} / 要改善・後日対応の残項目：{remainingChecks(doc).length}件</p>
           {completed === 7 ? <><h2>7つの実行記録がそろいました</h2><p>問い合わせの獲得を保証するものではありません。残課題は引き続き今週のアクションで確認できます。</p><Link href={href("/dashboard/challenge/weekly")}>今週のアクションへ →</Link></> : null}
         </section>
-        {!weekly ? <DayCards doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : null}</details>
+        {!weekly ? <DayCards compact doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : null}</details>
         {weekly ? <section className={styles.grid}>{data.actions.length ? data.actions.map(action => <WeeklyRecord key={`${data.version}-${action.key}`} action={action} data={data} save={save} busy={busy} />) : <p>現在、記録が必要なアクションはありません。</p>}</section> : <>
-          {selected ? <DayDetail actionsProvided day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} notice={notice} /></DayDetail> : null}
+          {selected && journey?.currentDay && selected.day !== journey.currentDay.day ? <p className={styles.viewing}>DAY{selected.day}を閲覧しています。現在取り組むDAYはDAY{journey.currentDay.day}です。<Link href={href(`/dashboard/challenge?day=${journey.currentDay.day}`)}>現在のDAYに戻る →</Link></p> : null}
+          {selected ? <DayDetail compact actionsProvided day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} notice={notice} /></DayDetail> : null}
           {(selected?.day === 3 || selected?.day === 4) ? <section className={styles.form}><h2>口コミアンケートの依頼</h2>{data.surveys?.length ? data.surveys.map(s => <p key={s.id}>{s.title} <button type="button" onClick={() => void copyRequest(s)}>依頼文・URLをコピー</button></p>) : <p>有効なアンケートがありません。アンケート設定を確認してください。</p>}</section> : null}
         </>}
-        <section className={styles.metrics}><h2>実行と成果</h2><p>計測期間：{doc.startedAt} ～ {data.snapshot.at}</p><p className={styles.muted}>口コミ・投稿はDB保存分。Googleの全件取得・公開を保証する集計ではありません。</p>
+        <details className={styles.details}><summary>実行と成果・問い合わせ記録</summary>{!weekly ? <ChallengeGoal doc={doc} snapshot={data.snapshot} /> : null}<section className={styles.metrics}><h2>実行と成果</h2><p>計測期間：{doc.startedAt} ～ {data.snapshot.at}</p><p className={styles.muted}>口コミ・投稿はDB保存分。Googleの全件取得・公開を保証する集計ではありません。</p>
           <dl><dt>保存済みGoogle口コミ（開始 → 現在）</dt><dd>{display(doc.baseline.reviews?.count)} → {display(data.snapshot.reviews?.count)}</dd>
             <dt>平均評価（開始 → 現在）</dt><dd>{display(doc.baseline.reviews?.rating, "")} → {display(data.snapshot.reviews?.rating, "")}</dd>
             <dt>返信記録率（開始 → 現在）</dt><dd>{display(doc.baseline.reviews?.replyRate, "%")} → {display(data.snapshot.reviews?.replyRate, "%")}</dd>
@@ -181,10 +200,11 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
             <dt>依頼人数（手動申告）</dt><dd>DAY3：{display(doc.missions[2].evidence.requested === undefined ? null : Number(doc.missions[2].evidence.requested), "名")} / DAY4：{display(doc.missions[3].evidence.requested === undefined ? null : Number(doc.missions[3].evidence.requested), "名")}</dd>
             <dt>回答率・口コミ転換率</dt><dd>未計測（依頼と回答者の対応付けなし）</dd>
             <dt>Google経由の実問い合わせ（手動申告）</dt><dd>{display(doc.inquiries?.google)}</dd>
-            <dt>写真・38項目診断スコア</dt><dd>未計測 / 写真カテゴリはDAY2の手動確認</dd></dl>
+            <dt>写真・診断スコア</dt><dd>未計測 / 写真カテゴリはDAY2の手動確認</dd></dl>
           {doc.after ? <p>完了時スナップショット保存：{doc.after.at} / 口コミ {display(doc.after.reviews?.count)} / 同期投稿 {display(doc.after.posts?.count)}</p> : null}
         </section>
         <InquiryForm key={`${schoolId}-${data.version}-inquiry`} doc={doc} save={save} busy={busy} />
+        </details>
       </>}
     </> : null}
   </main>;

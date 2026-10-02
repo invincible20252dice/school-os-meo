@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { missions, type ChallengeDocument, type Snapshot } from "@/lib/challenge";
 import { challengeProgress, checkLabels, dayProgress, fieldProgress, formatMetric, metricChange, priorityLabels, type DayProgress, type ProgressItem } from "@/lib/challenge-progress";
 import styles from "./page.module.css";
+import { dayChecks, dayTitle } from "@/lib/challenge-journey";
 
 export function challengeHref(path: string, schoolId: string) {
   return `${path}${path.includes("?") ? "&" : "?"}schoolId=${encodeURIComponent(schoolId)}`;
@@ -12,10 +13,19 @@ export function challengeHref(path: string, schoolId: string) {
 export function ProgressMeter({ progress, label }: { progress: Pick<DayProgress, "percent" | "done" | "total" | "unit" | "remaining">; label: string }) {
   return <div className={styles.meter}><span>{label}</span><strong>{progress.percent}%</strong><progress aria-label={label} value={progress.percent} max={100} /><p>{progress.done} / {progress.total}{progress.unit} <span className={styles.muted}>{progress.remaining ? `あと${progress.remaining}${progress.unit}` : "目標数に到達"}</span></p></div>;
 }
-export function DayCards({ doc, snapshot, schoolId }: { doc: ChallengeDocument | null; snapshot: Snapshot; schoolId: string }) {
+export function DayCards({ doc, snapshot, schoolId, compact = false }: { doc: ChallengeDocument | null; snapshot: Snapshot; schoolId: string; compact?: boolean }) {
   return <section className={styles.grid} aria-label="7つのミッション">{missions.map(mission => {
     const saved = doc?.missions.find(m => m.day === mission.day);
     const progress = saved && doc ? dayProgress(saved, doc.additionalTarget, snapshot, doc.requestTarget?.count) : null;
+    if (compact) {
+      const current = doc?.missions.find(m => m.status !== "COMPLETED")?.day === mission.day;
+      const checks = saved && doc ? dayChecks(doc, saved, snapshot) : [];
+      const done = checks.filter(c => c.state === "GOOD").length;
+      return <article className={styles.card} key={mission.day}><span className={styles.kicker}>DAY{mission.day}</span><h2>{dayTitle(mission.day)}</h2>
+        <span className={styles.badge}>{progress?.cleared ? "✓ 完了" : current ? "今日" : saved?.status === "DEFERRED" ? "あとで対応あり" : saved?.status === "WAITING" ? "確認待ち" : saved?.status === "IN_PROGRESS" ? "対応中" : "未着手"}</span>
+        {checks.length > 0 ? <p>{done} / {checks.length} 項目確認済み{done < checks.length ? <small> / あと{checks.length - done}項目を確認</small> : null}</p> : null}
+        <small>約{mission.minutes}分</small><Link href={doc ? challengeHref(`/dashboard/challenge?day=${mission.day}`, schoolId) : "#challenge-start"}>{progress?.cleared ? "達成内容を見る" : current ? "続きから" : "内容を見る"} →</Link></article>;
+    }
     return <article className={styles.card} key={mission.day}>
       <span className={styles.kicker}>DAY{mission.day}</span><h2>{mission.title}</h2>
       <span className={styles.badge}>{progress?.cleared ? "CLEAR" : saved?.status === "WAITING" ? "確認待ち" : saved?.status === "DEFERRED" ? "あとで対応" : saved && saved.status !== "NOT_STARTED" ? "進行中" : "未着手"}</span>
@@ -46,14 +56,22 @@ export function OutcomeMetrics({ day, doc, snapshot }: { day: number; doc: Chall
   </dl></section>;
 }
 export function DiagnosticDetails({ doc }: { doc: ChallengeDocument }) {
-  return <details className={styles.details}><summary>確認項目の詳細を見る</summary><p>現在のミッション定義と保存済み手動記録です。38項目の自動診断マスタは未実装のため、診断スコアは表示しません。</p><div className={styles.tableScroll}><table><thead><tr><th>DAY</th><th>確認項目</th><th>現在の記録</th><th>状態</th><th>重要度</th><th>判定方式</th></tr></thead><tbody>{missions.flatMap(m => m.fields.map(field => {
+  return <details className={styles.details}><summary>確認項目の詳細を見る</summary><p>現在のミッション定義と保存済み手動記録です。自動診断スコアではありません。</p><div className={styles.tableScroll}><table><thead><tr><th>DAY</th><th>確認項目</th><th>現在の記録</th><th>状態</th><th>重要度</th><th>判定方式</th></tr></thead><tbody>{missions.flatMap(m => m.fields.map(field => {
     const item = fieldProgress(field, doc.missions[m.day - 1]);
     return <tr key={`${m.day}-${field.key}`}><td>{m.day}</td><td>{field.label}</td><td>{item.value}</td><td>{item.deferred ? "あとで対応" : item.state === "GOOD" ? "記録済み" : checkLabels[item.state]}</td><td>{item.priority}</td><td>手動記録</td></tr>;
   }))}</tbody></table></div></details>;
 }
-export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvided = false }: { day: number; doc: ChallengeDocument; snapshot: Snapshot; schoolId: string; children: ReactNode; actionsProvided?: boolean }) {
+export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvided = false, compact = false }: { day: number; doc: ChallengeDocument; snapshot: Snapshot; schoolId: string; children: ReactNode; actionsProvided?: boolean; compact?: boolean }) {
   const mission = missions[day - 1];
   const progress = dayProgress(doc.missions[day - 1], doc.additionalTarget, snapshot, doc.requestTarget?.count);
+  if (compact) return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
+    <header><p className={styles.kicker}>閲覧中：DAY{day}</p><h2>{dayTitle(day)}</h2></header>
+    {progress.cleared ? <div className={styles.notice}><h3>✓ DAY{day} 完了</h3><p>完了の実行記録を保存済みです。残課題は別に確認できます。</p></div> : null}
+    {children}
+    <details className={styles.details}><summary>このDAYの成果・達成率を見る</summary><ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} /><p>項目の達成率とDAYの完了記録は別です。</p><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></details>
+    <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>次のDAYを見る →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
+    <DiagnosticDetails doc={doc} />
+  </section>;
   return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
     <header><p className={styles.kicker}>DAY{day} / 7</p><h2>{mission.title}</h2><p>{mission.criterion}</p><small>所要時間：約{mission.minutes}分 / 手動の実行記録</small></header>
     <ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} />

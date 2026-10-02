@@ -1,4 +1,4 @@
-.page { width: min(100%, 1180px); margin: 0 auto; padding: 32px; color: #17202a; }
+.page { width: min(100%, 1100px); margin: 0 auto; padding: 24px 32px; color: #17202a; min-width: 0; }
 .page * { box-sizing: border-box; letter-spacing: 0; }
 .page h1 { font-size: 28px; margin: 0; }
 .page h2 { font-size: 19px; line-height: 1.5; margin: 0 0 12px; }
@@ -10,7 +10,7 @@
 .tabs, .links { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 16px 0; }
 .tabs { border-bottom: 1px solid #dde5e1; }
 .tabs a[aria-current] { font-weight: 800; text-decoration-thickness: 2px; }
-.page button { color: #fff; background: #147d68; border: 1px solid #147d68; border-radius: 6px; padding: 10px 16px; font: inherit; font-size: 14px; cursor: pointer; min-height: 42px; white-space: normal; }
+.page button { color: #126453; background: #fff; border: 1px solid #bccdc4; border-radius: 6px; padding: 10px 16px; font: inherit; font-size: 14px; cursor: pointer; min-height: 44px; white-space: normal; }
 .page button:disabled { cursor: wait; opacity: .6; }
 .page button:focus-visible, .page a:focus-visible { outline: 3px solid #2475c5; outline-offset: 3px; }
 .progress, .metrics, .form { padding: 24px 0; border-bottom: 1px solid #dde5e1; }
@@ -65,6 +65,50 @@
 .selfCheck > div { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .selfCheck label { display: inline-flex; align-items: center; min-height: 44px; font-weight: 400; }
 .selfCheck input { width: 18px; height: 18px; min-height: 0; accent-color: #147d68; }
+.pageHeader p { margin: 6px 0; }
+.pageHeader small { color: #52606a; }
+.dayNav { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 16px 0 8px; }
+.dayNav a { display: grid; justify-items: center; align-content: start; gap: 3px; padding: 8px 0; min-height: 76px; color: #52606a; text-decoration: none; border-bottom: 3px solid #dde5e1; font-size: 13px; }
+.dayNav a span { font-size: 18px; }
+.dayNav a small { min-height: 16px; }
+.dayNav a[data-today="true"] { background: #eaf5ef; color: #126453; border-color: #147d68; }
+.dayNav a[data-complete="true"] { color: #126453; }
+.dayNav a[aria-current] { outline: 1px solid #147d68; outline-offset: -1px; }
+.today { padding: 16px 0; }
+.page .dayNumber { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
+.dayNumber span { font-size: 13px; margin-left: 12px; color: #147d68; }
+.today h2 { font-size: 24px; margin: 0 0 12px; }
+.goal { margin: 0 0 16px; }
+.goal strong { display: block; font-size: 13px; }
+.todayProgress { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; }
+.todayProgress strong { font-size: 22px; }
+.todayProgress strong span, .todayProgress > span { font-size: 14px; }
+.todayProgress small { color: #52606a; }
+.today > progress { width: 100%; height: 8px; accent-color: #147d68; margin: 10px 0 14px; display: block; }
+.nextTask { border-left: 4px solid #147d68; background: #f0f7f3; padding: 16px 20px; }
+.nextTask p { margin: 0 0 10px; }
+.nextTask .kicker { font-size: 12px; }
+.nextTask h3 { font-size: 20px; margin: 0 0 8px; }
+.page .primary, .primaryLink { display: inline-block; background: #147d68; color: #fff; border-color: #147d68; padding: 12px 20px; border-radius: 6px; text-decoration: none; }
+.viewing { padding: 12px 0; border-bottom: 1px solid #dde5e1; }
+.viewing a { display: inline-block; margin-left: 12px; }
+.loading { min-height: 300px; padding: 32px 0; }
+.page .taskHighlight { background: #eaf5ef; outline: 3px solid #147d68; outline-offset: 6px; }
+.page [id^="challenge-day-"] { scroll-margin-block: 100px; }
+.page [id^="challenge-day-"]:focus-visible { outline: 3px solid #2475c5; }
+@media (max-width: 520px) {
+  .page .tabs { gap: 8px 16px; padding: 10px 0; font-size: 13px; }
+  .tabs button { padding: 8px; font-size: 12px; }
+  .dayNav a { font-size: 10px; min-height: 68px; }
+  .page .dayNumber { font-size: 22px; }
+  .today h2 { font-size: 20px; }
+  .today { padding: 12px 0; }
+  .nextTask { padding: 12px 14px; }
+  .nextTask h3 { font-size: 18px; }
+  .page .primary { width: 100%; }
+  .todayProgress { gap: 6px 12px; }
+  .todayProgress small { width: 100%; }
+}
 @media (max-width: 800px) { .dayColumns { grid-template-columns: 1fr; gap: 8px; } }
 @media (max-width: 800px) { .page { padding: 20px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .page { padding: 16px; } .page h1 { font-size: 24px; } .grid { grid-template-columns: 1fr; } .metrics dl { grid-template-columns: 1fr; } .metrics dd { margin-bottom: 12px; } }

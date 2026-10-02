@@ -8,6 +8,23 @@ import { dayProgress } from "@/lib/challenge-progress";
 afterEach(cleanup);
 const schoolId = "school & A";
 describe("DAY achievement presentation", () => {
+  it("simplifies cards without turning partial, waiting or deferred records into completed days", () => {
+    const doc = challengeDocument();
+    doc.missions[0].status = "COMPLETED";
+    doc.missions[0].evidence = completeCommand(1).evidence;
+    doc.missions[2].status = "WAITING";
+    doc.missions[3].status = "DEFERRED";
+    doc.missions[4].status = "IN_PROGRESS";
+    const view = render(<DayCards compact doc={doc} snapshot={snapshot()} schoolId={schoolId} />);
+    expect(screen.getByText("✓ 完了")).toBeDefined();
+    expect(screen.getByText("今日")).toBeDefined();
+    expect(screen.getByText("確認待ち")).toBeDefined();
+    expect(screen.getByText("あとで対応あり")).toBeDefined();
+    expect(screen.getByText("対応中")).toBeDefined();
+    expect(screen.queryAllByRole("progressbar")).toHaveLength(0);
+    view.rerender(<DayCards compact doc={null} snapshot={snapshot()} schoolId={schoolId} />);
+    expect(screen.getAllByRole("link").every(a => a.getAttribute("href") === "#challenge-start")).toBe(true);
+  });
   it("shows seven missions before starting without claiming measured zero", () => {
     render(<DayCards doc={null} snapshot={snapshot()} schoolId={schoolId} />);
     expect(screen.getAllByRole("article")).toHaveLength(7);
@@ -101,7 +118,7 @@ describe("DAY achievement presentation", () => {
     expect(screen.getByText(/要改善・要対応 1/)).toBeDefined();
     view.rerender(<DiagnosticDetails doc={doc} />);
     expect(screen.getAllByRole("row")).toHaveLength(1 + missions.reduce((sum, m) => sum + m.fields.length, 0));
-    expect(screen.getByText(/38項目の自動診断マスタは未実装/)).toBeDefined();
+    expect(screen.getByText(/自動診断スコアではありません/)).toBeDefined();
   });
   it("exposes accessible percentage text and status even without color", () => {
     const doc = challengeDocument(); const p = dayProgress(doc.missions[0], 10, snapshot());

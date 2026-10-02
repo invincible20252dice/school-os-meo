@@ -84,6 +84,8 @@ export default function AuthAccessBadge() {
     };
   }, []);
 
+  if (process.env.NODE_ENV !== "development") return null;
+
   return (
     <div className={`${styles.badge} ${styles[access.status]}`}>
       <span>Supabase権限</span>
