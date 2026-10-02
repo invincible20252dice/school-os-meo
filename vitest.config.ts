@@ -19,6 +19,7 @@ export default defineConfig({
         "src/app/**/survey-client.tsx",
         "src/app/**/challenge/challenge-client.tsx",
         "src/app/**/challenge/day-detail.tsx",
+        "src/app/**/challenge/next-actions.tsx",
       ],
       exclude: [
         "src/**/*.test.ts",
@@ -27,6 +28,8 @@ export default defineConfig({
         "src/app/api/**/route.test.ts",
       ],
       thresholds: {
+        "src/lib/challenge-next-actions.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/**/challenge/next-actions.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/challenge.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/challenge-progress.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/challenge/day-detail.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },

@@ -15,7 +15,7 @@ export function ProgressMeter({ progress, label }: { progress: Pick<DayProgress,
 export function DayCards({ doc, snapshot, schoolId }: { doc: ChallengeDocument | null; snapshot: Snapshot; schoolId: string }) {
   return <section className={styles.grid} aria-label="7つのミッション">{missions.map(mission => {
     const saved = doc?.missions.find(m => m.day === mission.day);
-    const progress = saved && doc ? dayProgress(saved, doc.additionalTarget, snapshot) : null;
+    const progress = saved && doc ? dayProgress(saved, doc.additionalTarget, snapshot, doc.requestTarget?.count) : null;
     return <article className={styles.card} key={mission.day}>
       <span className={styles.kicker}>DAY{mission.day}</span><h2>{mission.title}</h2>
       <span className={styles.badge}>{progress?.cleared ? "CLEAR" : saved?.status === "WAITING" ? "確認待ち" : saved?.status === "DEFERRED" ? "あとで対応" : saved && saved.status !== "NOT_STARTED" ? "進行中" : "未着手"}</span>
@@ -51,15 +51,15 @@ export function DiagnosticDetails({ doc }: { doc: ChallengeDocument }) {
     return <tr key={`${m.day}-${field.key}`}><td>{m.day}</td><td>{field.label}</td><td>{item.value}</td><td>{item.deferred ? "あとで対応" : item.state === "GOOD" ? "記録済み" : checkLabels[item.state]}</td><td>{item.priority}</td><td>手動記録</td></tr>;
   }))}</tbody></table></div></details>;
 }
-export function DayDetail({ day, doc, snapshot, schoolId, children }: { day: number; doc: ChallengeDocument; snapshot: Snapshot; schoolId: string; children: ReactNode }) {
+export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvided = false }: { day: number; doc: ChallengeDocument; snapshot: Snapshot; schoolId: string; children: ReactNode; actionsProvided?: boolean }) {
   const mission = missions[day - 1];
-  const progress = dayProgress(doc.missions[day - 1], doc.additionalTarget, snapshot);
+  const progress = dayProgress(doc.missions[day - 1], doc.additionalTarget, snapshot, doc.requestTarget?.count);
   return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
     <header><p className={styles.kicker}>DAY{day} / 7</p><h2>{mission.title}</h2><p>{mission.criterion}</p><small>所要時間：約{mission.minutes}分 / 手動の実行記録</small></header>
     <ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} />
     <p className={styles.muted}>達成 {progress.complete.length} / 要改善・要対応 {progress.incomplete.filter(i => i.state === "WARNING" || i.state === "ERROR").length} / 未確認 {progress.incomplete.filter(i => i.state === "UNCHECKED").length}</p>
     {progress.cleared ? <div className={styles.notice}><h3>DAY{day} CLEAR</h3><p>実行記録の完了を保存済みです。現在の未達項目は、完了履歴とは別に保持します。</p></div> : null}
-    <div className={styles.dayColumns}><div><RecommendedActions progress={progress} schoolId={schoolId} /><section className={styles.section}><h3>未達項目一覧</h3>{progress.incomplete.length ? <ul className={styles.checklist}>{progress.incomplete.map(item => <li key={item.key}><strong>{item.label}</strong>：{item.deferred ? "あとで対応" : checkLabels[item.state]} / {priorityLabels[item.priority]}</li>)}</ul> : <p>未達項目はありません。</p>}</section><details className={styles.details}><summary>達成済み {progress.complete.length}項目</summary><ul className={styles.checklist}>{progress.complete.map(item => <ChecklistItem key={item.key} item={item} schoolId={schoolId} />)}</ul></details></div><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></div>
+    <div className={styles.dayColumns}><div>{!actionsProvided ? <RecommendedActions progress={progress} schoolId={schoolId} /> : null}<section className={styles.section}><h3>未達項目一覧</h3>{progress.incomplete.length ? <ul className={styles.checklist}>{progress.incomplete.map(item => <li key={item.key}><strong>{item.label}</strong>：{item.deferred ? "あとで対応" : checkLabels[item.state]} / {priorityLabels[item.priority]}</li>)}</ul> : <p>未達項目はありません。</p>}</section><details className={styles.details}><summary>達成済み {progress.complete.length}項目</summary><ul className={styles.checklist}>{progress.complete.map(item => <ChecklistItem key={item.key} item={item} schoolId={schoolId} />)}</ul></details></div><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></div>
     {children}
     {!progress.cleared ? <p>DAY{day}はまだCLEARしていません。未対応項目は{progress.incomplete.length}件です。次のDAYへ進んでも完了扱いにはなりません。</p> : null}
     <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>{progress.cleared ? "" : "それでも"}DAY{day + 1}へ進む →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>

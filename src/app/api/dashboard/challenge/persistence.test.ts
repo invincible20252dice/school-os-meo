@@ -36,6 +36,21 @@ beforeEach(async () => {
 });
 
 describe("DAY1 API to PostgreSQL persistence", () => {
+  it("persists a grounded plan and reconciles execution history without touching another tenant", async () => {
+    expect((await POST(request({ action: "next-action", key: "check-1-website", status: "IN_PROGRESS", note: "", version: 1 }))).status).toBe(200);
+    const active = await (await GET(request())).json();
+    expect(active.document.nextActionHistory[0]).toMatchObject({ status: "IN_PROGRESS", key: "check-1-website" });
+    expect((await POST(request({ ...completeCommand(1), version: active.version }))).status).toBe(200);
+    const completed = await (await GET(request())).json();
+    expect(completed.document.nextActionHistory[0]).toMatchObject({ status: "COMPLETED", completedAt: snapshot().at });
+    expect((await POST(request({ action: "adopt-request-target", version: completed.version }))).status).toBe(200);
+    const adopted = await (await GET(request())).json();
+    expect(adopted.document.requestTarget.count).toBe(5);
+    expect((await POST(request({ ...completeCommand(3), evidence: { requested: 5 }, version: adopted.version }))).status).toBe(200);
+    const final = await (await GET(request())).json();
+    expect(dayProgress(final.document.missions[2], final.document.additionalTarget, snapshot(), final.document.requestTarget.count)).toMatchObject({ cleared: true, percent: 100, total: 5 });
+    expect((await db.query('SELECT version, document FROM public."SchoolChallenge" WHERE "schoolId"=$1', ["b"])).rows).toEqual([{ version: 1, document: challengeDocument() }]);
+  });
   it.each(["確認済み", "修正済み", "後で対応", "要改善"])("persists %s answers and reads the saved state without changing another school", async answer => {
     const before = await (await GET(request())).json();
     expect(before.document.missions[0]).toMatchObject({ status: "NOT_STARTED", completedAt: null, evidence: {} });

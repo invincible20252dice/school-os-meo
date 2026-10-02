@@ -6,6 +6,7 @@ import { resolveRequestAccess } from "@/lib/supabase-access";
 import { prisma } from "@/lib/prisma";
 import { ChallengeError, count, object, readDocument, startChallenge, updateChallenge, weeklyActions } from "@/lib/challenge";
 import { loadChallengeData } from "@/lib/challenge-data";
+import { reconcileActionHistory, updateNextAction } from "@/lib/challenge-next-actions";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -55,7 +56,8 @@ export async function POST(request: Request) {
       if (row.version !== version) throw new ChallengeError("別の更新が保存されています。再取得してから記録してください。", 409);
       const current = readDocument(row.document);
       const { snapshot } = await loadChallengeData(school.id, current.startedAt);
-      const document = updateChallenge(current, body, snapshot, actorId);
+      const document = body.action === "next-action" || body.action === "adopt-request-target"
+        ? updateNextAction(current, body, snapshot, actorId) : reconcileActionHistory(updateChallenge(current, body, snapshot, actorId), snapshot, actorId);
       const result = await prisma.schoolChallenge.updateMany({ where: { schoolId: school.id, version }, data: { version: { increment: 1 }, document: document as unknown as Prisma.InputJsonValue } });
       if (result.count !== 1) throw new ChallengeError("同時更新を検出しました。再取得してください。", 409);
     }

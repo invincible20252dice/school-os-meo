@@ -8,6 +8,7 @@ import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
 import { challengeStatuses, missions, remainingChecks, statusLabels, type ChallengeDocument, type ChallengeStatus, type Evidence, type MissionProgress, type Snapshot, type WeeklyAction } from "@/lib/challenge";
 import styles from "./page.module.css";
 import { DayCards, DayDetail, OverallProgress } from "./day-detail";
+import { ActionPanel, ChallengeGoal } from "./next-actions";
 
 export type ChallengeView = {
   success: true; school: { id: string; name: string; phoneNumber: string | null; addressLine: string | null; websiteUrl: string | null };
@@ -35,6 +36,7 @@ function MissionForm({ progress, data, save, busy, notice }: { progress: Mission
       <ul>{[{ label: "電話番号", value: data.school.phoneNumber }, { label: "住所", value: data.school.addressLine }, { label: "Webサイト", value: data.school.websiteUrl }].map(item => <li key={item.label}>{item.label}：{item.value || "DB未設定"}（Google上の内容は手動確認）</li>)}</ul>
     </div> : null}
     {mission.day === 4 ? <p>追加依頼目標：{data.document!.additionalTarget}名 / DB内の未対応口コミ：{display(data.snapshot.reviews?.pending)}</p> : null}
+    {mission.day === 3 ? <p>今回の依頼目標：{data.document!.requestTarget?.count ?? 10}名。0名の場合も実際の確認を行い、依頼人数0と確認内容を記録してください。</p> : null}
     {mission.day === 6 ? <div className={styles.facts}>{data.snapshot.comparisons?.length ? data.snapshot.comparisons.map(c => <div key={c.id}><h3>{c.keyword}</h3><p>計測：{c.at} / ID：{c.id}</p><ul>{c.competitors.map((row, i) => <li key={i}>{row.name} / 評価 {display(row.rating, "")} / 口コミ {display(row.reviewCount)}</li>)}</ul></div>) : <p>保存済み競合データがありません。順位計測・設定を確認してください。</p>}</div> : null}
     <div className={styles.links}>{mission.links.map(link => <Link key={link.path} href={scopedHref(link.path, data.school.id)}>{link.label} →</Link>)}</div>
     <fieldset disabled={busy}>
@@ -158,13 +160,15 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
       {data.snapshot.google === false ? <Link href={href("/dashboard/settings/google")}>Googleアカウントを連携する →</Link> : null}
       {data.snapshot.instagram === false ? <Link className={styles.connectionLink} href={href("/dashboard/settings/instagram")}>Instagramを連携する →</Link> : null}
       {!doc ? <><form id="challenge-start" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "start", additionalTarget: target }); }}><h2>7つのミッションを始める</h2><p>同じ日に複数のミッションへ進めます。成果の件数と、行動の完了は別に記録します。</p><label>DAY4の追加依頼目標人数<input type="number" min={1} max={10000} required value={target} onChange={e => setTarget(Number(e.target.value))} disabled={busy} /></label><p>DAY3は10名、DAY4は別の{target}名へ依頼します。</p><button disabled={busy}>チャレンジを開始</button></form><DayCards doc={null} snapshot={data.snapshot} schoolId={schoolId} /></> : <>
+        <ChallengeGoal doc={doc} snapshot={data.snapshot} />
+        <ActionPanel doc={doc} snapshot={data.snapshot} schoolId={schoolId} day={day || undefined} weekly={weekly} save={save} busy={busy} />
         <details key={`overview-${day}-${weekly}`} open={!day || weekly} className={styles.details}><summary>全体・DAY別の進捗一覧</summary><OverallProgress doc={doc} snapshot={data.snapshot} schoolId={schoolId} />
         <section className={styles.progress}><p>開始：{doc.startedAt.slice(0, 10)} / 要改善・後日対応の残項目：{remainingChecks(doc).length}件</p>
           {completed === 7 ? <><h2>7つの実行記録がそろいました</h2><p>問い合わせの獲得を保証するものではありません。残課題は引き続き今週のアクションで確認できます。</p><Link href={href("/dashboard/challenge/weekly")}>今週のアクションへ →</Link></> : null}
         </section>
         {!weekly ? <DayCards doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : null}</details>
         {weekly ? <section className={styles.grid}>{data.actions.length ? data.actions.map(action => <WeeklyRecord key={`${data.version}-${action.key}`} action={action} data={data} save={save} busy={busy} />) : <p>現在、記録が必要なアクションはありません。</p>}</section> : <>
-          {selected ? <DayDetail day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} notice={notice} /></DayDetail> : null}
+          {selected ? <DayDetail actionsProvided day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} notice={notice} /></DayDetail> : null}
           {(selected?.day === 3 || selected?.day === 4) ? <section className={styles.form}><h2>口コミアンケートの依頼</h2>{data.surveys?.length ? data.surveys.map(s => <p key={s.id}>{s.title} <button type="button" onClick={() => void copyRequest(s)}>依頼文・URLをコピー</button></p>) : <p>有効なアンケートがありません。アンケート設定を確認してください。</p>}</section> : null}
         </>}
         <section className={styles.metrics}><h2>実行と成果</h2><p>計測期間：{doc.startedAt} ～ {data.snapshot.at}</p><p className={styles.muted}>口コミ・投稿はDB保存分。Googleの全件取得・公開を保証する集計ではありません。</p>

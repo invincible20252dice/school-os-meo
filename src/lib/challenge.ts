@@ -17,6 +17,12 @@ export const missions: Array<{ day: number; title: string; minutes: number; crit
   { day: 7, title: "問い合わせ導線を確認する", minutes: 10, criterion: "問い合わせ先・リンク・フォームを確認し、テストを記録する。テスト問い合わせは成果から除外します。", links: [{ label: "Google・問い合わせ先設定", path: "/dashboard/settings/google" }], fields: [check("contact", "問い合わせ先の確認", ["確認済み"]), check("links", "Googleからリンク先への遷移", ["確認済み"]), check("test", "電話・フォーム・LINE等の導線テスト", ["実施済み"])] },
 ];
 // Display priorities for the existing manual checks, not an automated diagnostic score.
+missions[1].title = "Google上の信頼を高める";
+missions[2].title = "保護者の声を増やす";
+missions[2].criterion = "保存した目標人数への依頼を実行記録に残す。評価による依頼先の選別は行いません。";
+missions[3].title = "口コミを強くする";
+missions[4].title = "検索需要から情報発信する";
+missions[6].title = "問い合わせにつながる状態に仕上げる";
 for (const mission of missions) {
   for (const field of mission.fields) {
     field.priority = ["website", "contact", "links", "test"].includes(field.key) ? "S" : ["hours", "description"].includes(field.key) || mission.day === 2 ? "B" : "A";
@@ -28,6 +34,8 @@ for (const mission of missions) {
 }
 export type Snapshot = {
   at: string;
+  latestReviewAt?: string | null;
+  demand?: Array<{ query: string; month: string; impressions: number; updatedAt: string }> | null;
   reviews: { count: number; rating: number | null; pending: number; replyRate: number | null; newCount: number | null } | null;
   surveyResponses: number | null;
   posts: { count: number; latestAt: string | null } | null;
@@ -41,6 +49,9 @@ export type ChallengeDocument = {
   schemaVersion: 1; startedAt: string; completedAt: string | null; additionalTarget: number;
   missions: MissionProgress[]; baseline: Snapshot; after: Snapshot | null;
   actions: Record<string, ActionRecord>;
+  requestTarget?: { count: number; reason: string; at: string; actorId: string };
+  additionalRequestTarget?: { count: number; reason: string; at: string; actorId: string };
+  nextActionHistory?: Array<import("./challenge-next-actions").NextActionRecord>;
   inquiries: { google: number; unknown: number; other: number; tests: number; recordedAt: string; actorId: string } | null;
 };
 export class ChallengeError extends Error {
@@ -119,7 +130,7 @@ export function updateChallenge(doc: ChallengeDocument, command: Record<string, 
     const unresolved = mission.fields.filter(field => ["要改善", "後で対応"].includes(String(evidence[field.key])));
     if (unresolved.some(field => mission.day !== 1 || field.priority === "S" || field.priority === "A")) throw new ChallengeError("重要な未対応項目が残っています。対応中または確認待ちで保存してください。");
     if (mission.fields.some(f => evidence[f.key] === undefined || evidence[f.key] === "")) throw new ChallengeError("すべての確認項目を記録してから完了してください。");
-    if (mission.day === 3 && Number(evidence.requested) < 10) throw new ChallengeError("実際に依頼した人数が10名に達していません。");
+    if (mission.day === 3 && Number(evidence.requested) < (doc.requestTarget?.count ?? 10)) throw new ChallengeError(`実際に依頼した人数が${doc.requestTarget?.count ?? 10}名に達していません。`);
     if (mission.day === 4) {
       if (Number(evidence.requested) < doc.additionalTarget) throw new ChallengeError("追加依頼の目標人数に達していません。");
       if (evidence.reviews === "対象なし" && (!snapshot.reviews || snapshot.reviews.pending > 0)) throw new ChallengeError("未対応口コミを確認できないか、対応対象が残っています。");

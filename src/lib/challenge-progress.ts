@@ -16,7 +16,7 @@ export function fieldProgress(field: Field, progress: MissionProgress): Progress
     reason: deferred ? "後日対応として残っています。確認・改善後に記録を更新してください。" : state === "WARNING" ? "要改善の申告があります。関連設定を見直してください。" : state === "UNCHECKED" ? "まだ確認記録がありません。実際の状態を確認してください。" : "実行記録を保存済みです。",
     path: missions[progress.day - 1].links[0].path, cta: progress.day === 2 ? "写真・店舗設定を確認" : "設定・関連画面を開く" };
 }
-export function dayProgress(progress: MissionProgress, additionalTarget: number, snapshot: Snapshot): DayProgress {
+export function dayProgress(progress: MissionProgress, additionalTarget: number, snapshot: Snapshot, requestTarget = 10): DayProgress {
   const mission = missions[progress.day - 1];
   let items = mission.fields.map(f => fieldProgress(f, progress));
   let total = items.length;
@@ -24,10 +24,10 @@ export function dayProgress(progress: MissionProgress, additionalTarget: number,
   let unit = "項目";
   let percent = Math.round(items.reduce((sum, i) => sum + (i.state === "GOOD" ? priorityWeights[i.priority] : 0), 0) / items.reduce((sum, i) => sum + priorityWeights[i.priority], 0) * 100);
   if (progress.day === 3 || progress.day === 4) {
-    total = progress.day === 3 ? 10 : additionalTarget;
+    total = progress.day === 3 ? requestTarget : additionalTarget;
     done = typeof progress.evidence.requested === "number" ? progress.evidence.requested : 0;
     unit = "名";
-    const fraction = Math.min(done / total, 1);
+    const fraction = total === 0 ? 1 : Math.min(done / total, 1);
     items[0] = { ...items[0], state: done >= total ? "GOOD" : "WARNING", value: `${done} / ${total}名`, reason: done >= total ? "依頼人数の目標を達成しました。" : `あと${total - done}名へ、評価で選別せず率直なご意見を依頼しましょう。`, path: "/dashboard/surveys", cta: "口コミ依頼をする" };
     percent = Math.round(fraction * 100);
     if (progress.day === 4) {
@@ -47,7 +47,7 @@ export function dayProgress(progress: MissionProgress, additionalTarget: number,
   return { day: progress.day, percent, done, total, unit, remaining: Math.max(total - done, 0), cleared: progress.status === "COMPLETED", items, incomplete, complete: items.filter(i => i.state === "GOOD"), recommended: incomplete.slice(0, 3) };
 }
 export function challengeProgress(doc: ChallengeDocument, snapshot: Snapshot) {
-  const days = doc.missions.map(m => dayProgress(m, doc.additionalTarget, snapshot));
+  const days = doc.missions.map(m => dayProgress(m, doc.additionalTarget, snapshot, doc.requestTarget?.count));
   const recommended = days.find(d => !d.cleared) ?? days.find(d => d.incomplete.length > 0);
   return { days, percent: Math.round(days.reduce((sum, d) => sum + d.percent, 0) / days.length), cleared: days.filter(d => d.cleared).length, recommended };
 }

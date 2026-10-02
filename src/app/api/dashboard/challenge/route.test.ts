@@ -69,6 +69,13 @@ describe("authenticated school challenge API", () => {
     expect((await POST(request({ ...completeCommand(3), version: 1 }))).status).toBe(200);
     expect(prisma.schoolChallenge.updateMany).toHaveBeenCalledWith({ where: { schoolId: "a", version: 1 }, data: { version: { increment: 1 }, document: expect.objectContaining({ baseline: snapshot(), missions: expect.arrayContaining([expect.objectContaining({ day: 3, status: "COMPLETED", actorId: "u" })]) }) } });
   });
+  it.each([{ action: "next-action", key: "pending-replies", status: "IN_PROGRESS", note: "" }, { action: "adopt-request-target" }])("saves server-derived plans through the existing school CAS boundary", async command => {
+    vi.mocked(prisma.schoolChallenge.findUnique).mockResolvedValue(stored() as never);
+    expect((await POST(request({ ...command, version: 1, schoolId: "b" }))).status).toBe(200);
+    const call = vi.mocked(prisma.schoolChallenge.updateMany).mock.calls[0][0]!;
+    expect(call.where).toEqual({ schoolId: "a", version: 1 });
+    expect(call.data.document).toMatchObject(command.action === "next-action" ? { nextActionHistory: [expect.objectContaining({ key: "pending-replies", actorId: "u" })] } : { requestTarget: { count: 5, actorId: "u" } });
+  });
   it("rejects concurrent saves and stale replays rather than overwriting", async () => {
     vi.mocked(prisma.schoolChallenge.findUnique).mockResolvedValue(stored() as never);
     expect((await POST(request({ ...completeCommand(3), version: 0 }))).status).toBe(409);

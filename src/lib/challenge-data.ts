@@ -31,10 +31,14 @@ export async function loadChallengeData(schoolId: string, startedAt: string | nu
   const rankings = await read("競合計測", () => prisma.targetKeyword.findMany({ where: { schoolId, isActive: true }, select: { keyword: true,
     rankHistories: { orderBy: { checkedAt: "desc" }, take: 1, select: { id: true, checkedAt: true, competitorData: true } } } }), errors);
   const surveys = await read("アンケート", () => prisma.survey.findMany({ where: { schoolId, isValid: true }, select: { id: true, title: true }, orderBy: { updatedAt: "desc" } }), errors);
+  const demand = await read("検索需要", () => prisma.searchQueryLog.findMany({ where: { schoolId }, select: { query: true, targetMonth: true, impressionCount: true, updatedAt: true }, orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }], take: 100 }), errors);
+  const latestReview = reviews?.flatMap(r => r.postedAt && r.postedAt <= now ? [r.postedAt.toISOString()] : []).sort().at(-1) ?? null;
   const rated = reviews?.flatMap(r => r.rating !== null && r.rating >= 1 && r.rating <= 5 ? [r.rating] : []) ?? [];
   const replied = reviews?.filter(r => r.repliedAt && r.replyText?.trim()).length ?? 0;
   const snapshot: Snapshot = {
     at: now.toISOString(),
+    latestReviewAt: latestReview,
+    demand: demand ? demand.filter(d => d.targetMonth === demand[0]?.targetMonth).map(d => ({ query: d.query, month: d.targetMonth, impressions: d.impressionCount, updatedAt: d.updatedAt.toISOString() })) : null,
     google: errors.some(e => e.startsWith("Google")) ? null : Boolean(settings?.googleConnected && settings.selectedGbpLocationId),
     instagram: errors.some(e => e.startsWith("Instagram")) ? null : Boolean(instagram?.instagramBusinessAccountId),
     reviews: reviews ? { count: reviews.length, rating: rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : null,
