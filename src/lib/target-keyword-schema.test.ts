@@ -18,6 +18,9 @@ describe("TargetKeyword location additive alignment", () => {
     await db.exec(migration);
     expect((await db.query('SELECT id, "schoolId", keyword FROM public."TargetKeyword" ORDER BY id')).rows).toEqual(before);
     expect((await db.query('SELECT location FROM public."TargetKeyword"')).rows).toEqual([{ location: "" }, { location: "" }]);
+    expect((await db.query('SELECT "nearestStation", municipality, latitude, longitude, "radiusMeters", "isActive" FROM public."TargetKeyword" WHERE id=$1', ["k1"])).rows).toEqual([
+      { nearestStation: "", municipality: "", latitude: null, longitude: null, radiusMeters: 1500, isActive: true },
+    ]);
     await db.query('UPDATE public."TargetKeyword" SET location=$1 WHERE id=$2', ["実際の計測地点", "k1"]);
     await db.exec(migration);
     expect((await db.query('SELECT location FROM public."TargetKeyword" WHERE id=$1', ["k1"])).rows).toEqual([{ location: "実際の計測地点" }]);
@@ -28,7 +31,15 @@ describe("TargetKeyword location additive alignment", () => {
     await db.exec('CREATE TABLE public."TargetKeyword" (id text, location text NOT NULL, "currentRank" integer);');
     await db.query('INSERT INTO public."TargetKeyword" VALUES ($1,$2,$3)', ["existing", "保存済み地点", 4]);
     await db.exec(migration);
-    expect((await db.query('SELECT * FROM public."TargetKeyword"')).rows).toEqual([{ id: "existing", location: "保存済み地点", currentRank: 4 }]);
+    expect((await db.query('SELECT id, location, "currentRank" FROM public."TargetKeyword"')).rows).toEqual([{ id: "existing", location: "保存済み地点", currentRank: 4 }]);
+  });
+
+  it("preserves configured station, coordinates, radius and inactive state", async () => {
+    await db.exec('CREATE TABLE public."TargetKeyword" (id text, location text, "nearestStation" text, municipality text, latitude decimal(9,6), longitude decimal(9,6), "radiusMeters" integer, "isActive" boolean);');
+    await db.query('INSERT INTO public."TargetKeyword" VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ["k", "地点", "駅", "市", 32.1, 130.1, 2300, false]);
+    const before = (await db.query('SELECT * FROM public."TargetKeyword"')).rows;
+    await db.exec(migration);
+    expect((await db.query('SELECT * FROM public."TargetKeyword"')).rows).toEqual(before);
   });
 
   it("fails closed for a missing table instead of inventing records", async () => {
