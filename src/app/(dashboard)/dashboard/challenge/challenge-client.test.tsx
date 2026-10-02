@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChallengeClient, { type ChallengeView } from "./challenge-client";
 import { missions, startChallenge, updateChallenge, weeklyActions } from "@/lib/challenge";
@@ -41,25 +41,32 @@ describe("challenge UI", () => {
     await load();
     fireEvent.change(screen.getByLabelText("DAY4の追加依頼目標人数"), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: "チャレンジを開始" }));
-    await screen.findByText("0 / 7 完了");
+    await screen.findByText("0 / 7 DAY CLEAR");
     expect(commands).toEqual([{ action: "start", additionalTarget: 12, version: 0 }]);
     expect(body.document).toMatchObject({ additionalTarget: 12 });
     expect(screen.queryAllByText("DB未設定", { exact: false })).toHaveLength(0);
-    for (const a of screen.getAllByRole("link")) expect(a.getAttribute("href")).toContain("schoolId=a");
+    for (const a of screen.getAllByRole("link")) {
+      const href = a.getAttribute("href")!;
+      if (!href.startsWith("#")) expect(href).toContain("schoolId=a");
+    }
     expect(fetch).toHaveBeenCalledWith("/api/dashboard/challenge?schoolId=a", expect.objectContaining({ headers: { authorization: "Bearer token" }, cache: "no-store" }));
   });
   it.each([1, 2, 3, 4, 5, 6, 7])("records DAY%s through the real validation logic and restores it after reload", async day => {
     route.params.set("day", String(day));
     await load();
     const command = completeCommand(day);
-    for (const field of missions[day - 1].fields) fireEvent.change(screen.getByLabelText(field.label), { target: { value: String(command.evidence[field.key]) } });
+    for (const field of missions[day - 1].fields) {
+      const value = String(command.evidence[field.key]);
+      if (field.question) fireEvent.click(within(screen.getByRole("radiogroup", { name: field.label })).getByRole("radio", { name: value === "確認済み" || value === "実施済み" ? "はい" : value }));
+      else fireEvent.change(screen.getByLabelText(field.label), { target: { value } });
+    }
     fireEvent.change(screen.getByLabelText("実行記録・残課題の理由"), { target: { value: "完了を現地確認" } });
     fireEvent.change(screen.getByLabelText("進捗状態"), { target: { value: "COMPLETED" } });
     fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
-    await screen.findByText("1 / 7 完了");
+    await screen.findByText("1 / 7 DAY CLEAR");
     expect(body.document!.missions[day - 1]).toMatchObject({ status: "COMPLETED", note: "完了を現地確認", evidence: command.evidence });
     fireEvent.click(screen.getByRole("button", { name: "再取得" }));
-    await screen.findByText("1 / 7 完了");
+    await screen.findByText("1 / 7 DAY CLEAR");
     expect((screen.getByLabelText("実行記録・残課題の理由") as HTMLTextAreaElement).value).toBe("完了を現地確認");
     expect(screen.getByText(/完了記録：/)).toBeDefined();
   });
@@ -83,7 +90,7 @@ describe("challenge UI", () => {
     fireEvent.change(screen.getByLabelText("実行記録・残課題の理由"), { target: { value: "来週対応" } });
     fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
     await waitFor(() => expect(body.document!.missions[2].status).toBe("DEFERRED"));
-    await screen.findByText("0 / 7 完了");
+    await screen.findByText("0 / 7 DAY CLEAR");
   });
   it("records real inquiries by known source separately from test counts", async () => {
     await load();
@@ -98,7 +105,7 @@ describe("challenge UI", () => {
   it("renders completion with frozen results without claiming inquiry success", async () => {
     for (let day = 1; day <= 7; day++) body.document = updateChallenge(body.document!, completeCommand(day), body.snapshot, "actor");
     await load();
-    expect(screen.getByText("7 / 7 完了")).toBeDefined();
+    expect(screen.getByText("7 / 7 DAY CLEAR")).toBeDefined();
     expect(screen.getByText("7つの実行記録がそろいました")).toBeDefined();
     expect(screen.getByText(/完了時スナップショット保存/)).toBeDefined();
     expect(screen.queryByRole("button", { name: "実行記録を保存" })).toBeNull();

@@ -7,6 +7,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
 import { challengeStatuses, missions, remainingChecks, statusLabels, type ChallengeDocument, type ChallengeStatus, type Evidence, type MissionProgress, type Snapshot, type WeeklyAction } from "@/lib/challenge";
 import styles from "./page.module.css";
+import { DayCards, DayDetail, OverallProgress } from "./day-detail";
 
 export type ChallengeView = {
   success: true; school: { id: string; name: string; phoneNumber: string | null; addressLine: string | null; websiteUrl: string | null };
@@ -25,20 +26,19 @@ function MissionForm({ progress, data, save, busy }: { progress: MissionProgress
   const [evidence, setEvidence] = useState<Evidence>(progress.evidence);
   const [note, setNote] = useState(progress.note);
   const [status, setStatus] = useState<ChallengeStatus>(progress.status === "NOT_STARTED" ? "IN_PROGRESS" : progress.status);
-  return <form className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status }); }}>
-    <h2>DAY{mission.day} {mission.title}</h2>
-    <p>{mission.criterion}</p>
+  return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status }); }}>
+    <h3>実行記録</h3>
     <p className={styles.muted}>記録区分：手動申告 / 目安 {mission.minutes}分</p>
     {mission.day === 1 ? <div className={styles.facts}>
-      <h3>優先確認項目（最大3件）</h3>
+      <h3>登録済み基本情報</h3>
       <ul>{[{ label: "電話番号", value: data.school.phoneNumber }, { label: "住所", value: data.school.addressLine }, { label: "Webサイト", value: data.school.websiteUrl }].map(item => <li key={item.label}>{item.label}：{item.value || "DB未設定"}（Google上の内容は手動確認）</li>)}</ul>
     </div> : null}
     {mission.day === 4 ? <p>追加依頼目標：{data.document!.additionalTarget}名 / DB内の未対応口コミ：{display(data.snapshot.reviews?.pending)}</p> : null}
     {mission.day === 6 ? <div className={styles.facts}>{data.snapshot.comparisons?.length ? data.snapshot.comparisons.map(c => <div key={c.id}><h3>{c.keyword}</h3><p>計測：{c.at} / ID：{c.id}</p><ul>{c.competitors.map((row, i) => <li key={i}>{row.name} / 評価 {display(row.rating, "")} / 口コミ {display(row.reviewCount)}</li>)}</ul></div>) : <p>保存済み競合データがありません。順位計測・設定を確認してください。</p>}</div> : null}
     <div className={styles.links}>{mission.links.map(link => <Link key={link.path} href={scopedHref(link.path, data.school.id)}>{link.label} →</Link>)}</div>
     <fieldset disabled={busy}>
-      {mission.fields.map(field => <label key={field.key}>{field.label}
-        {field.type === "select" ? <select value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
+      {mission.fields.map(field => field.question ? <fieldset className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div></fieldset> : <label key={field.key}>{field.label}
+        {field.type === "select" ? <select aria-label={field.label} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">未確認</option>{field.options!.map(option => <option key={option}>{option}</option>)}
         </select> : field.key === "comparisonId" ? <select value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">計測を選択</option>{data.snapshot.comparisons?.map(c => <option key={c.id} value={c.id}>{c.keyword} / {c.at}</option>)}
@@ -139,16 +139,19 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
     {current?.error ? <p role="alert" className={styles.error}>{current.error}</p> : !data ? <p role="status">集客チャレンジを読み込んでいます。</p> : null}
     {notice ? <p role="status" className={styles.notice}>{notice}</p> : null}
     {data ? <>
-      {data.snapshot.errors.map(error => <p role="alert" className={styles.error} key={error}>{error}</p>)}
+      {data.snapshot.errors.length ? <details role="alert" className={styles.warning}><summary>一部データを取得できませんでした（{data.snapshot.errors.length}件）</summary><ul>{data.snapshot.errors.map(error => <li key={error}>{error}</li>)}</ul><p>利用できるDAYは引き続き実行できます。「再取得」で保存済みデータを再確認してください。</p></details> : null}
+      <p className={styles.muted}>最終取得：{data.snapshot.at} / 再取得対象：DB内の進捗・連携設定・口コミ・投稿・競合計測</p>
       <p className={styles.muted}>Google連携：{data.snapshot.google === null ? "取得失敗" : data.snapshot.google ? "設定済み" : "未連携"} / Instagram：{data.snapshot.instagram === null ? "取得失敗" : data.snapshot.instagram ? "設定済み" : "未連携"}</p>
       {data.snapshot.google === false ? <Link href={href("/dashboard/settings/google")}>Googleアカウントを連携する →</Link> : null}
-      {!doc ? <form className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "start", additionalTarget: target }); }}><h2>7つのミッションを始める</h2><p>同じ日に複数のミッションへ進めます。成果の件数と、行動の完了は別に記録します。</p><label>DAY4の追加依頼目標人数<input type="number" min={1} max={10000} required value={target} onChange={e => setTarget(Number(e.target.value))} disabled={busy} /></label><p>DAY3は10名、DAY4は別の{target}名へ依頼します。</p><button disabled={busy}>チャレンジを開始</button></form> : <>
-        <section className={styles.progress}><h2>{completed} / 7 完了</h2><progress value={completed} max={7} /><p>開始：{doc.startedAt.slice(0, 10)} / 後日対応の残課題：{remainingChecks(doc).length}件</p>
-          {completed === 7 ? <><h2>7つの実行記録がそろいました</h2><p>問い合わせの獲得を保証するものではありません。残課題は引き続き今週のアクションで確認できます。</p><Link href={href("/dashboard/challenge/weekly")}>今週のアクションへ →</Link></> : recommended ? <p>今日のおすすめ：<Link href={href(`/dashboard/challenge?day=${recommended.day}`)}>DAY{recommended.day} {missions[recommended.day - 1].title}</Link> / 約{missions[recommended.day - 1].minutes}分</p> : null}
+      {data.snapshot.instagram === false ? <Link className={styles.connectionLink} href={href("/dashboard/settings/instagram")}>Instagramを連携する →</Link> : null}
+      {!doc ? <><form id="challenge-start" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "start", additionalTarget: target }); }}><h2>7つのミッションを始める</h2><p>同じ日に複数のミッションへ進めます。成果の件数と、行動の完了は別に記録します。</p><label>DAY4の追加依頼目標人数<input type="number" min={1} max={10000} required value={target} onChange={e => setTarget(Number(e.target.value))} disabled={busy} /></label><p>DAY3は10名、DAY4は別の{target}名へ依頼します。</p><button disabled={busy}>チャレンジを開始</button></form><DayCards doc={null} snapshot={data.snapshot} schoolId={schoolId} /></> : <>
+        <details key={`overview-${day}-${weekly}`} open={!day || weekly} className={styles.details}><summary>全体・DAY別の進捗一覧</summary><OverallProgress doc={doc} snapshot={data.snapshot} schoolId={schoolId} />
+        <section className={styles.progress}><p>開始：{doc.startedAt.slice(0, 10)} / 要改善・後日対応の残項目：{remainingChecks(doc).length}件</p>
+          {completed === 7 ? <><h2>7つの実行記録がそろいました</h2><p>問い合わせの獲得を保証するものではありません。残課題は引き続き今週のアクションで確認できます。</p><Link href={href("/dashboard/challenge/weekly")}>今週のアクションへ →</Link></> : null}
         </section>
+        {!weekly ? <DayCards doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : null}</details>
         {weekly ? <section className={styles.grid}>{data.actions.length ? data.actions.map(action => <WeeklyRecord key={`${data.version}-${action.key}`} action={action} data={data} save={save} busy={busy} />) : <p>現在、記録が必要なアクションはありません。</p>}</section> : <>
-          <section className={styles.grid} aria-label="7つのミッション">{doc.missions.map(m => <article className={styles.card} key={m.day}><span>DAY{m.day}</span><h2>{missions[m.day - 1].title}</h2><span className={styles.badge}>{statusLabels[m.status]}</span><small>約{missions[m.day - 1].minutes}分</small><Link href={href(`/dashboard/challenge?day=${m.day}`)}>ミッションを開く →</Link></article>)}</section>
-          {selected ? <MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} /> : null}
+          {selected ? <DayDetail day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} /></DayDetail> : null}
           {(selected?.day === 3 || selected?.day === 4) ? <section className={styles.form}><h2>口コミアンケートの依頼</h2>{data.surveys?.length ? data.surveys.map(s => <p key={s.id}>{s.title} <button type="button" onClick={() => void copyRequest(s)}>依頼文・URLをコピー</button></p>) : <p>有効なアンケートがありません。アンケート設定を確認してください。</p>}</section> : null}
         </>}
         <section className={styles.metrics}><h2>実行と成果</h2><p>計測期間：{doc.startedAt} ～ {data.snapshot.at}</p><p className={styles.muted}>口コミ・投稿はDB保存分。Googleの全件取得・公開を保証する集計ではありません。</p>

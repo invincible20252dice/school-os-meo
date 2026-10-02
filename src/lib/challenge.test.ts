@@ -3,6 +3,21 @@ import { ChallengeError, count, object, readDocument, remainingChecks, startChal
 import { challengeDocument, completeCommand, snapshot } from "@/test/challenge-fixtures";
 
 describe("school challenge rules", () => {
+  it("preserves CLEAR history and baseline when current checks need attention again", () => {
+    const cleared = updateChallenge(challengeDocument(), completeCommand(1), snapshot(), "actor");
+    const command = completeCommand(1); command.evidence.website = "要改善";
+    const later = updateChallenge(cleared, command, { ...snapshot(), at: "2026-10-02T09:00:00Z" }, "actor");
+    expect(later.missions[0].completedAt).toBe(cleared.missions[0].completedAt);
+    expect(later.missions[0].status).toBe("COMPLETED");
+    expect(later.baseline).toEqual(cleared.baseline);
+    expect(remainingChecks(later)).toEqual([{ day: 1, key: "website", label: "Webサイト" }]);
+    expect(weeklyActions(later, snapshot())).toContainEqual(expect.objectContaining({ key: "check-1-website", status: "IN_PROGRESS", reason: "要改善として記録された残課題" }));
+  });
+  it.each([[1, "website", "要改善"], [2, "photo0", "後で対応"], [7, "test", "要改善"]])("does not grant a first CLEAR with unresolved DAY%s evidence", (day, key, value) => {
+    const command = completeCommand(Number(day)); command.evidence[String(key)] = String(value);
+    expect(() => updateChallenge(challengeDocument(), command, snapshot(), "actor")).toThrow("未対応項目");
+    expect(updateChallenge(challengeDocument(), { ...command, status: "WAITING" }, snapshot(), "actor").missions[Number(day) - 1].status).toBe("WAITING");
+  });
   it("persists seven missions on the same day without requiring outcomes or elapsed days", () => {
     let doc = challengeDocument();
     const before = structuredClone(doc);
