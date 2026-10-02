@@ -30,6 +30,22 @@ function deferred() {
 }
 
 describe("ReviewsClient direct Google replies", () => {
+  it.each([
+    { source: undefined, reviewId: undefined },
+    { source: null, reviewId: "real_gbp_001" },
+    { source: "", reviewId: "gbp_002" },
+    { source: "GBP", reviewId: "legacy-import" },
+  ])("does not discard API-returned Google cards based on legacy source metadata (%j)", metadata => {
+    const rows = ["保存済み投稿者A", "保存済み投稿者B", "保存済み投稿者C"].map((authorName, i) => ({ ...review, ...metadata, id: `stored-${i}`, authorName }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ success: true, reviews: rows })));
+    render(<ReviewsClient />);
+    return waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Google口コミ" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getAllByRole("article")).toHaveLength(3);
+      for (const row of rows) expect(screen.getByText(row.authorName)).toBeDefined();
+      expect(screen.queryByText(/この校舎の口コミはまだありません/)).toBeNull();
+    });
+  });
   it("separates unpublished survey drafts and hides Google posting controls", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(list())
       .mockResolvedValueOnce(list([{ ...review, source: "SURVEY", authorName: "アンケート回答者（生徒本人）" }]))
