@@ -3,6 +3,23 @@ import { ChallengeError, count, object, readDocument, remainingChecks, startChal
 import { challengeDocument, completeCommand, snapshot } from "@/test/challenge-fixtures";
 
 describe("school challenge rules", () => {
+  it.each(["確認済み", "修正済み"])("completes DAY1 with %s answers and an optional empty note", answer => {
+    const command = completeCommand(1);
+    command.evidence = Object.fromEntries(Object.keys(command.evidence).map(key => [key, answer]));
+    command.note = "";
+    expect(updateChallenge(challengeDocument(), command, snapshot(), "actor").missions[0]).toMatchObject({ status: "COMPLETED", note: "", completedAt: snapshot().at });
+  });
+  it.each(["後で対応", "要改善"])("keeps B-priority %s as a remaining task after CLEAR", value => {
+    const command = completeCommand(1); command.evidence.hours = value;
+    const result = updateChallenge(challengeDocument(), command, snapshot(), "actor");
+    expect(result.missions[0].status).toBe("COMPLETED");
+    expect(remainingChecks(result)).toEqual([{ day: 1, key: "hours", label: "通常・特別営業時間" }]);
+    expect(() => updateChallenge(challengeDocument(), { ...command, note: "" }, snapshot(), "actor")).toThrow("理由");
+  });
+  it.each(["name", "phone", "address", "category", "website"])("never grants the first CLEAR while critical %s is deferred", key => {
+    const command = completeCommand(1); command.evidence[key] = "後で対応";
+    expect(() => updateChallenge(challengeDocument(), command, snapshot(), "actor")).toThrow("重要な未対応項目");
+  });
   it("preserves CLEAR history and baseline when current checks need attention again", () => {
     const cleared = updateChallenge(challengeDocument(), completeCommand(1), snapshot(), "actor");
     const command = completeCommand(1); command.evidence.website = "要改善";
@@ -68,7 +85,7 @@ describe("school challenge rules", () => {
   it.each([
     { ...completeCommand(1), evidence: {} },
     { ...completeCommand(5), evidence: { published: "公開確認済み", publication: "   " } },
-    { ...completeCommand(1), note: " " },
+    { ...completeCommand(2), note: " " },
     { ...completeCommand(1), evidence: { name: "invalid" } },
     { ...completeCommand(3), evidence: { requested: 9 } },
     { ...completeCommand(4), evidence: { requested: 9, reviews: "対応済み" } },

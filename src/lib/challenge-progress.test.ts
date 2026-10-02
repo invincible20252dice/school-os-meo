@@ -5,6 +5,48 @@ import { challengeProgress, dayProgress, fieldProgress, formatMetric, metricChan
 
 const saved = (day: number, evidence: MissionProgress["evidence"] = {}) => ({ ...challengeDocument().missions[day - 1], evidence });
 describe("challenge progress derived from saved evidence", () => {
+  it.each([
+    { day: 1, keys: ["name", "phone", "address", "category", "website", "description", "hours"], weights: [5, 5, 5, 5, 10, 3, 3] },
+    { day: 2, keys: ["photo0", "photo1", "photo2", "photo3", "photo4", "photo5", "photo6", "photo7"], weights: [3, 3, 3, 3, 3, 3, 3, 3] },
+    { day: 7, keys: ["contact", "links", "test"], weights: [10, 10, 10] },
+  ])("checks every achievement subset against independent DAY$day weights", ({ day, keys, weights }) => {
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    for (let mask = 0; mask < 2 ** keys.length; mask++) {
+      const evidence: MissionProgress["evidence"] = {};
+      let achievedWeight = 0;
+      let achievedCount = 0;
+      keys.forEach((key, index) => {
+        if (mask & (1 << index)) {
+          evidence[key] = day === 2 ? "追加済み" : key === "test" ? "実施済み" : "確認済み";
+          achievedWeight += weights[index]; achievedCount++;
+        } else {
+          evidence[key] = index % 2 ? "後で対応" : "要改善";
+        }
+      });
+      const result = dayProgress(saved(day, evidence), 10, snapshot());
+      expect(result.percent).toBe(Math.round(achievedWeight / totalWeight * 100));
+      expect(result.done).toBe(achievedCount);
+      expect(result.remaining).toBe(keys.length - achievedCount);
+      expect(result.complete).toHaveLength(achievedCount);
+      expect(result.incomplete).toHaveLength(keys.length - achievedCount);
+      expect(result.recommended.map(item => item.key)).toEqual(result.incomplete.slice(0, 3).map(item => item.key));
+      expect(result.cleared).toBe(false);
+    }
+  });
+  it.each([1, 10, 25, 10000])("keeps DAY4 percentages bounded and monotonic around target %s", target => {
+    for (const handled of [false, true]) {
+      let previous = -1;
+      for (const requested of [...new Set([0, target - 1, target, Math.min(target + 1, 10000)])]) {
+        const result = dayProgress(saved(4, { requested, ...(handled ? { reviews: "対応済み" } : {}) }), target, snapshot());
+        expect(result.percent).toBe(Math.round((Math.min(requested / target, 1) + Number(handled)) * 50));
+        expect(result.percent).toBeGreaterThanOrEqual(previous);
+        expect(result.percent).toBeLessThanOrEqual(100);
+        expect(result.remaining).toBe(Math.max(target - requested, 0));
+        expect(result.cleared).toBe(false);
+        previous = result.percent;
+      }
+    }
+  });
   it("does not equate outcome counts, age, or connections to completed actions", () => {
     const doc = challengeDocument();
     const before = structuredClone(doc);

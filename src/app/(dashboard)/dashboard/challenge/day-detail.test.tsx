@@ -45,13 +45,15 @@ describe("DAY achievement presentation", () => {
     expect(screen.getByText("保存フォーム")).toBeDefined();
     expect(screen.getByText("確認項目の詳細を見る").closest("details")?.open).toBe(false);
     expect(screen.getByRole("region", { name: "現在の成果" })).toBeDefined();
-    expect(screen.getByRole("link", { name: day < 7 ? `DAY${day + 1}へ進む →` : "今週のアクションへ →" }).getAttribute("href")).toContain("schoolId=school%20%26%20A");
+    expect(screen.getByRole("link", { name: day < 7 ? `それでもDAY${day + 1}へ進む →` : "今週のアクションへ →" }).getAttribute("href")).toContain("schoolId=school%20%26%20A");
+    expect(screen.getByText(new RegExp(`DAY${day}はまだCLEARしていません`))).toBeDefined();
   });
   it("keeps incomplete warnings above collapsed achievements after CLEAR", () => {
     const cmd = completeCommand(1); cmd.evidence.hours = "後で対応";
     const doc = updateChallenge(challengeDocument(), cmd, snapshot(), "actor");
     render(<DayDetail day={1} doc={doc} snapshot={snapshot()} schoolId={schoolId}>{null}</DayDetail>);
     expect(screen.getByText("DAY1 CLEAR")).toBeDefined();
+    expect(screen.getByRole("link", { name: "DAY2へ進む →" })).toBeDefined();
     expect(screen.getByText("達成済み 6項目").closest("details")?.open).toBe(false);
     expect(screen.getAllByText("あとで対応").length).toBeGreaterThan(0);
     expect(screen.getByRole("progressbar").getAttribute("value")).not.toBe("100");

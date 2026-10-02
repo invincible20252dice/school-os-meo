@@ -31,6 +31,47 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const load = async (weekly = false) => { const view = render(<ChallengeClient weekly={weekly} />); await screen.findByText("校舎A"); return view; };
 describe("challenge UI", () => {
+  it.each(["はい", "修正済み"])("saves DAY1 %s without a note, reloads DB data, and stays on its CLEAR view", async answer => {
+    const view = await load();
+    for (const field of missions[0].fields) fireEvent.click(within(screen.getByRole("radiogroup", { name: field.label })).getByRole("radio", { name: answer }));
+    fireEvent.change(screen.getByLabelText("進捗状態"), { target: { value: "COMPLETED" } });
+    fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
+    await screen.findByText("実行記録を保存しました。");
+    expect(screen.getByText("DAY1 CLEAR")).toBeDefined();
+    expect(screen.getByRole("progressbar", { name: "DAY1 ミッション達成率" }).getAttribute("value")).toBe("100");
+    expect(commands[0]).toMatchObject({ action: "mission", day: 1, status: "COMPLETED", note: "", version: 1 });
+    expect(body.document!.missions[0].completedAt).toBe(snapshot().at);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    view.unmount(); route.params.set("day", "1"); await load();
+    expect(screen.getByText("DAY1 CLEAR")).toBeDefined();
+    expect((screen.getByLabelText("進捗状態") as HTMLSelectElement).value).toBe("COMPLETED");
+  });
+  it("does not claim fresh progress when saving succeeds but the following GET fails", async () => {
+    await load();
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementationOnce(original).mockRejectedValueOnce(new Error("offline"));
+    fireEvent.change(screen.getByLabelText("実行記録・残課題の理由"), { target: { value: "再取得失敗の確認" } });
+    fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
+    await screen.findByText("保存は完了しましたが、最新状態を取得できませんでした。「再取得」で確認してください。");
+    expect(body.version).toBe(2);
+    expect(screen.queryByText("実行記録を保存しました。")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "再取得" }));
+    await screen.findByText("校舎A");
+    expect((screen.getByLabelText("実行記録・残課題の理由") as HTMLTextAreaElement).value).toBe("再取得失敗の確認");
+  });
+  it("ignores the old school's post-save refresh after a school switch", async () => {
+    const view = await load(); const pending = deferred<Response>();
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementationOnce(original).mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    const old = structuredClone(body);
+    route.params = new URLSearchParams("schoolId=b"); body = { ...payload(), school: { ...payload().school, id: "b", name: "校舎B" } };
+    view.rerender(<ChallengeClient />); await screen.findByText("校舎B");
+    await act(async () => pending.resolve(Response.json(old)));
+    expect(screen.queryByText("校舎A")).toBeNull();
+    expect(screen.queryByText("実行記録を保存しました。")).toBeNull();
+  });
   it("distinguishes unrecorded request counts from explicitly recorded zero", async () => {
     body.document!.missions[3].evidence.requested = 0;
     await load();

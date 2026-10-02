@@ -112,10 +112,12 @@ export function updateChallenge(doc: ChallengeDocument, command: Record<string, 
   }
   const note = text(command.note);
   const status = command.status as ChallengeStatus;
-  if (["DEFERRED", "WAITING", "COMPLETED"].includes(status) && !note) throw new ChallengeError("実行内容・対象外の理由・確認待ちの内容を記録してください。");
+  const hasRemaining = Object.values(evidence).some(value => value === "要改善" || value === "後で対応");
+  if ((["DEFERRED", "WAITING"].includes(status) || status === "COMPLETED" && (mission.day !== 1 || hasRemaining)) && !note) throw new ChallengeError("実行内容・対象外の理由・確認待ちの内容を記録してください。");
   const previous = doc.missions[mission.day - 1];
   if (status === "COMPLETED" && previous.status !== "COMPLETED") {
-    if (Object.values(evidence).includes("要改善") || (mission.day !== 1 && Object.values(evidence).includes("後で対応"))) throw new ChallengeError("未対応項目が残っています。対応中または確認待ちで保存してください。");
+    const unresolved = mission.fields.filter(field => ["要改善", "後で対応"].includes(String(evidence[field.key])));
+    if (unresolved.some(field => mission.day !== 1 || field.priority === "S" || field.priority === "A")) throw new ChallengeError("重要な未対応項目が残っています。対応中または確認待ちで保存してください。");
     if (mission.fields.some(f => evidence[f.key] === undefined || evidence[f.key] === "")) throw new ChallengeError("すべての確認項目を記録してから完了してください。");
     if (mission.day === 3 && Number(evidence.requested) < 10) throw new ChallengeError("実際に依頼した人数が10名に達していません。");
     if (mission.day === 4) {

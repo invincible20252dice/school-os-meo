@@ -21,7 +21,7 @@ function display(value: number | null | undefined, unit = "件") {
   return value == null ? "未計測" : `${Math.round(value * 10) / 10}${unit}`;
 }
 
-function MissionForm({ progress, data, save, busy }: { progress: MissionProgress; data: ChallengeView; save: Save; busy: boolean }) {
+function MissionForm({ progress, data, save, busy, notice }: { progress: MissionProgress; data: ChallengeView; save: Save; busy: boolean; notice: string }) {
   const mission = missions[progress.day - 1];
   const [evidence, setEvidence] = useState<Evidence>(progress.evidence);
   const [note, setNote] = useState(progress.note);
@@ -29,6 +29,7 @@ function MissionForm({ progress, data, save, busy }: { progress: MissionProgress
   return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status }); }}>
     <h3>実行記録</h3>
     <p className={styles.muted}>記録区分：手動申告 / 目安 {mission.minutes}分</p>
+    {mission.day === 1 ? <p>全項目に回答し、最優先・重要項目を「はい」または「修正済み」にすると完了できます。残課題がある場合は理由を記録してください。全項目達成時の理由は任意です。</p> : null}
     {mission.day === 1 ? <div className={styles.facts}>
       <h3>登録済み基本情報</h3>
       <ul>{[{ label: "電話番号", value: data.school.phoneNumber }, { label: "住所", value: data.school.addressLine }, { label: "Webサイト", value: data.school.websiteUrl }].map(item => <li key={item.label}>{item.label}：{item.value || "DB未設定"}（Google上の内容は手動確認）</li>)}</ul>
@@ -48,6 +49,7 @@ function MissionForm({ progress, data, save, busy }: { progress: MissionProgress
       <label>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label>
       <button type="submit">実行記録を保存</button>
     </fieldset>
+    {notice ? <p role="status" className={styles.notice}>{notice}</p> : null}
     {progress.completedAt ? <p>完了記録：{progress.completedAt}</p> : null}
   </form>;
 }
@@ -78,6 +80,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
   const [target, setTarget] = useState(10);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [savedDay, setSavedDay] = useState<{ schoolId: string; day: number } | null>(null);
   const epoch = useRef(0);
   const saving = useRef(false);
   useEffect(() => {
@@ -107,6 +110,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
     if (!data || saving.current) return;
     const generation = epoch.current;
     saving.current = true; setBusy(true); setNotice("");
+    let persisted = false;
     try {
       const { data: auth } = await createBrowserSupabaseClient().auth.getSession();
       if (!auth.session?.access_token) throw new Error("ログインし直してください。");
@@ -114,9 +118,18 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
       const response = await fetch(`/api/dashboard/challenge?schoolId=${encodeURIComponent(schoolId)}`, { method: "POST", headers: { authorization: `Bearer ${auth.session.access_token}`, "Content-Type": "application/json" }, body: JSON.stringify({ ...command, version: data.version }) });
       const body = await response.json();
       if (!response.ok || body.success !== true) throw new Error(body.error || "保存できませんでした。");
-      if (generation === epoch.current) setRetry(v => v + 1);
+      persisted = true;
+      if (generation !== epoch.current) return;
+      const refreshed = await fetch(`/api/dashboard/challenge?schoolId=${encodeURIComponent(schoolId)}`, { headers: { authorization: `Bearer ${auth.session.access_token}` }, cache: "no-store" });
+      const latest = await refreshed.json();
+      if (!refreshed.ok || latest.success !== true) throw new Error("保存後の再取得に失敗しました。");
+      if (generation === epoch.current) {
+        if (command.action === "mission") setSavedDay({ schoolId, day: Number(command.day) });
+        setState({ key: schoolId, data: latest, error: "" });
+        setNotice("実行記録を保存しました。");
+      }
     } catch (error) {
-      if (generation === epoch.current) setNotice(error instanceof Error ? error.message : "保存できませんでした。");
+      if (generation === epoch.current) setNotice(persisted ? "保存は完了しましたが、最新状態を取得できませんでした。「再取得」で確認してください。" : error instanceof Error ? error.message : "保存できませんでした。");
     } finally {
       if (generation === epoch.current) { saving.current = false; setBusy(false); }
     }
@@ -131,13 +144,13 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
   const doc = data?.document;
   const completed = doc?.missions.filter(m => m.status === "COMPLETED").length ?? 0;
   const recommended = doc?.missions.find(m => m.status !== "COMPLETED" && m.status !== "DEFERRED") ?? doc?.missions.find(m => m.status !== "COMPLETED");
-  const selected = doc?.missions.find(m => m.day === day) ?? recommended;
+  const selected = doc?.missions.find(m => m.day === (day || (savedDay?.schoolId === schoolId ? savedDay.day : 0))) ?? recommended;
   const href = (path: string) => scopedHref(path, schoolId);
   return <main className={styles.page}>
     <header><p className={styles.kicker}>集客チャレンジ</p><h1>{weekly ? "今週のアクション" : "7日間チャレンジ"}</h1><p>導入後7日以内に、Google経由の新規問い合わせ1件を目指す</p>{data ? <p>{data.school.name}</p> : null}</header>
     <nav className={styles.tabs}><Link aria-current={!weekly ? "page" : undefined} href={href("/dashboard/challenge")}>7日間チャレンジ</Link><Link aria-current={weekly ? "page" : undefined} href={href("/dashboard/challenge/weekly")}>今週のアクション</Link><button type="button" disabled={busy} onClick={() => setRetry(v => v + 1)}>再取得</button></nav>
     {current?.error ? <p role="alert" className={styles.error}>{current.error}</p> : !data ? <p role="status">集客チャレンジを読み込んでいます。</p> : null}
-    {notice ? <p role="status" className={styles.notice}>{notice}</p> : null}
+    {notice && (weekly || !selected) ? <p role="status" className={styles.notice}>{notice}</p> : null}
     {data ? <>
       {data.snapshot.errors.length ? <details role="alert" className={styles.warning}><summary>一部データを取得できませんでした（{data.snapshot.errors.length}件）</summary><ul>{data.snapshot.errors.map(error => <li key={error}>{error}</li>)}</ul><p>利用できるDAYは引き続き実行できます。「再取得」で保存済みデータを再確認してください。</p></details> : null}
       <p className={styles.muted}>最終取得：{data.snapshot.at} / 再取得対象：DB内の進捗・連携設定・口コミ・投稿・競合計測</p>
@@ -151,7 +164,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
         </section>
         {!weekly ? <DayCards doc={doc} snapshot={data.snapshot} schoolId={schoolId} /> : null}</details>
         {weekly ? <section className={styles.grid}>{data.actions.length ? data.actions.map(action => <WeeklyRecord key={`${data.version}-${action.key}`} action={action} data={data} save={save} busy={busy} />) : <p>現在、記録が必要なアクションはありません。</p>}</section> : <>
-          {selected ? <DayDetail day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} /></DayDetail> : null}
+          {selected ? <DayDetail day={selected.day} doc={doc} snapshot={data.snapshot} schoolId={schoolId}><MissionForm key={`${schoolId}-${data.version}-${selected.day}`} progress={selected} data={data} save={save} busy={busy} notice={notice} /></DayDetail> : null}
           {(selected?.day === 3 || selected?.day === 4) ? <section className={styles.form}><h2>口コミアンケートの依頼</h2>{data.surveys?.length ? data.surveys.map(s => <p key={s.id}>{s.title} <button type="button" onClick={() => void copyRequest(s)}>依頼文・URLをコピー</button></p>) : <p>有効なアンケートがありません。アンケート設定を確認してください。</p>}</section> : null}
         </>}
         <section className={styles.metrics}><h2>実行と成果</h2><p>計測期間：{doc.startedAt} ～ {data.snapshot.at}</p><p className={styles.muted}>口コミ・投稿はDB保存分。Googleの全件取得・公開を保証する集計ではありません。</p>

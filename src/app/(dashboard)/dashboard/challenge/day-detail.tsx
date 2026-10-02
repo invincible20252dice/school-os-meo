@@ -61,7 +61,8 @@ export function DayDetail({ day, doc, snapshot, schoolId, children }: { day: num
     {progress.cleared ? <div className={styles.notice}><h3>DAY{day} CLEAR</h3><p>実行記録の完了を保存済みです。現在の未達項目は、完了履歴とは別に保持します。</p></div> : null}
     <div className={styles.dayColumns}><div><RecommendedActions progress={progress} schoolId={schoolId} /><section className={styles.section}><h3>未達項目一覧</h3>{progress.incomplete.length ? <ul className={styles.checklist}>{progress.incomplete.map(item => <li key={item.key}><strong>{item.label}</strong>：{item.deferred ? "あとで対応" : checkLabels[item.state]} / {priorityLabels[item.priority]}</li>)}</ul> : <p>未達項目はありません。</p>}</section><details className={styles.details}><summary>達成済み {progress.complete.length}項目</summary><ul className={styles.checklist}>{progress.complete.map(item => <ChecklistItem key={item.key} item={item} schoolId={schoolId} />)}</ul></details></div><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></div>
     {children}
-    <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>DAY{day + 1}へ進む →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
+    {!progress.cleared ? <p>DAY{day}はまだCLEARしていません。未対応項目は{progress.incomplete.length}件です。次のDAYへ進んでも完了扱いにはなりません。</p> : null}
+    <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>{progress.cleared ? "" : "それでも"}DAY{day + 1}へ進む →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
     <DiagnosticDetails doc={doc} />
   </section>;
 }
