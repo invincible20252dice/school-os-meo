@@ -1,0 +1,8 @@
+.git
+.env*
+.next*
+node_modules
+coverage
+work
+.seed-build
+*.log
