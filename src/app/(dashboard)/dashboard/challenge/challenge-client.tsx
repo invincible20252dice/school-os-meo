@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
-import { challengeStatuses, missions, remainingChecks, statusLabels, type ChallengeDocument, type ChallengeStatus, type Evidence, type MissionProgress, type Snapshot, type WeeklyAction } from "@/lib/challenge";
+import { challengeStatuses, missions, photoConfirmation, remainingChecks, statusLabels, type ChallengeDocument, type ChallengeStatus, type Evidence, type MissionProgress, type Snapshot, type WeeklyAction } from "@/lib/challenge";
 import styles from "./page.module.css";
 import { DayCards, DayDetail, OverallProgress } from "./day-detail";
 import { ActionPanel, ChallengeGoal } from "./next-actions";
@@ -29,10 +29,16 @@ function MissionForm({ progress, data, save, busy, notice }: { progress: Mission
   const [evidence, setEvidence] = useState<Evidence>(progress.evidence);
   const [note, setNote] = useState(progress.note);
   const [status, setStatus] = useState<ChallengeStatus>(progress.status === "NOT_STARTED" ? "IN_PROGRESS" : progress.status);
+  const photos = mission.day === 2 ? photoConfirmation(evidence, note) : null;
   const noteRequired = status === "WAITING" || status === "DEFERRED" || status === "COMPLETED" && (mission.day !== 1 || Object.values(evidence).some(v => v === "要改善" || v === "後で対応"));
-  return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status }); }}>
-    <h3>実行記録</h3>
+  return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status: photos?.status ?? status }); }}>
+    <h3>{photos ? "写真カテゴリの確認" : "実行記録"}</h3>
     <p className={styles.muted}>記録区分：手動申告 / 目安 {mission.minutes}分</p>
+    {photos ? <section aria-label="DAY2の完了条件" aria-live="polite">
+      <h4>{photos.remaining.length ? `DAY2完了まであと${photos.remaining.length}カテゴリ` : "DAY2完了条件を満たしました。"}</h4>
+      {photos.remaining.length ? <><ul>{photos.remaining.map(item => <li key={item.key}>{item.label}：{item.reason}</li>)}</ul><a href={`#${fieldAnchor(2, photos.remaining.find(item => !item.deferred)?.key ?? photos.remaining[0].key)}`}>次の写真カテゴリを確認する →</a></> : <p>{progress.status === "COMPLETED" ? "DAY2は完了済みです。確認内容を変更した場合は再度保存してください。" : "「DAY2を完了する」で確認内容を保存するとCLEARになります。"}</p>}
+      <p>追加済み・既存写真で充足はメモ不要です。対象外の場合だけ理由を記録してください。</p>
+    </section> : null}
     {mission.day === 1 ? <p>全項目に回答し、最優先・重要項目を「はい」または「修正済み」にすると完了できます。残課題がある場合は理由を記録してください。全項目達成時の理由は任意です。</p> : null}
     {mission.day === 1 ? <details className={styles.details}><summary>登録済み基本情報を見る</summary><div className={styles.facts}>
       <h3>登録済み基本情報</h3>
@@ -43,16 +49,16 @@ function MissionForm({ progress, data, save, busy, notice }: { progress: Mission
     {mission.day === 6 ? <div className={styles.facts}>{data.snapshot.comparisons?.length ? data.snapshot.comparisons.map(c => <div key={c.id}><h3>{c.keyword}</h3><p>計測：{c.at} / ID：{c.id}</p><ul>{c.competitors.map((row, i) => <li key={i}>{row.name} / 評価 {display(row.rating, "")} / 口コミ {display(row.reviewCount)}</li>)}</ul></div>) : <p>保存済み競合データがありません。順位計測・設定を確認してください。</p>}</div> : null}
     <div className={styles.links}>{mission.links.map(link => <Link key={link.path} href={scopedHref(link.path, data.school.id)}>{link.label} →</Link>)}</div>
     <fieldset disabled={busy}>
-      {mission.fields.map(field => field.question ? <fieldset id={fieldAnchor(mission.day, field.key)} tabIndex={-1} className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div></fieldset> : <label id={fieldAnchor(mission.day, field.key)} tabIndex={-1} key={field.key}>{field.label}
+      {mission.fields.map(field => field.question ? <fieldset id={fieldAnchor(mission.day, field.key)} tabIndex={-1} className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div>{photos?.exempt[0]?.key === field.key ? <label>対象外の理由（{photos.exempt.map(item => item.label).join("・")}）<textarea maxLength={2000} value={note} placeholder="例：専用駐車場がないため" onChange={e => setNote(e.target.value)} /></label> : null}</fieldset> : <label id={fieldAnchor(mission.day, field.key)} tabIndex={-1} key={field.key}>{field.label}
         {field.type === "select" ? <select aria-label={field.label} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">未確認</option>{field.options!.map(option => <option key={option}>{option}</option>)}
         </select> : field.key === "comparisonId" ? <select value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: e.target.value }))}>
           <option value="">計測を選択</option>{data.snapshot.comparisons?.map(c => <option key={c.id} value={c.id}>{c.keyword} / {c.at}</option>)}
         </select> : <input type={field.type === "number" ? "number" : "text"} min={0} max={10000} maxLength={2000} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: field.type === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))} />}
       </label>)}
-      <details className={styles.details} open={noteRequired || undefined}><summary>{noteRequired ? "メモ・確認内容を記録（この状態での保存に必要）" : note ? "メモを確認・編集" : "メモを追加する（任意）"}</summary><label>実行記録・残課題の理由<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label></details>
-      <label id={fieldAnchor(mission.day, "status")} tabIndex={-1}>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label>
-      <button type="submit">実行記録を保存</button>
+      {!photos?.exempt.length ? <details className={styles.details} open={!photos && noteRequired || undefined}><summary>{!photos && noteRequired ? "メモ・確認内容を記録（この状態での保存に必要）" : note ? "メモを確認・編集" : "メモを追加する（任意）"}</summary><label>{photos ? "確認メモ（任意）" : "実行記録・残課題の理由"}<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label></details> : null}
+      {!photos ? <label id={fieldAnchor(mission.day, "status")} tabIndex={-1}>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label> : null}
+      <button id={photos ? fieldAnchor(2, "status") : undefined} type="submit">{photos ? photos.status === "COMPLETED" ? "DAY2を完了する" : "確認内容を保存" : "実行記録を保存"}</button>
     </fieldset>
     {notice ? <p role="status" className={styles.notice}>{notice}</p> : null}
     {progress.completedAt ? <p>完了記録：{progress.completedAt}</p> : null}
@@ -133,7 +139,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
       if (generation === epoch.current) {
         if (command.action === "mission") setSavedDay({ schoolId, day: Number(command.day) });
         setState({ key: schoolId, data: latest, error: "" });
-        setNotice("実行記録を保存しました。");
+        setNotice(command.action === "mission" && command.day === 2 ? "写真の確認内容を保存しました。" : "実行記録を保存しました。");
       }
     } catch (error) {
       if (generation === epoch.current) setNotice(persisted ? "保存は完了しましたが、最新状態を取得できませんでした。「最新データに更新」で確認してください。" : error instanceof Error ? error.message : "保存できませんでした。");

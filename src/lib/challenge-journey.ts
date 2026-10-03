@@ -1,4 +1,4 @@
-import { missions, type ChallengeDocument, type MissionProgress, type Snapshot } from "./challenge";
+import { missions, photoConfirmation, type ChallengeDocument, type MissionProgress, type Snapshot } from "./challenge";
 import { dayProgress, fieldProgress, priorityWeights } from "./challenge-progress";
 
 export const dayGoals = [
@@ -19,6 +19,8 @@ export function dayChecks(doc: ChallengeDocument, progress: MissionProgress, sna
   const measured = dayProgress(progress, doc.additionalTarget, snapshot, doc.requestTarget?.count);
   return definition.fields.map(field => {
     const item = measured.items.find(item => item.key === field.key) ?? fieldProgress(field, progress);
+    const missingPhoto = progress.day === 2 ? photoConfirmation(progress.evidence, progress.note).remaining.find(missing => missing.key === field.key) : undefined;
+    if (missingPhoto) return { ...item, reason: missingPhoto.reason, state: item.state === "GOOD" ? "UNCHECKED" as const : item.state };
     // A zero target still requires an explicit execution record; DAY6 needs a valid saved measurement.
     if (field.key === "requested" && progress.evidence.requested === undefined) return { ...item, state: "UNCHECKED" as const };
     if (field.key === "comparisonId" && !snapshot.comparisons?.some(c => c.id === progress.evidence.comparisonId)) return { ...item, state: "UNCHECKED" as const };

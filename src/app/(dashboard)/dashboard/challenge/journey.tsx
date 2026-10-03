@@ -24,7 +24,7 @@ export function Journey({ doc, snapshot, viewingDay, schoolId, onTask }: { doc: 
       <section className={styles.nextTask} aria-label="次にやること">
         <p className={styles.kicker}>NEXT ACTION</p>
         <h3>{currentTask ? `${currentTask.label}を確認しましょう` : "実行記録を確認して、DAYを完了にしましょう"}</h3>
-        <p>{currentTask ? currentTask.reason : "確認項目はそろっています。必要なメモを記入し、進捗状態を「完了」にして保存してください。保存時に完了条件を確認します。"}</p>
+        <p>{currentTask ? currentTask.reason : currentDay.day === 2 ? "写真の確認項目はそろっています。「DAY2を完了する」で保存してください。進捗状態の選択は不要です。" : "確認項目はそろっています。必要なメモを記入し、進捗状態を「完了」にして保存してください。保存時に完了条件を確認します。"}</p>
         <button type="button" className={styles.primary} onClick={() => onTask(currentDay.day, currentTask?.key ?? "status")}>{currentTask ? "今すぐ確認する" : "完了の記録へ"} →</button>
       </section>
     </section> : <section className={styles.today} aria-label="チャレンジ完了"><p className={styles.dayNumber}>7 / 7 DAY 完了</p><h2>7日間チャレンジの実行記録がそろいました</h2><p>これからは今週のアクションで改善を続けましょう。残課題や問い合わせの成果は、引き続き確認できます。</p><Link className={styles.primaryLink} href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link></section>}

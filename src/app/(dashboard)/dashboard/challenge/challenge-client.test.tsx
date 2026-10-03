@@ -31,6 +31,57 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const load = async (weekly = false) => { const view = render(<ChallengeClient weekly={weekly} />); await screen.findByText("校舎A"); return view; };
 describe("challenge UI", () => {
+  it.each(["追加済み", "既存写真で充足"])("completes DAY2 using only %s answers, restores them, and offers DAY3", async answer => {
+    route.params.set("day", "2");
+    body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
+    await load();
+    expect(screen.queryByLabelText("進捗状態")).toBeNull();
+    expect(screen.getByRole("button", { name: "確認内容を保存" })).toBeDefined();
+    for (const field of missions[1].fields) fireEvent.click(within(screen.getByRole("radiogroup", { name: field.label })).getByRole("radio", { name: answer }));
+    expect(screen.getByText("DAY2完了条件を満たしました。")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "DAY2を完了する" }));
+    await screen.findByText("✓ DAY2 完了");
+    expect(commands[0]).toMatchObject({ status: "COMPLETED", note: "", version: 1 });
+    expect(screen.getByRole("link", { name: /次のDAY3/ })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "最新データに更新" }));
+    await screen.findByText("✓ DAY2 完了");
+    expect((screen.getByLabelText("確認メモ（任意）") as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getAllByRole("radio", { name: answer }).every(radio => (radio as HTMLInputElement).checked)).toBe(true);
+  });
+  it("shows an exemption reason next to the relevant category and preserves it after save", async () => {
+    route.params.set("day", "2");
+    body.document!.missions[1].evidence = { ...completeCommand(2).evidence, photo7: "対象外" };
+    await load();
+    const group = screen.getByRole("radiogroup", { name: "駐車場・駐輪場" });
+    const reason = within(group).getByLabelText("対象外の理由（駐車場・駐輪場）");
+    expect(screen.getByText("DAY2完了まであと1カテゴリ")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
+    await screen.findByText("写真の確認内容を保存しました。");
+    expect(body.document!.missions[1].status).toBe("IN_PROGRESS");
+    fireEvent.change(screen.getByLabelText("対象外の理由（駐車場・駐輪場）"), { target: { value: "専用駐車場がないため" } });
+    expect(reason).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "DAY2を完了する" }));
+    await screen.findByText("✓ DAY2 完了");
+    expect(body.document!.missions[1].note).toBe("専用駐車場がないため");
+  });
+  it.each([["あとで確認", "後で対応", "WAITING"], ["いいえ", "要改善", "IN_PROGRESS"]])("explains the remaining DAY2 %s and saves without memo", async (label, value, status) => {
+    route.params.set("day", "2");
+    body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
+    body.document!.missions[1].evidence = completeCommand(2).evidence;
+    await load();
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "授業" })).getByRole("radio", { name: label }));
+    const remaining = screen.getByRole("region", { name: "DAY2の完了条件" });
+    expect(remaining.textContent).toContain(`授業：${label}になっています`);
+    expect(within(remaining).getByRole("link").getAttribute("href")).toBe("#challenge-day-2-photo3");
+    expect(screen.queryByRole("button", { name: "DAY2を完了する" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
+    await screen.findByText("写真の確認内容を保存しました。");
+    expect(body.document!.missions[1]).toMatchObject({ status, note: "", evidence: { photo3: value } });
+    expect(screen.getByRole("region", { name: "次にやること" }).textContent).toContain("授業を確認しましょう");
+    fireEvent.change(screen.getByLabelText("確認メモ（任意）"), { target: { value: "来週確認します" } });
+    fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
+    await waitFor(() => expect(body.document!.missions[1].note).toBe("来週確認します"));
+  });
   it.each([true, false])("focuses the current task from a future DAY without changing saved progress (reduced motion %s)", async reduced => {
     body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
     body.document!.missions[1].evidence = completeCommand(2).evidence;
@@ -49,8 +100,8 @@ describe("challenge UI", () => {
     expect(scroll).toHaveBeenCalledWith({ behavior: reduced ? "auto" : "smooth", block: "center" });
     expect(body.document).toEqual(saved); expect(commands).toEqual([]);
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "授業" })).getByRole("radio", { name: "追加済み" }));
-    fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
-    await screen.findByText("実行記録を保存しました。");
+    fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
+    await screen.findByText("写真の確認内容を保存しました。");
     expect(screen.getByRole("region", { name: "次にやること" }).textContent).toContain("自習を確認しましょう");
     expect(body.document!.missions[1].evidence.photo0).toBe(saved!.missions[1].evidence.photo0);
     expect(body.document!.missions[0].completedAt).toBe(saved!.missions[0].completedAt);
@@ -141,7 +192,7 @@ describe("challenge UI", () => {
     }
     expect(fetch).toHaveBeenCalledWith("/api/dashboard/challenge?schoolId=a", expect.objectContaining({ headers: { authorization: "Bearer token" }, cache: "no-store" }));
   });
-  it.each([1, 2, 3, 4, 5, 6, 7])("records DAY%s through the real validation logic and restores it after reload", async day => {
+  it.each([1, 3, 4, 5, 6, 7])("records DAY%s through the real validation logic and restores it after reload", async day => {
     route.params.set("day", String(day));
     await load();
     const command = completeCommand(day);

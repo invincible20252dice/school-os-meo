@@ -31,6 +31,10 @@ describe("read-only challenge journey", () => {
     expect(deriveJourney(doc, snapshot())).toMatchObject({ completed: 1, currentTask: { key: "photo3" }, dayCompletion: { done: 6, total: 8, remaining: 2 } });
     doc.missions[1].evidence = completeCommand(2).evidence;
     expect(deriveJourney(doc, snapshot())).toMatchObject({ currentDay: { day: 2 }, currentTask: null, completed: 1 });
+    doc.missions[1].evidence.photo7 = "対象外";
+    expect(deriveJourney(doc, snapshot())).toMatchObject({ currentTask: { key: "photo7" }, dayCompletion: { done: 7, remaining: 1 } });
+    doc.missions[1].note = "専用駐車場なし";
+    expect(deriveJourney(doc, snapshot()).currentTask).toBeNull();
   });
   it("requires explicit zero requests and distinguishes request targets from field counts", () => {
     const doc = challengeDocument();

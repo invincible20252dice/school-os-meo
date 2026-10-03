@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { ChallengeError, count, object, readDocument, remainingChecks, startChallenge, text, updateChallenge, weeklyActions } from "./challenge";
+import { ChallengeError, count, object, photoConfirmation, readDocument, remainingChecks, startChallenge, text, updateChallenge, weeklyActions } from "./challenge";
 import { challengeDocument, completeCommand, snapshot } from "@/test/challenge-fixtures";
 
 describe("school challenge rules", () => {
+  it.each(["追加済み", "既存写真で充足"])("auto-completes DAY2 with %s and no memo even for legacy IN_PROGRESS commands", value => {
+    const evidence = Object.fromEntries(Object.keys(completeCommand(2).evidence).map(key => [key, value]));
+    const result = updateChallenge(challengeDocument(), { ...completeCommand(2), evidence, note: "", status: "IN_PROGRESS" }, snapshot(), "actor");
+    expect(result.missions[1]).toMatchObject({ status: "COMPLETED", evidence, note: "", completedAt: snapshot().at });
+    const later = updateChallenge(result, { ...completeCommand(2), evidence, note: "" }, { ...snapshot(), at: "2026-10-03T00:00:00Z" }, "actor");
+    expect(later.missions[1].completedAt).toBe(snapshot().at);
+  });
+  it("requires only an exemption reason, preserves the original note key, and never clears on a forced status", () => {
+    const command = { ...completeCommand(2), evidence: { ...completeCommand(2).evidence, photo7: "対象外" }, note: " " };
+    const pending = updateChallenge(challengeDocument(), command, snapshot(), "actor");
+    expect(pending.missions[1].status).toBe("IN_PROGRESS");
+    expect(photoConfirmation(command.evidence, "").remaining).toEqual([expect.objectContaining({ key: "photo7", reason: "対象外の理由を入力してください。" })]);
+    const done = updateChallenge(pending, { ...command, note: "専用駐車場がないため" }, snapshot(), "actor");
+    expect(done.missions[1]).toMatchObject({ status: "COMPLETED", note: "専用駐車場がないため" });
+  });
+  it.each([["後で対応", "WAITING"], ["要改善", "IN_PROGRESS"], ["", "IN_PROGRESS"]])("retains incomplete DAY2 %s without a required memo", (answer, status) => {
+    const command = { ...completeCommand(2), evidence: { ...completeCommand(2).evidence, photo3: answer }, note: "" };
+    const cleared = updateChallenge(challengeDocument(), completeCommand(2), snapshot(), "actor");
+    const result = updateChallenge(cleared, command, snapshot(), "actor");
+    expect(result.missions[1]).toMatchObject({ status, completedAt: null });
+    expect(photoConfirmation(command.evidence, "").remaining[0].key).toBe("photo3");
+  });
+  it("keeps untouched DAY2 NOT_STARTED, and prioritizes real missing work over deferred checks", () => {
+    expect(photoConfirmation({}, "").status).toBe("NOT_STARTED");
+    expect(photoConfirmation({ photo0: "後で対応" }, "").status).toBe("IN_PROGRESS");
+  });
   it.each(["確認済み", "修正済み"])("completes DAY1 with %s answers and an optional empty note", answer => {
     const command = completeCommand(1);
     command.evidence = Object.fromEntries(Object.keys(command.evidence).map(key => [key, answer]));
@@ -30,7 +56,7 @@ describe("school challenge rules", () => {
     expect(remainingChecks(later)).toEqual([{ day: 1, key: "website", label: "Webサイト" }]);
     expect(weeklyActions(later, snapshot())).toContainEqual(expect.objectContaining({ key: "check-1-website", status: "IN_PROGRESS", reason: "要改善として記録された残課題" }));
   });
-  it.each([[1, "website", "要改善"], [2, "photo0", "後で対応"], [7, "test", "要改善"]])("does not grant a first CLEAR with unresolved DAY%s evidence", (day, key, value) => {
+  it.each([[1, "website", "要改善"], [7, "test", "要改善"]])("does not grant a first CLEAR with unresolved DAY%s evidence", (day, key, value) => {
     const command = completeCommand(Number(day)); command.evidence[String(key)] = String(value);
     expect(() => updateChallenge(challengeDocument(), command, snapshot(), "actor")).toThrow("未対応項目");
     expect(updateChallenge(challengeDocument(), { ...command, status: "WAITING" }, snapshot(), "actor").missions[Number(day) - 1].status).toBe("WAITING");
@@ -85,7 +111,6 @@ describe("school challenge rules", () => {
   it.each([
     { ...completeCommand(1), evidence: {} },
     { ...completeCommand(5), evidence: { published: "公開確認済み", publication: "   " } },
-    { ...completeCommand(2), note: " " },
     { ...completeCommand(1), evidence: { name: "invalid" } },
     { ...completeCommand(3), evidence: { requested: 9 } },
     { ...completeCommand(4), evidence: { requested: 9, reviews: "対応済み" } },

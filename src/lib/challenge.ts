@@ -44,6 +44,23 @@ export type Snapshot = {
   errors: string[];
 };
 export type MissionProgress = { day: number; status: ChallengeStatus; evidence: Evidence; note: string; updatedAt: string | null; completedAt: string | null; actorId: string | null };
+// Shared by the form and server; only a save changes persisted progress.
+export function photoConfirmation(evidence: Evidence, note: string) {
+  const exempt = missions[1].fields.filter(field => evidence[field.key] === "対象外");
+  const remaining = missions[1].fields.flatMap(field => {
+    const value = evidence[field.key];
+    const reason = value === "追加済み" || value === "既存写真で充足" ? null
+      : value === "対象外" ? (note.trim() ? null : "対象外の理由を入力してください。")
+      : value === "後で対応" ? "あとで確認になっています。写真の状態を確認してください。"
+      : value === "要改善" ? "いいえになっています。写真を追加するか、既存写真を確認してください。"
+      : "写真の状態を選択してください。";
+    return reason ? [{ key: field.key, label: field.label, reason, deferred: value === "後で対応" }] : [];
+  });
+  const status: ChallengeStatus = remaining.length === 0 ? "COMPLETED"
+    : missions[1].fields.every(field => !evidence[field.key]) ? "NOT_STARTED"
+    : remaining.every(item => item.deferred) ? "WAITING" : "IN_PROGRESS";
+  return { exempt, remaining, status };
+}
 export type ActionRecord = { status: "COMPLETED" | "DEFERRED"; note: string; at: string; actorId: string };
 export type ChallengeDocument = {
   schemaVersion: 1; startedAt: string; completedAt: string | null; additionalTarget: number;
@@ -122,9 +139,9 @@ export function updateChallenge(doc: ChallengeDocument, command: Record<string, 
     if (field.options && !field.options.includes(String(evidence[field.key]))) throw new ChallengeError(`${field.label}の選択内容を確認してください。`);
   }
   const note = text(command.note);
-  const status = command.status as ChallengeStatus;
+  const status = mission.day === 2 ? photoConfirmation(evidence, note).status : command.status as ChallengeStatus;
   const hasRemaining = Object.values(evidence).some(value => value === "要改善" || value === "後で対応");
-  if ((["DEFERRED", "WAITING"].includes(status) || status === "COMPLETED" && (mission.day !== 1 || hasRemaining)) && !note) throw new ChallengeError("実行内容・対象外の理由・確認待ちの内容を記録してください。");
+  if (mission.day !== 2 && (["DEFERRED", "WAITING"].includes(status) || status === "COMPLETED" && (mission.day !== 1 || hasRemaining)) && !note) throw new ChallengeError("実行内容・対象外の理由・確認待ちの内容を記録してください。");
   const previous = doc.missions[mission.day - 1];
   if (status === "COMPLETED" && previous.status !== "COMPLETED") {
     const unresolved = mission.fields.filter(field => ["要改善", "後で対応"].includes(String(evidence[field.key])));

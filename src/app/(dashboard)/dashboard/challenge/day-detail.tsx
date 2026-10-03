@@ -69,7 +69,7 @@ export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvi
     {progress.cleared ? <div className={styles.notice}><h3>✓ DAY{day} 完了</h3><p>完了の実行記録を保存済みです。残課題は別に確認できます。</p></div> : null}
     {children}
     <details className={styles.details}><summary>このDAYの成果・達成率を見る</summary><ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} /><p>項目の達成率とDAYの完了記録は別です。</p><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></details>
-    <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>次のDAYを見る →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
+    <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>次のDAY{day + 1}を見る →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
     <DiagnosticDetails doc={doc} />
   </section>;
   return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>

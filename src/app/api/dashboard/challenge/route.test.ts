@@ -21,6 +21,21 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("authenticated school challenge API", () => {
+  it.each([
+    { answer: "追加済み", note: "", status: "COMPLETED" },
+    { answer: "既存写真で充足", note: "", status: "COMPLETED" },
+    { answer: "対象外", note: "専用駐車場なし", status: "COMPLETED" },
+    { answer: "対象外", note: "", status: "IN_PROGRESS" },
+    { answer: "後で対応", note: "", status: "WAITING" },
+    { answer: "要改善", note: "", status: "IN_PROGRESS" },
+  ])("persists server-derived DAY2 $answer as $status within the existing version boundary", async ({ answer, note, status }) => {
+    vi.mocked(prisma.schoolChallenge.findUnique).mockResolvedValue(stored() as never);
+    const command = { ...completeCommand(2), evidence: { ...completeCommand(2).evidence, photo7: answer }, note, version: 1 };
+    expect((await POST(request(command))).status).toBe(200);
+    const call = vi.mocked(prisma.schoolChallenge.updateMany).mock.calls[0][0]!;
+    expect(call.where).toEqual({ schoolId: "a", version: 1 });
+    expect(call.data.document).toMatchObject({ missions: expect.arrayContaining([expect.objectContaining({ day: 2, evidence: command.evidence, note, status, actorId: "u", completedAt: status === "COMPLETED" ? snapshot().at : null })]) });
+  });
   it("loads an unstarted school without writing records", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("private, no-store");
