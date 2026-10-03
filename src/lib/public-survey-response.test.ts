@@ -203,7 +203,7 @@ describe("public-survey-response", () => {
     expect(steps.map((step) => step.id)).toEqual(["system-respondent-type", "q2", "q1", "q3"]);
     expect(steps.map((step) => step.helperText)).toEqual([
       "1つ選択してください",
-      "最大3つまで選択できます",
+      "3つまで選択できます",
       "1つ選択してください",
       "100〜300文字を目安に入力",
     ]);

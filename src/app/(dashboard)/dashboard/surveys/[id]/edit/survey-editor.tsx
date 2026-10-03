@@ -753,13 +753,16 @@ export default function SurveyEditor({ surveyId }: { surveyId: string }) {
                         <span>最大選択数</span>
                         <input
                           type="number"
-                          value={item.maxSelect ?? 3}
+                          aria-label="最大選択数"
+                          min={0}
+                          value={item.maxSelect ?? 0}
                           onChange={(event) =>
                             updateItem(item.id, {
                               maxSelect: Number(event.target.value),
                             })
                           }
                         />
+                        <small>0は上限なし</small>
                       </label>
                     ) : null}
                     {item.type !== "TEXT" ? (

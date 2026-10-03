@@ -309,8 +309,10 @@ export function buildSurveyPreviewSteps(survey: SurveyEditorState) {
           ? getTextQuestionPlaceholder(item.question, item.placeholder)
           : undefined,
       helperText:
-        item.type === "MULTI_SELECT" && item.maxSelect
-          ? `最大${item.maxSelect}つまで選択できます`
+        item.type === "MULTI_SELECT"
+          ? item.maxSelect && item.maxSelect > 0
+            ? `${item.maxSelect}つまで選択できます`
+            : "複数選択できます"
           : item.type === "TEXT"
             ? getTextQuestionHelperText(
                 item.question,

@@ -259,7 +259,8 @@ describe("survey editor workflow", () => {
     render(<SurveyEditor surveyId="survey-1" />);
     await screen.findByText("保存済みアンケートをDBから読み込みました。");
     expect(screen.getAllByRole("combobox", { name: "設問タイプ" }).map(el => (el as HTMLSelectElement).value)).toEqual(["SINGLE_SELECT", "MULTI_SELECT", "TEXT", "TEXT", "TEXT"]);
-    expect((screen.getByRole("spinbutton", { name: "最大選択数" }) as HTMLInputElement).value).toBe("3");
+    expect((screen.getByRole("spinbutton", { name: "最大選択数" }) as HTMLInputElement).value).toBe("0");
+    expect(screen.getByText("0は上限なし")).toBeDefined();
     expect(screen.getAllByRole("textbox", { name: "入力例（プレースホルダー）" }).map(el => (el as HTMLInputElement).value)).toEqual(["", "", "例: 高校名"]);
     expect(savedCard(survey.title).getByText("作成日時 日時なし")).toBeDefined();
   });

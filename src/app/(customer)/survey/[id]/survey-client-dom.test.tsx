@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SurveyClient from "./survey-client";
 import type { SerializedPublicSurveyResponse } from "@/lib/public-survey-query";
@@ -32,6 +32,44 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("public survey loading and input", () => {
+  it.each([2, 3, null, 0])("uses configured maxSelect=%s for both guidance and actual selection", async maxSelect => {
+    const updatedQuestions = [questions[0], { ...questions[1], maxSelect, options: ["A", "B", "C", "D"] }];
+    const updated = { ...data, questions: updatedQuestions, survey: { ...data.survey!, questions: updatedQuestions, items: updatedQuestions } };
+    render(<SurveyClient schoolId="s1" surveyId="v1" initialData={updated} />);
+    expect(screen.getByText("1つ選択してください")).toBeTruthy();
+    const multi = screen.getByRole("heading", { name: "良かった点" }).closest("section")!;
+    expect(within(multi).getByText(maxSelect ? `${maxSelect}つまで選択できます` : "複数選択できます")).toBeTruthy();
+    const text = screen.getByRole("textbox").closest("section")!;
+    expect(within(text).queryByText(/選択/)).toBeNull();
+    const count = maxSelect || 4;
+    for (let i = 0; i < count; i++) {
+      fireEvent.click(screen.getByRole("checkbox", { name: updatedQuestions[1].options[i] }));
+      expect(screen.getAllByRole("checkbox").filter(input => (input as HTMLInputElement).checked)).toHaveLength(i + 1);
+    }
+    if (maxSelect) {
+      const excess = screen.getByRole("checkbox", { name: updatedQuestions[1].options[count] });
+      fireEvent.click(excess);
+      expect((excess as HTMLInputElement).checked).toBe(false);
+      expect(within(multi).getByRole("status").textContent).toBe(`${maxSelect}つまで選択できます`);
+      fireEvent.click(screen.getByRole("checkbox", { name: "A" }));
+      expect(within(multi).queryByRole("status")).toBeNull();
+      fireEvent.click(excess);
+      expect((excess as HTMLInputElement).checked).toBe(true);
+    } else expect(within(multi).queryByRole("status")).toBeNull();
+  });
+
+  it("reflects a changed stored maximum on reload without modifying the questions or answers in storage", async () => {
+    const original = structuredClone(data);
+    const view = render(<SurveyClient schoolId="s1" surveyId="v1" initialData={data} />);
+    expect(screen.getByText("2つまで選択できます")).toBeTruthy();
+    const updatedQuestions = [questions[0], { ...questions[1], maxSelect: 3 }];
+    view.rerender(<SurveyClient schoolId="s1" surveyId="v1" initialData={{ ...data, questions: updatedQuestions, survey: { ...data.survey!, questions: updatedQuestions, items: updatedQuestions } }} />);
+    expect(screen.getByText("3つまで選択できます")).toBeTruthy();
+    expect(screen.queryByText("2つまで選択できます")).toBeNull();
+    expect(data).toEqual(original);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("keeps submit disabled until fetched questions arrive, then binds actual questions and role", async () => {
     const pending = deferred<Response>();
     fetchMock.mockReturnValueOnce(pending.promise);

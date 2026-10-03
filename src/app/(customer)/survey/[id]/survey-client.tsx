@@ -154,6 +154,7 @@ export default function SurveyClient({
   const [copyNotice, setCopyNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectionNotice, setSelectionNotice] = useState<{ id: string; message: string } | null>(null);
   const [debugError, setDebugError] = useState(initialDebugError);
   const [responseNotice, setResponseNotice] = useState("");
   const [isSettingLoading, setIsSettingLoading] = useState(!initialData);
@@ -174,6 +175,7 @@ export default function SurveyClient({
   const isGoogleReviewGuideVisible = reviews.length > 0;
 
   useEffect(() => {
+    setSelectionNotice(null);
     if (initialData) {
       const questions = extractPublicSurveyQuestions(initialData);
       setDebugError(
@@ -351,12 +353,18 @@ export default function SurveyClient({
   }, [initialData, schoolId, surveyId]);
 
   function toggleSurveyOption(item: PublicSurveyItem, option: string) {
+    setSelectionNotice(null);
     if (item.type === "SINGLE_SELECT") {
       setAnswers((current) => setSingleSurveyAnswer(current, item.id, option));
       return;
     }
 
-    setAnswers((current) => toggleMultiSurveyAnswer(current, item, option));
+    const next = toggleMultiSurveyAnswer(answers, item, option);
+    if (next === answers) {
+      setSelectionNotice({ id: item.id, message: `${item.maxSelect}つまで選択できます` });
+      return;
+    }
+    setAnswers(next);
   }
 
   function updateTextAnswer(item: PublicSurveyItem, value: string) {
@@ -513,6 +521,7 @@ export default function SurveyClient({
                 <span className={styles.questionNumber}>Q{item.order}</span>
                 <h2>{item.question}{item.order === 1 ? <small>（必須）</small> : null}</h2>
                 <p>{item.helperText}</p>
+                {selectionNotice?.id === item.id ? <p role="status" className={styles.error}>{selectionNotice.message}</p> : null}
                 {item.type === "TEXT" ? (
                   <>
                     <textarea
