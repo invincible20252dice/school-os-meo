@@ -96,7 +96,33 @@
 .page .taskHighlight { background: #eaf5ef; outline: 3px solid #147d68; outline-offset: 6px; }
 .page [id^="challenge-day-"] { scroll-margin-block: 100px; }
 .page [id^="challenge-day-"]:focus-visible { outline: 3px solid #2475c5; }
+.photoRow { border-bottom: 1px solid #dde5e1; min-width: 0; }
+.photoSummary { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(120px, 1fr) 100px; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; }
+.photoSummary .badge { justify-self: start; overflow-wrap: anywhere; }
+.photoSummary button { width: 100%; padding: 8px; }
+.photoEditor { padding: 12px 16px; background: #f4f7f9; }
+.page .photoEditor fieldset { border: 0; padding: 0; margin-bottom: 12px; }
+.photoEditor textarea { display: block; }
+.photoEditor .selfCheck > label { display: grid; margin-top: 12px; }
+.completion { border-top: 2px solid #147d68; padding: 20px 0; margin-top: 12px; }
+.completion h3 { font-size: 20px; margin: 0 0 12px; }
+.completion > strong { font-size: 22px; }
+.unsaved { color: #805512; }
+.stickyAction { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); border-top: 1px solid #bccdc4; background: #fff; }
+.stickyAction span { display: grid; gap: 2px; font-size: 12px; }
+.stickyAction strong { font-size: 14px; }
+.stickyAction small { color: #805512; }
+.page .stickyAction button { width: auto; }
+.form:has(.photoRow) > fieldset { gap: 0; }
+.warning { background: transparent; color: #52606a; border-left: 0; padding: 12px 0; }
 @media (max-width: 520px) {
+  .photoSummary { grid-template-columns: minmax(0, 1fr) 88px; gap: 4px 12px; }
+  .photoSummary > strong { grid-column: 1; }
+  .photoSummary > .badge { grid-column: 1; }
+  .photoSummary > button { grid-column: 2; grid-row: 1 / 3; }
+  .photoEditor { padding: 12px 8px; }
+  .stickyAction { bottom: 0; }
+  .page .stickyAction button { max-width: 220px; padding: 10px 12px; }
   .page .tabs { gap: 8px 16px; padding: 10px 0; font-size: 13px; }
   .tabs button { padding: 8px; font-size: 12px; }
   .dayNav a { font-size: 10px; min-height: 68px; }

@@ -56,7 +56,7 @@ export function OutcomeMetrics({ day, doc, snapshot }: { day: number; doc: Chall
   </dl></section>;
 }
 export function DiagnosticDetails({ doc }: { doc: ChallengeDocument }) {
-  return <details className={styles.details}><summary>確認項目の詳細を見る</summary><p>現在のミッション定義と保存済み手動記録です。自動診断スコアではありません。</p><div className={styles.tableScroll}><table><thead><tr><th>DAY</th><th>確認項目</th><th>現在の記録</th><th>状態</th><th>重要度</th><th>判定方式</th></tr></thead><tbody>{missions.flatMap(m => m.fields.map(field => {
+  return <details className={styles.details}><summary>管理用の詳細を見る</summary><p>現在のミッション定義と保存済み手動記録です。自動診断スコアではありません。</p><div className={styles.tableScroll}><table><thead><tr><th>DAY</th><th>確認項目</th><th>現在の記録</th><th>状態</th><th>重要度</th><th>判定方式</th></tr></thead><tbody>{missions.flatMap(m => m.fields.map(field => {
     const item = fieldProgress(field, doc.missions[m.day - 1]);
     return <tr key={`${m.day}-${field.key}`}><td>{m.day}</td><td>{field.label}</td><td>{item.value}</td><td>{item.deferred ? "あとで対応" : item.state === "GOOD" ? "記録済み" : checkLabels[item.state]}</td><td>{item.priority}</td><td>手動記録</td></tr>;
   }))}</tbody></table></div></details>;
@@ -66,11 +66,10 @@ export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvi
   const progress = dayProgress(doc.missions[day - 1], doc.additionalTarget, snapshot, doc.requestTarget?.count);
   if (compact) return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
     <header><p className={styles.kicker}>閲覧中：DAY{day}</p><h2>{dayTitle(day)}</h2></header>
-    {progress.cleared ? <div className={styles.notice}><h3>✓ DAY{day} 完了</h3><p>完了の実行記録を保存済みです。残課題は別に確認できます。</p></div> : null}
-    {children}
+    {progress.cleared ? <div className={styles.notice}><h3>✓ DAY{day} 完了</h3><p>完了の実行記録を保存済みです。残課題は別に確認できます。</p>{day === 2 ? <strong>{dayChecks(doc, doc.missions[1], snapshot).filter(item => item.state === "GOOD").length} / 8 項目確認済み</strong> : null}</div> : null}
+    {progress.cleared && day === 2 ? <details className={styles.details}><summary>DAY2の内容を見る</summary>{children}</details> : children}
     <details className={styles.details}><summary>このDAYの成果・達成率を見る</summary><ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} /><p>項目の達成率とDAYの完了記録は別です。</p><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></details>
     <nav className={styles.links}>{day < 7 ? <Link href={challengeHref(`/dashboard/challenge?day=${day + 1}`, schoolId)}>次のDAY{day + 1}を見る →</Link> : <Link href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link>}</nav>
-    <DiagnosticDetails doc={doc} />
   </section>;
   return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
     <header><p className={styles.kicker}>DAY{day} / 7</p><h2>{mission.title}</h2><p>{mission.criterion}</p><small>所要時間：約{mission.minutes}分 / 手動の実行記録</small></header>

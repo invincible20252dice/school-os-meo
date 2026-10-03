@@ -60,7 +60,7 @@ describe("DAY achievement presentation", () => {
     const actions = screen.getByRole("region", { name: "今日やること" });
     expect(within(actions).getAllByRole("listitem").length).toBeLessThanOrEqual(3);
     expect(screen.getByText("保存フォーム")).toBeDefined();
-    expect(screen.getByText("確認項目の詳細を見る").closest("details")?.open).toBe(false);
+    expect(screen.getByText("管理用の詳細を見る").closest("details")?.open).toBe(false);
     expect(screen.getByRole("region", { name: "現在の成果" })).toBeDefined();
     expect(screen.getByRole("link", { name: day < 7 ? `それでもDAY${day + 1}へ進む →` : "今週のアクションへ →" }).getAttribute("href")).toContain("schoolId=school%20%26%20A");
     expect(screen.getByText(new RegExp(`DAY${day}はまだCLEARしていません`))).toBeDefined();

@@ -13,6 +13,8 @@ const deferred = <T,>() => { let resolve!: (v: T) => void; let reject!: (v: unkn
 let body: ChallengeView;
 let commands: Record<string, unknown>[];
 beforeEach(() => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
   route.params = new URLSearchParams("schoolId=a"); commands = []; body = payload();
   session.mockReset().mockResolvedValue({ data: { session: { access_token: "token" } } });
   vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
@@ -31,36 +33,72 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const load = async (weekly = false) => { const view = render(<ChallengeClient weekly={weekly} />); await screen.findByText("校舎A"); return view; };
 describe("challenge UI", () => {
+  it("keeps only one photo editor open, preserves unsaved edits and moves from the sticky action to completion", async () => {
+    body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
+    body.document!.missions[1].evidence = { ...completeCommand(2).evidence, photo3: "後で対応" };
+    route.params.set("day", "2");
+    await load();
+    const sticky = screen.getByLabelText("DAY2の操作");
+    fireEvent.click(within(sticky).getByRole("button", { name: "未完了項目へ移動" }));
+    expect(document.activeElement?.id).toBe("challenge-day-2-photo3");
+    fireEvent.click(screen.getByRole("radio", { name: "追加済み" }));
+    fireEvent.click(screen.getByRole("button", { name: "一覧に戻る" }));
+    expect(screen.queryAllByRole("radiogroup")).toHaveLength(0);
+    expect(screen.getByText(/未保存の変更があります/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "授業を変更" }));
+    expect((screen.getByRole("radio", { name: "追加済み" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "授業を変更" }));
+    expect(screen.queryAllByRole("radiogroup")).toHaveLength(0);
+    fireEvent.click(within(sticky).getByRole("button", { name: "DAY2を完了する" }));
+    expect(document.activeElement?.id).toBe("challenge-day-2-status");
+    expect(commands).toEqual([]);
+    const region = screen.getByRole("region", { name: "DAY2詳細" });
+    for (const label of ["全体・DAY別の進捗一覧", "連携・データ取得情報", "管理用の詳細を見る"]) {
+      expect(region.compareDocumentPosition(screen.getByText(label)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
   it.each(["追加済み", "既存写真で充足"])("completes DAY2 using only %s answers, restores them, and offers DAY3", async answer => {
     route.params.set("day", "2");
     body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
     await load();
     expect(screen.queryByLabelText("進捗状態")).toBeNull();
     expect(screen.getByRole("button", { name: "確認内容を保存" })).toBeDefined();
-    for (const field of missions[1].fields) fireEvent.click(within(screen.getByRole("radiogroup", { name: field.label })).getByRole("radio", { name: answer }));
+    expect(screen.queryAllByRole("radiogroup")).toHaveLength(0);
+    for (const field of missions[1].fields) {
+      fireEvent.click(screen.getByRole("button", { name: `${field.label}を確認する` }));
+      expect(screen.getAllByRole("radiogroup")).toHaveLength(1);
+      fireEvent.click(within(screen.getByRole("radiogroup", { name: field.label })).getByRole("radio", { name: answer }));
+    }
     expect(screen.getByText("DAY2完了条件を満たしました。")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "DAY2を完了する" }));
+    expect(screen.getByRole("region", { name: "現在取り組むDAY" }).textContent).toContain("8 / 8");
+    fireEvent.click(within(screen.getByRole("region", { name: "DAY2の完了条件" })).getByRole("button", { name: "DAY2を完了する" }));
     await screen.findByText("✓ DAY2 完了");
+    expect(screen.getByText("DAY2の内容を見る").closest("details")?.open).toBe(false);
+    fireEvent.click(screen.getByText("DAY2の内容を見る"));
     expect(commands[0]).toMatchObject({ status: "COMPLETED", note: "", version: 1 });
     expect(screen.getByRole("link", { name: /次のDAY3/ })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "最新データに更新" }));
     await screen.findByText("✓ DAY2 完了");
     expect((screen.getByLabelText("確認メモ（任意）") as HTMLTextAreaElement).value).toBe("");
-    expect(screen.getAllByRole("radio", { name: answer }).every(radio => (radio as HTMLInputElement).checked)).toBe(true);
+    fireEvent.click(screen.getByText("DAY2の内容を見る"));
+    fireEvent.click(screen.getByRole("button", { name: "外観を変更" }));
+    expect((screen.getByRole("radio", { name: answer }) as HTMLInputElement).checked).toBe(true);
   });
   it("shows an exemption reason next to the relevant category and preserves it after save", async () => {
     route.params.set("day", "2");
     body.document!.missions[1].evidence = { ...completeCommand(2).evidence, photo7: "対象外" };
     await load();
+    fireEvent.click(screen.getByRole("button", { name: "駐車場・駐輪場を変更" }));
     const group = screen.getByRole("radiogroup", { name: "駐車場・駐輪場" });
     const reason = within(group).getByLabelText("対象外の理由（駐車場・駐輪場）");
     expect(screen.getByText("DAY2完了まであと1カテゴリ")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
     await screen.findByText("写真の確認内容を保存しました。");
     expect(body.document!.missions[1].status).toBe("IN_PROGRESS");
+    fireEvent.click(screen.getByRole("button", { name: "駐車場・駐輪場を変更" }));
     fireEvent.change(screen.getByLabelText("対象外の理由（駐車場・駐輪場）"), { target: { value: "専用駐車場がないため" } });
     expect(reason).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "DAY2を完了する" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "DAY2の完了条件" })).getByRole("button", { name: "DAY2を完了する" }));
     await screen.findByText("✓ DAY2 完了");
     expect(body.document!.missions[1].note).toBe("専用駐車場がないため");
   });
@@ -69,10 +107,12 @@ describe("challenge UI", () => {
     body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
     body.document!.missions[1].evidence = completeCommand(2).evidence;
     await load();
+    fireEvent.click(screen.getByRole("button", { name: "授業を変更" }));
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "授業" })).getByRole("radio", { name: label }));
     const remaining = screen.getByRole("region", { name: "DAY2の完了条件" });
     expect(remaining.textContent).toContain(`授業：${label}になっています`);
-    expect(within(remaining).getByRole("link").getAttribute("href")).toBe("#challenge-day-2-photo3");
+    fireEvent.click(within(remaining).getByRole("button", { name: "最初の未完了項目へ移動" }));
+    expect(document.activeElement?.id).toBe("challenge-day-2-photo3");
     expect(screen.queryByRole("button", { name: "DAY2を完了する" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "確認内容を保存" }));
     await screen.findByText("写真の確認内容を保存しました。");
@@ -94,7 +134,7 @@ describe("challenge UI", () => {
     expect(screen.getByRole("region", { name: "現在取り組むDAY" }).textContent).toContain("DAY 2 / 7");
     expect(screen.getByText(/DAY4を閲覧しています/)).toBeDefined();
     expect(screen.getByRole("region", { name: "次にやること" }).textContent).toContain("授業を確認しましょう");
-    fireEvent.click(screen.getByRole("button", { name: "今すぐ確認する →" }));
+    fireEvent.click(screen.getByRole("button", { name: "未完了項目へ移動 →" }));
     await screen.findByRole("radiogroup", { name: "授業" });
     expect(document.activeElement?.id).toBe("challenge-day-2-photo3");
     expect(scroll).toHaveBeenCalledWith({ behavior: reduced ? "auto" : "smooth", block: "center" });
@@ -114,7 +154,7 @@ describe("challenge UI", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
     await load();
     expect(screen.queryByText("✓ DAY1 完了")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "完了の記録へ →" }));
+    fireEvent.click(screen.getByRole("button", { name: "DAY1を完了する →" }));
     expect(document.activeElement?.id).toBe("challenge-day-1-status");
     expect(commands).toEqual([]);
     await waitFor(() => expect(document.activeElement?.className).not.toContain("taskHighlight"), { timeout: 3500 });
@@ -126,7 +166,7 @@ describe("challenge UI", () => {
     const warning = screen.getByText("一部データ未取得（1件）");
     expect(task.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(warning.closest("details")?.open).toBe(false);
-    expect(screen.getByText("確認項目の詳細を見る").closest("details")?.open).toBe(false);
+    expect(screen.getByText("管理用の詳細を見る").closest("details")?.open).toBe(false);
     expect(screen.getByText("メモを追加する（任意）").closest("details")?.open).toBe(false);
     expect(screen.queryByRole("alert")).toBeNull();
   });
