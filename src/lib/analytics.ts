@@ -96,6 +96,8 @@ export async function upsertGbpMetric(
       },
     },
     update: {
+      performanceFetchedAt: null,
+      performanceLocationId: null,
       views: metric.views,
       searches: metric.searches,
       websiteClicks: metric.websiteClicks,

@@ -22,6 +22,7 @@ export default defineConfig({
         "src/app/**/challenge/day-detail.tsx",
         "src/app/**/challenge/next-actions.tsx",
         "src/app/**/challenge/journey.tsx",
+        "src/app/**/roi/google-results-client.tsx",
       ],
       exclude: [
         "src/**/*.test.ts",
@@ -30,6 +31,12 @@ export default defineConfig({
         "src/app/api/**/route.test.ts",
       ],
       thresholds: {
+        "src/lib/google-leads.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/google-lead-store.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/google-lead-access.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/google-performance.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/dashboard/google-results/**/*.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/**/roi/google-results-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/challenge-journey.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/challenge/journey.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/rank-tracker/ranking-client.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },

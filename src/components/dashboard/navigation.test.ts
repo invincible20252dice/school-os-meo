@@ -25,7 +25,7 @@ describe("dashboard navigation", () => {
       dashboardNavItems.find((item) => item.href === "/dashboard")?.children,
     ).toEqual([
       { label: "概要", href: "/dashboard" },
-      { label: "成果ROI", href: "/dashboard/roi" },
+      { label: "Google集客成果", href: "/dashboard/roi" },
     ]);
     expect(
       dashboardNavItems.find((item) => item.href === "/dashboard/surveys")

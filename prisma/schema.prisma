@@ -171,6 +171,7 @@ model School {
   searchQueryLogs   SearchQueryLog[]
   churnAlerts       ChurnAlert[]
   challenge         SchoolChallenge?
+  googleLeads       GoogleLead[]
 
   @@index([ownerId])
   @@index([status])
@@ -185,6 +186,28 @@ model SchoolChallenge {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   school      School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+}
+
+model GoogleLead {
+  id             String   @id @default(cuid())
+  schoolId       String
+  source         String   @default("google")
+  channel        String
+  grade          String?
+  status         String   @default("inquiry")
+  occurredAt     DateTime @default(now())
+  meetingAt      DateTime?
+  closedAt       DateTime?
+  deletedAt      DateTime?
+  idempotencyKey String
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+
+  @@unique([schoolId, idempotencyKey])
+  @@index([schoolId, occurredAt])
+  @@index([schoolId, meetingAt])
 }
 
 model SurveySetting {
@@ -362,6 +385,8 @@ model GbpMetric {
   websiteClicks Int      @default(0)
   phoneCalls    Int      @default(0)
   routeRequests Int      @default(0)
+  performanceFetchedAt DateTime?
+  performanceLocationId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

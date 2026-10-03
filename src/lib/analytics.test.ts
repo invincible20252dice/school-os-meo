@@ -87,6 +87,8 @@ describe("analytics", () => {
         },
       },
       update: {
+        performanceFetchedAt: null,
+        performanceLocationId: null,
         views: 10,
         searches: 5,
         websiteClicks: 2,

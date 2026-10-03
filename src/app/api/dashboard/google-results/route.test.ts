@@ -1,0 +1,65 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { GET, POST, PATCH, DELETE } from "./route";
+import { GET as PERFORMANCE } from "./performance/route";
+import { prisma } from "@/lib/prisma";
+import { resolveRequestAccess } from "@/lib/supabase-access";
+import { loadPerformance } from "@/lib/google-performance";
+vi.mock("@/lib/prisma", () => ({ prisma: { school: { findUnique: vi.fn() }, googleLead: { findMany: vi.fn(), upsert: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() } } }));
+vi.mock("@/lib/supabase-access", () => ({ resolveRequestAccess: vi.fn() }));
+vi.mock("@/lib/google-performance", () => ({ loadPerformance: vi.fn() }));
+const access = { isAuthenticated: true, access: { userId: "u", role: "manager" as const, schoolIds: ["a"], schoolId: "a", status: "active" as const, name: "担当", email: "", source: "profiles" as const } };
+const req = (body?: unknown, school = "a", period = "") => new Request(`https://example.com/api/dashboard/google-results?schoolId=${school}&period=${period}`, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) });
+beforeEach(() => {
+  vi.resetAllMocks(); vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.mocked(resolveRequestAccess).mockResolvedValue(access);
+  vi.mocked(prisma.school.findUnique).mockResolvedValue({ id: "a", name: "校舎A" } as never);
+  vi.mocked(prisma.googleLead.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.googleLead.upsert).mockResolvedValue({ id: "x", channel: "line", deletedAt: null } as never);
+  vi.mocked(prisma.googleLead.findFirst).mockResolvedValue({ id: "x", version: 1, status: "inquiry", occurredAt: new Date(0) } as never);
+  vi.mocked(prisma.googleLead.updateMany).mockResolvedValue({ count: 1 });
+  vi.mocked(loadPerformance).mockResolvedValue({ state: "error", websiteClicks: null, phoneClicks: null, updatedAt: null, from: "", to: "", measuredDays: 0 });
+});
+afterEach(() => vi.restoreAllMocks());
+it.each([GET, POST, PATCH, DELETE, PERFORMANCE])("requires login, approval and school permission before every operation", async handler => {
+  vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, isAuthenticated: false });
+  expect((await handler(req({}))).status).toBe(401);
+  vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, status: "pending" } });
+  expect((await handler(req({}))).status).toBe(403);
+  vi.mocked(resolveRequestAccess).mockResolvedValue(access);
+  expect((await handler(req({}, "b"))).status).toBe(403);
+  expect(prisma.school.findUnique).not.toHaveBeenCalled();
+});
+it.each(["", "all"])("requires concrete school %s", async school => expect((await GET(req(undefined, school))).status).toBe(400));
+it("returns school-scoped facts without Google calls, supports periods and admin", async () => {
+  const response = await GET(req());
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(await response.json()).toMatchObject({ success: true, school: { id: "a" }, inquiriesCount: 0 });
+  expect(loadPerformance).not.toHaveBeenCalled();
+  expect((await GET(req(undefined, "a", "previous"))).status).toBe(200);
+  vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, role: "admin" } });
+  expect((await GET(req(undefined, "b"))).status).toBe(200);
+  expect(prisma.school.findUnique).toHaveBeenLastCalledWith({ where: { id: "b" }, select: { id: true, name: true } });
+});
+it("reports unavailable schools and database failures without false success or secrets", async () => {
+  vi.mocked(prisma.school.findUnique).mockResolvedValue(null);
+  expect((await GET(req())).status).toBe(404);
+  vi.mocked(prisma.school.findUnique).mockRejectedValue(new Error("secret-database-url"));
+  const response = await GET(req());
+  expect(response.status).toBe(503); expect(JSON.stringify(await response.json())).not.toContain("secret");
+  expect((await POST(req({}))).status).toBe(503);
+  expect((await PATCH(req({}))).status).toBe(503);
+  expect((await PERFORMANCE(req())).status).toBe(503);
+});
+it("handles CRUD, invalid payloads and separate metrics endpoint", async () => {
+  expect((await POST(req({ channel: "line", idempotencyKey: "abc" }))).status).toBe(200);
+  expect((await PATCH(req({ id: "x", version: 1, status: "meeting" }))).status).toBe(200);
+  expect((await DELETE(req({ id: "x", version: 1 }))).status).toBe(200);
+  expect((await POST(req([]))).status).toBe(400);
+  expect((await POST(new Request("https://example.com?schoolId=a", { method: "POST", body: "invalid" }))).status).toBe(400);
+  expect((await GET(req(undefined, "a", "invalid"))).status).toBe(400);
+  expect((await PERFORMANCE(req())).status).toBe(200);
+  expect(loadPerformance).toHaveBeenCalledWith("a", "month");
+  await PERFORMANCE(req(undefined, "a", "six"));
+  expect(loadPerformance).toHaveBeenLastCalledWith("a", "six");
+});

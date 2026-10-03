@@ -15,7 +15,7 @@ export const dashboardNavItems: DashboardNavItem[] = [
     icon: "dashboard",
     children: [
       { label: "概要", href: "/dashboard" },
-      { label: "成果ROI", href: "/dashboard/roi" },
+      { label: "Google集客成果", href: "/dashboard/roi" },
     ],
   },
   {

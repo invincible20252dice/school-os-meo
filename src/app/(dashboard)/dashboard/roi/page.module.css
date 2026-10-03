@@ -1,176 +1,60 @@
-.page {
-  width: min(100%, 1180px);
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 32px;
-}
-
-.header {
-  max-width: 860px;
-}
-
-.kicker {
-  margin: 0 0 10px;
-  color: #147d68;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.header h1 {
-  margin: 0;
-  color: #17202a;
-  font-size: 38px;
-  line-height: 1.2;
-}
-
-.header p,
-.panelTitle p,
-.roiCard p {
-  color: #52606a;
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-.header p {
-  margin: 14px 0 0;
-}
-
-.summaryGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 28px;
-}
-
-.summaryGrid article,
-.panel {
-  border: 1px solid #dde5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 12px 28px rgba(23, 32, 42, 0.08);
-}
-
-.summaryGrid article {
-  display: grid;
-  gap: 10px;
-  padding: 20px;
-}
-
-.summaryGrid span {
-  color: #66737d;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.summaryGrid strong {
-  color: #17202a;
-  font-size: 36px;
-  line-height: 1.1;
-}
-
-.roiCard {
-  background: #eef8f4;
-}
-
-.roiCard strong {
-  color: #147d68;
-  font-size: 46px;
-}
-
-.roiCard p {
-  margin: 0;
-}
-
-.panel {
-  margin-top: 20px;
-  padding: 22px;
-}
-
-.panelTitle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.panelTitle h2 {
-  margin: 0;
-  color: #17202a;
-  font-size: 20px;
-}
-
-.panelTitle p {
-  margin: 4px 0 0;
-}
-
-.channelChart {
-  display: grid;
-  gap: 14px;
-  margin-top: 20px;
-}
-
-.channelRow {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 56px;
-  gap: 14px;
-  align-items: center;
-}
-
-.channelRow span {
-  color: #17202a;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.channelRow div {
-  overflow: hidden;
-  height: 18px;
-  border-radius: 999px;
-  background: #edf1ef;
-}
-
-.channelRow b {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.channelRow strong {
-  color: #147d68;
-  font-size: 14px;
-  text-align: right;
-}
-
-.icon {
-  width: 24px;
-  height: 24px;
-  color: #27b58c;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-  flex: 0 0 auto;
-}
-
-@media (max-width: 900px) {
-  .summaryGrid,
-  .channelRow {
-    grid-template-columns: 1fr;
-  }
-
-  .channelRow strong {
-    text-align: left;
-  }
-}
-
-@media (max-width: 560px) {
-  .page {
-    padding: 22px;
-  }
-
-  .header h1 {
-    font-size: 30px;
-  }
+.page { max-width: 1100px; margin: 0 auto; padding: 28px; color: #202923; letter-spacing: 0; }
+.page h1 { font-size: 26px; margin: 0; }
+.page h2 { font-size: 17px; margin: 0 0 14px; }
+.page h2 small { font-size: 12px; font-weight: 400; color: #626c65; margin-left: 8px; }
+.page p { line-height: 1.7; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.header p { margin: 6px 0 0; color: #626c65; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.page button, .page select, .page input, .page summary { min-height: 44px; border: 1px solid #cbd5ce; background: white; color: #24392d; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
+.page button:disabled { opacity: .5; cursor: not-allowed; }
+.page :focus-visible { outline: 3px solid #3f83c7; outline-offset: 3px; }
+.kpis { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid #dbe1dd; }
+.kpis strong { display: block; font-size: 40px; line-height: 1.2; }
+.kpis strong small { font-size: 18px; margin-left: 8px; font-weight: 400; }
+.kpis .primary strong { font-size: 56px; color: #157347; }
+.kpis p { margin: 12px 0 0; font-size: 14px; }
+.kpis b { color: #157347; }
+.section { padding: 24px 0; border-bottom: 1px solid #dbe1dd; }
+.caption { color: #626c65; font-size: 12px !important; }
+.addButtons { display: flex; gap: 12px; max-width: 600px; }
+.addButtons button { flex: 1; min-height: 48px; background: #157347; color: white; border-color: #157347; font-weight: 600; }
+.notice { color: #157347; min-height: 24px; margin: 8px 0 0; }
+.optional { padding: 12px 0; display: grid; gap: 10px; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; font-size: 14px; }
+.metrics strong { display: block; font-size: 24px; margin-top: 8px; }
+.error { color: #af2730; background: #fff0f0; padding: 16px; }
+.warning { color: #81590a; font-size: 13px; }
+.list { padding: 0; margin: 0; list-style: none; }
+.list li { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #edf0ed; padding: 14px 0; flex-wrap: wrap; }
+.list li > div:first-child { flex: 1; min-width: 160px; }
+.list p { margin: 3px 0; font-size: 14px; }
+.list time { color: #626c65; font-size: 13px; }
+.status, .meeting { font-size: 13px; }
+.meeting { color: #157347; font-weight: 700; }
+.rowActions { display: flex; gap: 8px; align-items: center; }
+.rowActions details { position: relative; }
+.rowActions summary { list-style: none; width: 44px; text-align: center; font-size: 20px; }
+.rowActions summary::-webkit-details-marker { display: none; }
+.menu { position: absolute; right: 0; top: 48px; z-index: 3; display: grid; min-width: 130px; gap: 4px; padding: 8px; border: 1px solid #cbd5ce; background: white; border-radius: 6px; box-shadow: 0 4px 12px #0001; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: 12px 8px; text-align: right; border-bottom: 1px solid #e3e8e4; }
+.table th:first-child { text-align: left; }
+.table thead { background: #f1f5f2; }
+.dialog { width: min(480px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; border: 1px solid #cbd5ce; border-radius: 8px; padding: 24px; color: #202923; }
+.dialog::backdrop { background: #0006; }
+.dialog form { display: grid; gap: 16px; }
+.dialog label { display: grid; gap: 6px; font-size: 14px; }
+.dialog input, .dialog select { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 600px) {
+  .page { padding: 18px 14px; }
+  .page h1 { font-size: 23px; }
+  .kpis { gap: 16px; padding: 22px 0; grid-template-columns: 1fr 1fr; }
+  .kpis h2 { font-size: 14px; min-height: 40px; }
+  .kpis .primary strong { font-size: 46px; }
+  .kpis strong { font-size: 34px; }
+  .addButtons { gap: 8px; }
+  .section { padding: 20px 0; }
+  .list li { gap: 8px; }
+  .rowActions { margin-left: auto; }
 }
