@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import type { Snapshot } from "./challenge";
+import { loadSearchKeywords } from "./google-search-keywords";
 
 async function read<T>(label: string, query: () => Promise<T>, errors: string[]): Promise<T | null> {
   try { return await query(); } catch {
@@ -31,15 +32,18 @@ export async function loadChallengeData(schoolId: string, startedAt: string | nu
   const rankings = await read("競合計測", () => prisma.targetKeyword.findMany({ where: { schoolId, isActive: true }, select: { keyword: true,
     rankHistories: { orderBy: { checkedAt: "desc" }, take: 1, select: { id: true, checkedAt: true, competitorData: true } } } }), errors);
   const surveys = await read("アンケート", () => prisma.survey.findMany({ where: { schoolId, isValid: true }, select: { id: true, title: true }, orderBy: { updatedAt: "desc" } }), errors);
-  const demand = await read("検索需要", () => prisma.searchQueryLog.findMany({ where: { schoolId }, select: { query: true, targetMonth: true, impressionCount: true, updatedAt: true }, orderBy: [{ targetMonth: "desc" }, { impressionCount: "desc" }], take: 100 }), errors);
+  const demand = await loadSearchKeywords(schoolId);
+  if (demand.status === "API_ERROR") errors.push("Google検索語句APIの取得に失敗しました。Google連携全体の状態とは別です。");
+  if (demand.status === "DB_ERROR") errors.push("検索語句のDB取得・保存に失敗しました。");
   const latestReview = reviews?.flatMap(r => r.postedAt && r.postedAt <= now ? [r.postedAt.toISOString()] : []).sort().at(-1) ?? null;
   const rated = reviews?.flatMap(r => r.rating !== null && r.rating >= 1 && r.rating <= 5 ? [r.rating] : []) ?? [];
   const replied = reviews?.filter(r => r.repliedAt && r.replyText?.trim()).length ?? 0;
   const snapshot: Snapshot = {
     at: now.toISOString(),
     latestReviewAt: latestReview,
-    demand: demand ? demand.filter(d => d.targetMonth === demand[0]?.targetMonth).map(d => ({ query: d.query, month: d.targetMonth, impressions: d.impressionCount, updatedAt: d.updatedAt.toISOString() })) : null,
-    google: errors.some(e => e.startsWith("Google")) ? null : Boolean(settings?.googleConnected && settings.selectedGbpLocationId),
+    demandStatus: demand.status,
+    demand: demand.status === "AVAILABLE" || demand.status === "EMPTY" ? demand.rows.flatMap(d => d.impressions === null ? [] : [{ query: d.query, month: demand.diagnostic.month, impressions: d.impressions, updatedAt: demand.fetchedAt! }]) : null,
+    google: errors.includes("Google連携を取得できませんでした。") ? null : Boolean(settings?.googleConnected && settings.selectedGbpLocationId),
     instagram: errors.some(e => e.startsWith("Instagram")) ? null : Boolean(instagram?.instagramBusinessAccountId),
     reviews: reviews ? { count: reviews.length, rating: rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : null,
       pending: reviews.length - replied, replyRate: reviews.length ? replied / reviews.length * 100 : null,

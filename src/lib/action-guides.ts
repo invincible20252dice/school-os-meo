@@ -101,6 +101,11 @@ export function postTopics(snapshot: Snapshot) {
   const topics = (snapshot.demand ?? []).filter(row => row.impressions > 0).toSorted((a, b) => b.impressions - a.impressions)
     .filter((row, i, rows) => rows.findIndex(other => other.query === row.query) === i).slice(0, 3);
   return { topics, message: topics.length ? "Googleで自校舎が見つかった検索語句（保存済み）。市場全体の検索数ではありません。"
+    : snapshot.demandStatus === "DISCONNECTED" ? "検索語句を取得するGoogle店舗が未連携です。Google連携設定を確認してください。"
+    : snapshot.demandStatus === "EMPTY" ? "Googleから正常に取得しましたが、対象月の検索語句は0件です。"
+    : snapshot.demandStatus === "API_ERROR" ? "Google検索語句APIの取得に失敗しました。確認済みの教室情報からテーマを入力できます。"
+    : snapshot.demandStatus === "DB_ERROR" ? "検索語句のDB取得・保存に失敗しました。管理者にお問い合わせください。"
+    : snapshot.demandStatus === "AVAILABLE" ? "Googleの検索語句は取得済みですが、正確な表示数を確認できる語句がありません。少数データの閾値を表示数として扱いません。"
     : snapshot.demand === null ? "検索語句を取得できませんでした。確認済みの教室情報からテーマを入力できます。"
       : "検索語句の保存データがありません。確認済みの教室情報からテーマを入力できます。" };
 }

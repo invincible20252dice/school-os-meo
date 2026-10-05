@@ -32,6 +32,8 @@ export default defineConfig({
         "src/app/api/**/route.test.ts",
       ],
       thresholds: {
+        "src/lib/google-search-keywords.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/app/api/dashboard/analytics/queries/sync/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/action-guide*.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/**/challenge/action-guide.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/dashboard/challenge/guide-draft/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },

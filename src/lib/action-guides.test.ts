@@ -4,6 +4,11 @@ import { guideForAction, guideForField, guideRegistry, photoGuides, postTopics }
 import { snapshot } from "@/test/challenge-fixtures";
 
 describe("execution guide registry", () => {
+  it.each(["DISCONNECTED", "EMPTY", "API_ERROR", "DB_ERROR", "AVAILABLE"] as const)("labels keyword state %s", demandStatus => {
+    const result = postTopics({ ...snapshot(), demand: [], demandStatus });
+    const label = { DISCONNECTED: "未連携", EMPTY: "0件", API_ERROR: "API", DB_ERROR: "DB", AVAILABLE: "閾値" }[demandStatus];
+    expect(result.message).toContain(label);
+  });
   it("maps all eight existing photo keys to verified project assets", () => {
     expect(photoGuides).toHaveLength(8);
     photoGuides.forEach((guide, index) => {

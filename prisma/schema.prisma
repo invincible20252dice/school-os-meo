@@ -516,6 +516,20 @@ model MonthlyReport {
   @@index([targetMonth])
 }
 
+model GoogleSearchKeywordMonth {
+  id         String   @id @default(cuid())
+  schoolId   String
+  locationId String
+  month      String
+  status     String
+  rows       Json     @default("[]")
+  diagnostic Json
+  checkedAt  DateTime @default(now())
+  fetchedAt  DateTime?
+
+  @@unique([schoolId, locationId, month])
+}
+
 model SearchQueryLog {
   id              String   @id @default(cuid())
   schoolId        String
@@ -526,7 +540,7 @@ model SearchQueryLog {
   growthRate      String?
   intent          String?
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime? @updatedAt
 
   school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
