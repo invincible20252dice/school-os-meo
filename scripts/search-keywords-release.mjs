@@ -12,6 +12,7 @@ try {
   console.info("[Search audit before migration]", { schoolId, columns });
   const sql = readFileSync("prisma/migrations/20261005070000_search_keyword_sync/migration.sql", "utf8");
   await db.$transaction(sql.split(";").filter(s => s.trim()).map(s => db.$executeRawUnsafe(s)));
+  await db.searchQueryLog.findFirst({ where: { schoolId }, select: { id: true, updatedAt: true, intent: true } });
   console.info("[Search audit migration] Additive columns/table applied; no rows deleted or reset");
   await build({ entryPoints: ["src/lib/google-search-keywords.ts"], bundle: true, platform: "node", format: "esm", packages: "external", outfile: "work/search-keywords-runtime.mjs" });
   const { loadSearchKeywords } = await import("../work/search-keywords-runtime.mjs");

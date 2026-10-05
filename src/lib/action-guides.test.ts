@@ -4,6 +4,9 @@ import { guideForAction, guideForField, guideRegistry, photoGuides, postTopics }
 import { snapshot } from "@/test/challenge-fixtures";
 
 describe("execution guide registry", () => {
+  it("explains quota failure without presenting it as empty or disconnected", () => {
+    expect(postTopics({ ...snapshot(), demand: null, demandStatus: "API_ERROR", demandHttpStatus: 429 }).message).toContain("利用枠制限（429）");
+  });
   it.each(["DISCONNECTED", "EMPTY", "API_ERROR", "DB_ERROR", "AVAILABLE"] as const)("labels keyword state %s", demandStatus => {
     const result = postTopics({ ...snapshot(), demand: [], demandStatus });
     const label = { DISCONNECTED: "未連携", EMPTY: "0件", API_ERROR: "API", DB_ERROR: "DB", AVAILABLE: "閾値" }[demandStatus];

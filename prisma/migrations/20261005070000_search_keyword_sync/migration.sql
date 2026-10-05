@@ -1,5 +1,6 @@
 -- Add only. Historical query counts and timestamps are never reset.
 ALTER TABLE "SearchQueryLog" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3);
+ALTER TABLE "SearchQueryLog" ADD COLUMN IF NOT EXISTS "intent" TEXT;
 CREATE TABLE IF NOT EXISTS "GoogleSearchKeywordMonth" (
   "id" TEXT PRIMARY KEY,
   "schoolId" TEXT NOT NULL REFERENCES "School"("id") ON DELETE RESTRICT,

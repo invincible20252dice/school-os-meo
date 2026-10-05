@@ -36,6 +36,7 @@ export type Snapshot = {
   at: string;
   latestReviewAt?: string | null;
   demandStatus?: import("./google-search-keywords").KeywordState;
+  demandHttpStatus?: number | null;
   demand?: Array<{ query: string; month: string; impressions: number; updatedAt: string }> | null;
   reviews: { count: number; rating: number | null; pending: number; replyRate: number | null; newCount: number | null } | null;
   surveyResponses: number | null;

@@ -42,6 +42,7 @@ export async function loadChallengeData(schoolId: string, startedAt: string | nu
     at: now.toISOString(),
     latestReviewAt: latestReview,
     demandStatus: demand.status,
+    demandHttpStatus: demand.diagnostic?.httpStatus ?? null,
     demand: demand.status === "AVAILABLE" || demand.status === "EMPTY" ? demand.rows.flatMap(d => d.impressions === null ? [] : [{ query: d.query, month: demand.diagnostic.month, impressions: d.impressions, updatedAt: demand.fetchedAt! }]) : null,
     google: errors.includes("Google連携を取得できませんでした。") ? null : Boolean(settings?.googleConnected && settings.selectedGbpLocationId),
     instagram: errors.some(e => e.startsWith("Instagram")) ? null : Boolean(instagram?.instagramBusinessAccountId),

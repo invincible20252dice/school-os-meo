@@ -8,7 +8,7 @@ it("adds the missing column without inventing timestamps, preserving all histori
     await db.exec(`CREATE TABLE "School" (id TEXT PRIMARY KEY); INSERT INTO "School" VALUES ('a'); CREATE TABLE "SearchQueryLog" (id TEXT PRIMARY KEY, query TEXT, "impressionCount" INT); INSERT INTO "SearchQueryLog" VALUES ('old', '以前の検索', 42);`);
     const sql = readFileSync("prisma/migrations/20261005070000_search_keyword_sync/migration.sql", "utf8");
     await db.exec(sql); await db.exec(sql);
-    expect((await db.query('SELECT * FROM "SearchQueryLog"')).rows).toEqual([{ id: "old", query: "以前の検索", impressionCount: 42, updatedAt: null }]);
+    expect((await db.query('SELECT * FROM "SearchQueryLog"')).rows).toEqual([{ id: "old", query: "以前の検索", impressionCount: 42, updatedAt: null, intent: null }]);
     const insert = `INSERT INTO "GoogleSearchKeywordMonth" (id,"schoolId","locationId",month,status,diagnostic) VALUES ($1,$2,$3,$4,'EMPTY','{}')`;
     await db.query(insert, ["1", "a", "123", "2026-09"]);
     await expect(db.query(insert, ["2", "a", "123", "2026-09"])).rejects.toMatchObject({ code: "23505" });
