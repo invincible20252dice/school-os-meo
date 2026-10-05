@@ -88,7 +88,7 @@ type GbpReplyInput = {
 
 export async function buildFallbackGbpReply(input: GbpReplyInput) {
   if (input.rating >= 4) {
-    return `${input.schoolName}への温かい口コミをありがとうございます。お子さまが前向きに通ってくださっていることを大変うれしく思います。今後も一人ひとりに寄り添い、安心して学べる環境づくりに努めてまいります。`;
+    return `${input.schoolName}への温かい口コミをありがとうございます。いただいたお声を励みに、今後も一人ひとりに寄り添い、安心して学べる環境づくりに努めてまいります。`;
   }
 
   return `${input.schoolName}への貴重なご意見をありがとうございます。いただいた内容を真摯に受け止め、より安心して通っていただける教室運営に活かしてまいります。今後ともお気づきの点がございましたらお知らせください。`;

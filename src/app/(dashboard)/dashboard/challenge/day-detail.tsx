@@ -6,6 +6,8 @@ import { missions, type ChallengeDocument, type Snapshot } from "@/lib/challenge
 import { challengeProgress, checkLabels, dayProgress, fieldProgress, formatMetric, metricChange, priorityLabels, type DayProgress, type ProgressItem } from "@/lib/challenge-progress";
 import styles from "./page.module.css";
 import { dayChecks, dayTitle } from "@/lib/challenge-journey";
+import { guideForAction } from "@/lib/action-guides";
+import { ActionExecutionGuide } from "./action-guide";
 
 export function challengeHref(path: string, schoolId: string) {
   return `${path}${path.includes("?") ? "&" : "?"}schoolId=${encodeURIComponent(schoolId)}`;
@@ -66,6 +68,7 @@ export function DayDetail({ day, doc, snapshot, schoolId, children, actionsProvi
   const progress = dayProgress(doc.missions[day - 1], doc.additionalTarget, snapshot, doc.requestTarget?.count);
   if (compact) return <section className={styles.dayDetail} aria-label={`DAY${day}詳細`}>
     <header><p className={styles.kicker}>閲覧中：DAY{day}</p><h2>{dayTitle(day)}</h2></header>
+    <ActionExecutionGuide key={`${schoolId}-${day}`} guide={guideForAction(`day-${day}`)} schoolId={schoolId} snapshot={snapshot} />
     {progress.cleared ? <div className={styles.notice}><h3>✓ DAY{day} 完了</h3><p>完了の実行記録を保存済みです。残課題は別に確認できます。</p>{day === 2 ? <strong>{dayChecks(doc, doc.missions[1], snapshot).filter(item => item.state === "GOOD").length} / 8 項目確認済み</strong> : null}</div> : null}
     {progress.cleared && day === 2 ? <details className={styles.details}><summary>DAY2の内容を見る</summary>{children}</details> : children}
     <details className={styles.details}><summary>このDAYの成果・達成率を見る</summary><ProgressMeter progress={progress} label={`DAY${day} ミッション達成率`} /><p>項目の達成率とDAYの完了記録は別です。</p><OutcomeMetrics day={day} doc={doc} snapshot={snapshot} /></details>

@@ -5,6 +5,8 @@ import { missions, type ChallengeDocument, type Snapshot } from "@/lib/challenge
 import { dayGoals, dayTitle, deriveJourney } from "@/lib/challenge-journey";
 import { challengeHref } from "./day-detail";
 import styles from "./page.module.css";
+import { guideForField } from "@/lib/action-guides";
+import { ActionExecutionGuide } from "./action-guide";
 
 export function Journey({ doc, snapshot, viewingDay, schoolId, onTask }: { doc: ChallengeDocument; snapshot: Snapshot; viewingDay: number; schoolId: string; onTask: (day: number, key: string) => void }) {
   const { currentDay, currentTask, dayCompletion, completed } = deriveJourney(doc, snapshot);
@@ -27,6 +29,7 @@ export function Journey({ doc, snapshot, viewingDay, schoolId, onTask }: { doc: 
         <h3>{currentTask ? `${currentTask.label}を確認しましょう` : `DAY${currentDay.day}を完了しましょう`}</h3>
         <p>{currentTask ? currentTask.reason : currentDay.day === 2 ? "写真の確認項目はそろっています。「DAY2を完了する」で保存してください。進捗状態の選択は不要です。" : "確認項目はそろっています。必要なメモを記入し、進捗状態を「完了」にして保存してください。保存時に完了条件を確認します。"}</p>
         <button type="button" className={styles.primary} onClick={() => onTask(currentDay.day, currentTask?.key ?? "status")}>{currentTask ? "未完了項目へ移動" : `DAY${currentDay.day}を完了する`} →</button>
+        {currentTask ? <ActionExecutionGuide key={`${schoolId}-${currentDay.day}-${currentTask.key}`} guide={guideForField(currentDay.day, currentTask.key)} schoolId={schoolId} snapshot={snapshot} onExecute={() => onTask(currentDay.day, currentTask.key)} /> : null}
       </section>
     </section> : <section className={styles.today} aria-label="チャレンジ完了"><p className={styles.dayNumber}>7 / 7 DAY 完了</p><h2>7日間チャレンジの実行記録がそろいました</h2><p>これからは今週のアクションで改善を続けましょう。残課題や問い合わせの成果は、引き続き確認できます。</p><Link className={styles.primaryLink} href={challengeHref("/dashboard/challenge/weekly", schoolId)}>今週のアクションへ →</Link></section>}
     <p className={styles.muted}>{completed} / 7 DAY完了</p>

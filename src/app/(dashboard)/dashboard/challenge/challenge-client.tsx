@@ -11,6 +11,8 @@ import { DayCards, DayDetail, DiagnosticDetails, OverallProgress } from "./day-d
 import { ActionPanel, ChallengeGoal } from "./next-actions";
 import { deriveJourney, fieldAnchor } from "@/lib/challenge-journey";
 import { Journey } from "./journey";
+import { guideForAction, guideForField } from "@/lib/action-guides";
+import { ActionExecutionGuide } from "./action-guide";
 
 export type ChallengeView = {
   success: true; school: { id: string; name: string; phoneNumber: string | null; addressLine: string | null; websiteUrl: string | null };
@@ -56,7 +58,7 @@ function MissionForm({ progress, data, save, busy, notice, onPhotoDraft }: { pro
     <fieldset disabled={busy}>
       {mission.fields.map(field => photos ? <section key={field.key} id={fieldAnchor(2, field.key)} tabIndex={-1} className={styles.photoRow} onFocus={e => { if (e.target === e.currentTarget) setEditingPhoto(field.key); }} aria-label={`${field.label}の写真`}>
         <div className={styles.photoSummary}><strong>{field.label}</strong><span className={styles.badge} data-state={photos.remaining.some(item => item.key === field.key) ? "WARNING" : "GOOD"}>{evidence[field.key] === "要改善" ? "要対応" : evidence[field.key] === "後で対応" ? "あとで確認" : evidence[field.key] || "未確認"}{evidence[field.key] !== progress.evidence[field.key] ? "（未保存）" : ""}</span><button type="button" aria-expanded={editingPhoto === field.key} aria-controls={`photo-editor-${field.key}`} aria-label={`${field.label}を${evidence[field.key] ? "変更" : "確認する"}`} onClick={() => setEditingPhoto(editingPhoto === field.key ? null : field.key)}>{evidence[field.key] ? "変更" : "確認する"}</button></div>
-        {editingPhoto === field.key ? <div id={`photo-editor-${field.key}`} className={styles.photoEditor}><fieldset className={styles.selfCheck} role="radiogroup" aria-label={field.label}><legend>{field.question}</legend><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div>
+        {editingPhoto === field.key ? <div id={`photo-editor-${field.key}`} className={styles.photoEditor}><ActionExecutionGuide guide={guideForField(2, field.key)} schoolId={data.school.id} /><fieldset className={styles.selfCheck} role="radiogroup" aria-label={field.label}><legend>{field.question}</legend><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div>
           {evidence[field.key] === "対象外" ? <label>対象外の理由（{photos.exempt.map(item => item.label).join("・")}）<textarea aria-label={`対象外の理由（${photos.exempt.map(item => item.label).join("・")}）`} maxLength={2000} value={note} placeholder="例：専用駐車場がないため" onChange={e => setNote(e.target.value)} /><small>対象外カテゴリ共通の記録です。</small></label> : null}
         </fieldset><button type="button" onClick={() => setEditingPhoto(null)}>一覧に戻る</button></div> : null}
       </section> : field.question ? <fieldset id={fieldAnchor(mission.day, field.key)} tabIndex={-1} className={styles.selfCheck} key={field.key} role="radiogroup" aria-label={field.label}><legend>{field.label}</legend><p>{field.question}</p><div>{field.options!.map(option => <label key={option}><input type="radio" name={field.key} value={option} checked={evidence[field.key] === option} onChange={() => setEvidence(v => ({ ...v, [field.key]: option }))} />{option === "確認済み" || option === "実施済み" ? "はい" : option === "要改善" ? "いいえ" : option === "後で対応" ? "あとで確認" : option}</label>)}</div></fieldset> : <label id={fieldAnchor(mission.day, field.key)} tabIndex={-1} key={field.key}>{field.label}
@@ -92,6 +94,7 @@ function WeeklyRecord({ action, data, save, busy }: { action: WeeklyAction; data
   const [note, setNote] = useState(data.document!.actions[action.key]?.note ?? "");
   const [status, setStatus] = useState(action.status === "COMPLETED" ? "COMPLETED" : "DEFERRED");
   return <article className={styles.card}><h2>{action.title}</h2><p>{action.reason}</p><span className={styles.badge}>{statusLabels[action.status as ChallengeStatus]}</span>
+    <ActionExecutionGuide guide={guideForAction(action.key)} schoolId={data.school.id} snapshot={data.snapshot} />
     <Link href={scopedHref(action.path, data.school.id)}>関連画面へ →</Link>
     {action.day ? null : <form onSubmit={e => { e.preventDefault(); void save({ action: "weekly", key: action.key, status, note }); }}><fieldset disabled={busy}>
       <label>対応記録<textarea value={note} maxLength={2000} required onChange={e => setNote(e.target.value)} /></label>

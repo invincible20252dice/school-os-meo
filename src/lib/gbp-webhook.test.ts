@@ -25,6 +25,7 @@ describe("gbp-webhook", () => {
 
     expect(reply).toContain("青葉ゼミナール");
     expect(reply).toContain("ありがとうございます");
+    expect(reply).not.toMatch(/お子さま|保護者|成績|合格|高校/);
   });
 
   it("builds an improvement-oriented fallback reply for low-rated reviews", async () => {
@@ -108,6 +109,8 @@ describe("gbp-webhook", () => {
     expect(systemPrompt).toContain("自習室, 大学受験");
     expect(systemPrompt).toContain("絶対合格");
     expect(systemPrompt).toContain("160-220文字");
+    expect(systemPrompt).toContain("Google口コミ原文に明示された内容だけ");
+    expect(JSON.parse(payload.input.find(item => item.role === "user")!.content).reviewText).toBe("先生が親切でした。");
   });
 
   it("falls back when OpenAI returns an empty reply", async () => {

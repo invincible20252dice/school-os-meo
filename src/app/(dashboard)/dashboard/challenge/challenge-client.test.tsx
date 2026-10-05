@@ -33,6 +33,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const load = async (weekly = false) => { const view = render(<ChallengeClient weekly={weekly} />); await screen.findByText("校舎A"); return view; };
 describe("challenge UI", () => {
+  it("opens a guide without writing, navigates to the matching task, and saves with the existing version/CLEAR logic", async () => {
+    body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
+    body.document!.missions[1].evidence = { ...completeCommand(2).evidence, photo0: "要改善" };
+    route.params.set("day", "2");
+    await load();
+    const next = screen.getByRole("region", { name: "次にやること" });
+    const details = next.querySelector("details")!;
+    act(() => { details.open = true; fireEvent(details, new Event("toggle")); });
+    await within(next).findByText("おすすめ例");
+    expect(commands).toEqual([]);
+    fireEvent.click(within(next).getByRole("button", { name: "確認・実行記録へ進む" }));
+    expect(document.activeElement?.id).toBe("challenge-day-2-photo0");
+    fireEvent.click(screen.getByRole("radio", { name: "追加済み" }));
+    expect(commands).toEqual([]);
+    fireEvent.click(within(screen.getByRole("region", { name: "DAY2の完了条件" })).getByRole("button", { name: "DAY2を完了する" }));
+    await screen.findByText("✓ DAY2 完了");
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ action: "mission", day: 2, version: 1, evidence: { photo0: "追加済み" } });
+    expect(screen.getByRole("link", { name: /次のDAY3/ })).toBeTruthy();
+  });
   it("keeps only one photo editor open, preserves unsaved edits and moves from the sticky action to completion", async () => {
     body.document = updateChallenge(body.document!, completeCommand(1), body.snapshot, "actor");
     body.document!.missions[1].evidence = { ...completeCommand(2).evidence, photo3: "後で対応" };
