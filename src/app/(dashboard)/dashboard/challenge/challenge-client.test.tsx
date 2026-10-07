@@ -286,11 +286,11 @@ describe("challenge UI", () => {
     fireEvent.change(screen.getByLabelText(missions[2].fields[0].label), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("進捗状態"), { target: { value: "COMPLETED" } });
     fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
-    await screen.findByText("実行内容・対象外の理由・確認待ちの内容を記録してください。");
+    await screen.findByText("すべての確認項目を記録してから完了してください。");
     fireEvent.change(screen.getByLabelText("進捗状態"), { target: { value: "DEFERRED" } });
-    fireEvent.change(screen.getByLabelText("実行記録・残課題の理由"), { target: { value: "来週対応" } });
     fireEvent.click(screen.getByRole("button", { name: "実行記録を保存" }));
     await waitFor(() => expect(body.document!.missions[2].status).toBe("DEFERRED"));
+    expect(body.document!.missions[2].note).toBe("");
     await screen.findByText("7つのDAYのうち0つ完了");
   });
   it("records real inquiries by known source separately from test counts", async () => {

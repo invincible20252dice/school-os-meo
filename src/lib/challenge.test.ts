@@ -3,6 +3,17 @@ import { ChallengeError, count, object, photoConfirmation, readDocument, remaini
 import { challengeDocument, completeCommand, snapshot } from "@/test/challenge-fixtures";
 
 describe("school challenge rules", () => {
+  it.each([1, 3, 4, 5, 6, 7])("saves DAY%s without memo while retaining completion checks", day => {
+    for (const note of [undefined, "", "   "]) {
+      const completed = updateChallenge(challengeDocument(), { ...completeCommand(day), note }, snapshot(), "actor");
+      expect(completed.missions[day - 1]).toMatchObject({ status: "COMPLETED", note: "" });
+      for (const status of ["NOT_STARTED", "IN_PROGRESS", "WAITING", "DEFERRED"]) {
+        const progress = updateChallenge(challengeDocument(), { action: "mission", day, status, note, evidence: {} }, snapshot(), "actor");
+        expect(progress.missions[day - 1]).toMatchObject({ status, note: "", completedAt: null });
+      }
+    }
+    expect(() => updateChallenge(challengeDocument(), { ...completeCommand(day), evidence: {}, note: "" }, snapshot(), "actor")).toThrow("すべての確認項目");
+  });
   it.each(["追加済み", "既存写真で充足"])("auto-completes DAY2 with %s and no memo even for legacy IN_PROGRESS commands", value => {
     const evidence = Object.fromEntries(Object.keys(completeCommand(2).evidence).map(key => [key, value]));
     const result = updateChallenge(challengeDocument(), { ...completeCommand(2), evidence, note: "", status: "IN_PROGRESS" }, snapshot(), "actor");
@@ -40,7 +51,7 @@ describe("school challenge rules", () => {
     const result = updateChallenge(challengeDocument(), command, snapshot(), "actor");
     expect(result.missions[0].status).toBe("COMPLETED");
     expect(remainingChecks(result)).toEqual([{ day: 1, key: "hours", label: "通常・特別営業時間" }]);
-    expect(() => updateChallenge(challengeDocument(), { ...command, note: "" }, snapshot(), "actor")).toThrow("理由");
+    expect(updateChallenge(challengeDocument(), { ...command, note: "" }, snapshot(), "actor").missions[0].note).toBe("");
   });
   it.each(["name", "phone", "address", "category", "website"])("never grants the first CLEAR while critical %s is deferred", key => {
     const command = completeCommand(1); command.evidence[key] = "後で対応";

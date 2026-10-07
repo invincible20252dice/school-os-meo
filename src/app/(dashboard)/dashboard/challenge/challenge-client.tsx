@@ -41,12 +41,11 @@ function MissionForm({ progress, data, save, busy, notice, onPhotoDraft }: { pro
     element?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
     element?.focus({ preventScroll: true });
   }
-  const noteRequired = status === "WAITING" || status === "DEFERRED" || status === "COMPLETED" && (mission.day !== 1 || Object.values(evidence).some(v => v === "要改善" || v === "後で対応"));
   return <form id="execution-record" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "mission", day: mission.day, evidence, note, status: photos?.status ?? status }); }}>
     <h3>{photos ? "写真カテゴリの確認" : "実行記録"}</h3>
     <p className={styles.muted}>記録区分：手動申告 / 目安 {mission.minutes}分</p>
     {photos ? <p className={dirty ? styles.unsaved : styles.muted} role="status">{dirty ? "未保存の変更があります。下の保存ボタンで8カテゴリをまとめて保存します。" : "保存済みの確認内容です。"}</p> : null}
-    {mission.day === 1 ? <p>全項目に回答し、最優先・重要項目を「はい」または「修正済み」にすると完了できます。残課題がある場合は理由を記録してください。全項目達成時の理由は任意です。</p> : null}
+    {mission.day === 1 ? <p>全項目に回答し、最優先・重要項目を「はい」または「修正済み」にすると完了できます。残課題の補足メモは任意です。</p> : null}
     {mission.day === 1 ? <details className={styles.details}><summary>登録済み基本情報を見る</summary><div className={styles.facts}>
       <h3>登録済み基本情報</h3>
       <ul>{[{ label: "電話番号", value: data.school.phoneNumber }, { label: "住所", value: data.school.addressLine }, { label: "Webサイト", value: data.school.websiteUrl }].map(item => <li key={item.label}>{item.label}：{item.value || "DB未設定"}（Google上の内容は手動確認）</li>)}</ul>
@@ -68,7 +67,7 @@ function MissionForm({ progress, data, save, busy, notice, onPhotoDraft }: { pro
           <option value="">計測を選択</option>{data.snapshot.comparisons?.map(c => <option key={c.id} value={c.id}>{c.keyword} / {c.at}</option>)}
         </select> : <input type={field.type === "number" ? "number" : "text"} min={0} max={10000} maxLength={2000} value={evidence[field.key] ?? ""} onChange={e => setEvidence(v => ({ ...v, [field.key]: field.type === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))} />}
       </label>)}
-      {!photos?.exempt.length ? <details className={styles.details} open={!photos && noteRequired || undefined}><summary>{!photos && noteRequired ? "メモ・確認内容を記録（この状態での保存に必要）" : note ? "メモを確認・編集" : "メモを追加する（任意）"}</summary><label>{photos ? "確認メモ（任意）" : "実行記録・残課題の理由"}<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label></details> : null}
+      {!photos?.exempt.length ? <details className={styles.details}><summary>{note ? "メモを確認・編集" : "メモを追加する（任意）"}</summary><label>{photos ? "確認メモ（任意）" : "実行記録・残課題の理由"}<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label><small>空欄のまま保存できます。</small></details> : null}
       {!photos ? <label id={fieldAnchor(mission.day, "status")} tabIndex={-1}>進捗状態<select value={status} onChange={e => setStatus(e.target.value as ChallengeStatus)}>{challengeStatuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label> : null}
       <section id={photos ? fieldAnchor(2, "status") : undefined} tabIndex={-1} className={styles.completion} aria-label={`DAY${mission.day}の完了条件`}>
         <h3>DAY{mission.day} 完了準備</h3>

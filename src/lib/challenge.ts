@@ -140,10 +140,8 @@ export function updateChallenge(doc: ChallengeDocument, command: Record<string, 
     evidence[field.key] = field.type === "number" ? count(raw[field.key]) : text(raw[field.key]);
     if (field.options && !field.options.includes(String(evidence[field.key]))) throw new ChallengeError(`${field.label}の選択内容を確認してください。`);
   }
-  const note = text(command.note);
+  const note = text(command.note ?? "");
   const status = mission.day === 2 ? photoConfirmation(evidence, note).status : command.status as ChallengeStatus;
-  const hasRemaining = Object.values(evidence).some(value => value === "要改善" || value === "後で対応");
-  if (mission.day !== 2 && (["DEFERRED", "WAITING"].includes(status) || status === "COMPLETED" && (mission.day !== 1 || hasRemaining)) && !note) throw new ChallengeError("実行内容・対象外の理由・確認待ちの内容を記録してください。");
   const previous = doc.missions[mission.day - 1];
   if (status === "COMPLETED" && previous.status !== "COMPLETED") {
     const unresolved = mission.fields.filter(field => ["要改善", "後で対応"].includes(String(evidence[field.key])));
