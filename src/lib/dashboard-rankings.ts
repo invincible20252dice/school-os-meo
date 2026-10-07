@@ -93,6 +93,7 @@ export type DashboardRankingLog = {
 };
 
 export type DashboardRankingData = {
+  hasRegisteredKeywords?: boolean;
   dataSource?: "DATABASE" | "SIMULATION";
   school: {
     id: string;
@@ -369,6 +370,7 @@ export function buildDashboardRankingData({
     );
 
   return {
+    hasRegisteredKeywords: keywords.length > 0,
     school: school
       ? {
           id: school.id,

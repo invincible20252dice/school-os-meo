@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { DashboardRankingData } from "@/lib/dashboard-rankings";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
+import KeywordManager from "@/components/dashboard/KeywordManager";
 
 function MapIcon() {
   return (
@@ -83,7 +84,7 @@ export default function RankingClient() {
     {!selected ? <p role="status">ヘッダーから校舎を選択してください。</p> : <>
       <div className={styles.toolbar}>
         <button type="button" disabled={!current} onClick={() => setReload(value => value + 1)}>再取得</button>
-        <a href={`/dashboard/keywords?schoolId=${encodeURIComponent(schoolId)}`}>キーワード管理</a>
+        <KeywordManager key={schoolId} schoolId={schoolId} onChanged={() => { setSelection({ schoolId, keywordId: "" }); setReload(value => value + 1); }} />
       </div>
       {!current ? <p role="status">順位データを読み込んでいます。</p> : current.error ? <p role="alert">{current.error}</p> : current.data ? <>
         {current.data.dataSource === "SIMULATION" && <p role="note"><strong>シミュレーション・実測値ではありません</strong>。順位・位置・日時・競合情報は運用検証用サンプルです。</p>}

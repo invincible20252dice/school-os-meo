@@ -203,8 +203,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const newKeyword = await prisma.targetKeyword.create({
-      data: {
+    const newKeyword = await prisma.targetKeyword.upsert({
+      where: { schoolId_keyword_location: { schoolId, keyword, location } },
+      update: { isActive: true },
+      create: {
         schoolId,
         keyword,
         location,

@@ -18,6 +18,7 @@ const PLACES: Array<[string, number, number, string]> = [
 // Only the designated demonstration school may receive these non-persisted fixtures.
 export function withRankingSimulation(data: DashboardRankingData, keywordId?: string): DashboardRankingData {
   if (data.school?.id !== SCHOOL_ID || data.measuredAt !== null) return { ...data, dataSource: "DATABASE" };
+  if (data.hasRegisteredKeywords && !data.keywords.length) return { ...data, dataSource: "DATABASE" };
   const keywords: DashboardRankingKeyword[] = data.keywords.length ? data.keywords : SAMPLE_NAMES.map((keyword, index) => ({
     id: `simulation-${index + 1}`, keyword, location: "", municipality: "", nearestStation: "", radiusMeters: 1500, isActive: true,
   }));

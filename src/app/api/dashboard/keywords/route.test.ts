@@ -1,0 +1,17 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import { GET, DELETE } from "./route";
+import { prisma } from "@/lib/prisma";
+import { resolveRequestAccess } from "@/lib/supabase-access";
+import { isApprovedAccess } from "@/lib/access-control";
+import { canAccessSchool } from "@/lib/auth-access";
+vi.mock("@/lib/prisma", () => ({ prisma: { targetKeyword: { findMany: vi.fn(), updateMany: vi.fn() } } }));
+vi.mock("@/lib/supabase-access", () => ({ resolveRequestAccess: vi.fn() }));
+vi.mock("@/lib/access-control", () => ({ isApprovedAccess: vi.fn() }));
+vi.mock("@/lib/auth-access", () => ({ canAccessSchool: vi.fn() }));
+beforeEach(() => { vi.resetAllMocks(); vi.mocked(resolveRequestAccess).mockResolvedValue({ isAuthenticated: true, access: {} } as never); vi.mocked(isApprovedAccess).mockReturnValue(true); vi.mocked(canAccessSchool).mockReturnValue(true); });
+const req = (method = "GET", query = "schoolId=s1&id=k1") => new Request(`https://example.com?${query}`, { method });
+it("lists active keywords only", async () => { vi.mocked(prisma.targetKeyword.findMany).mockResolvedValue([]); expect((await GET(req())).status).toBe(200); expect(prisma.targetKeyword.findMany).toHaveBeenCalledWith({ where: { schoolId: "s1", isActive: true }, orderBy: { createdAt: "asc" } }); });
+it.each([0, 1])("soft-deletes only within the authorized school (%s)", async count => { vi.mocked(prisma.targetKeyword.updateMany).mockResolvedValue({ count }); expect((await DELETE(req("DELETE"))).status).toBe(count ? 200 : 404); expect(prisma.targetKeyword.updateMany).toHaveBeenCalledWith({ where: { id: "k1", schoolId: "s1", isActive: true }, data: { isActive: false } }); });
+it.each(["", "schoolId=all", "schoolId=s1"])("validates scope and id for delete", async query => { expect((await DELETE(req("DELETE", query))).status).toBe(400); });
+it("enforces login, approval, school permission", async () => { vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ isAuthenticated: false } as never); expect((await GET(req())).status).toBe(401); vi.mocked(isApprovedAccess).mockReturnValueOnce(false); expect((await GET(req())).status).toBe(403); vi.mocked(canAccessSchool).mockReturnValueOnce(false); expect((await DELETE(req("DELETE"))).status).toBe(403); expect(prisma.targetKeyword.updateMany).not.toHaveBeenCalled(); });
+it("reports database failures", async () => { vi.mocked(prisma.targetKeyword.findMany).mockRejectedValue(new Error("secret")); const response = await GET(req()); expect(response.status).toBe(500); expect(await response.text()).not.toContain("secret"); });

@@ -20,6 +20,7 @@ describe("scoped ranking simulation", () => {
     expect(withRankingSimulation(base(), "unknown").selectedKeyword).toBeNull();
   });
   it("preserves real measurements including out-of-range and does not mutate input", () => {
+    expect(withRankingSimulation({ ...base(), hasRegisteredKeywords: true }).dataSource).toBe("DATABASE");
     const real = { ...base(), measuredAt: "2026-10-08T00:00:00Z", currentRank: null };
     expect(withRankingSimulation(real)).toEqual({ ...real, dataSource: "DATABASE" });
     const input = base();

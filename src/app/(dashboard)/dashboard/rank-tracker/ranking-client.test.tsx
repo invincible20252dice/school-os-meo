@@ -5,6 +5,7 @@ import RankingClient from "./ranking-client";
 import { buildDashboardRankingData } from "@/lib/dashboard-rankings";
 
 const state = vi.hoisted(() => ({ schoolId: "s1", session: true }));
+vi.mock("@/components/dashboard/KeywordManager", () => ({ default: ({ onChanged }: { onChanged: () => void }) => <button onClick={onChanged}>キーワード管理更新</button> }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams({ schoolId: state.schoolId }) }));
 vi.mock("@/lib/supabase", () => ({ createBrowserSupabaseClient: () => ({ auth: { getSession: async () => ({ data: { session: state.session ? { access_token: "test-token" } : null } }) } }) }));
 function data(rank: number | null = 3, measured = true) {
@@ -17,6 +18,14 @@ beforeEach(() => { state.schoolId = "s1"; state.session = true; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("DB-backed ranking screen", () => {
+  it("reloads after keyword management changes", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => Response.json(data()));
+    vi.stubGlobal("fetch", fetcher); render(<RankingClient />);
+    await screen.findByRole("combobox");
+    fireEvent.click(screen.getByRole("button", { name: "キーワード管理更新" }));
+    await screen.findByText(/保存済みの順位データを再取得しました/);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("labels simulation throughout refresh without claiming a real measurement", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ ...data(), dataSource: "SIMULATION" })));
     render(<RankingClient />);
