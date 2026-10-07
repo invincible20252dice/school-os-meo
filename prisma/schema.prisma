@@ -172,11 +172,24 @@ model School {
   churnAlerts       ChurnAlert[]
   challenge         SchoolChallenge?
   googleLeads       GoogleLead[]
+  targetDistricts   TargetDistrict[]
 
   @@index([ownerId])
   @@index([status])
   @@index([prefecture, city])
   @@index([createdAt])
+}
+
+model TargetDistrict {
+  id String @id @default(cuid())
+  schoolId String
+  name String
+  focusPoint String @default("")
+  aiMessage String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  school School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  @@unique([schoolId, name])
 }
 
 model SchoolChallenge {
