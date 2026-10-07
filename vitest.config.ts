@@ -12,6 +12,7 @@ export default defineConfig({
         "src/lib/**/*.ts",
         "src/app/api/**/*.ts",
         "src/components/dashboard/navigation.ts",
+        "src/components/dashboard/SupportChat.tsx",
         "src/app/**/reviews/reviews-client.tsx",
         "src/app/**/rank-tracker/ranking-client.tsx",
         "src/app/**/dashboard/overview-client.tsx",
