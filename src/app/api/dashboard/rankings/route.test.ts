@@ -2,17 +2,21 @@ import { schoolFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma, type TargetKeyword } from "@prisma/client";
 
-const createKeyword = vi.hoisted(() => vi.fn<(args: { create: Prisma.TargetKeywordUncheckedCreateInput }) => Promise<TargetKeyword>>());
+const createKeyword = vi.hoisted(() => vi.fn<(args: { data: Prisma.TargetKeywordUncheckedCreateInput }) => Promise<TargetKeyword>>());
 const findKeywords = vi.hoisted(() => vi.fn<(args: Prisma.TargetKeywordFindManyArgs) => Promise<Prisma.TargetKeywordGetPayload<{ include: { rankHistories: true; aioScoreHistories: true } }>[]>>());
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     school: {
       findUnique: vi.fn(),
     },
     targetKeyword: {
       findMany: findKeywords,
-      upsert: createKeyword,
+      create: createKeyword,
+      findFirst: vi.fn(),
+      update: vi.fn(),
     },
     keywordRank: {
       findMany: vi.fn(),
@@ -38,9 +42,38 @@ vi.mock("@/lib/supabase-access", async () => ({
 }));
 
 describe("/api/dashboard/rankings", () => {
+  it("locks before lookup and reactivates the existing ID without replacing history", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { POST } = await import("./route");
+    vi.mocked(prisma.targetKeyword.findFirst).mockResolvedValue({ id: "existing" } as never);
+    vi.mocked(prisma.targetKeyword.update).mockResolvedValue({ id: "existing", isActive: true } as never);
+    const response = await POST(new Request("https://app.example.com/api/dashboard/keywords", { method: "POST", body: JSON.stringify({ schoolId: "school-1", keyword: " 同じ語句 ", location: "地点A", municipality: "市", nearestStation: "駅" }) }));
+    expect(response.status).toBe(200);
+    expect(prisma.$executeRaw).toHaveBeenCalledWith(expect.any(Array), JSON.stringify(["school-1", "同じ語句", "地点A"]));
+    expect(prisma.targetKeyword.findFirst).toHaveBeenCalledWith({ where: { schoolId: "school-1", keyword: "同じ語句", location: "地点A" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true } });
+    expect(prisma.targetKeyword.update).toHaveBeenCalledWith({ where: { id: "existing", schoolId: "school-1" }, data: { isActive: true, municipality: "市", nearestStation: "駅" } });
+    expect(createKeyword).not.toHaveBeenCalled();
+    expect(vi.mocked(prisma.$executeRaw).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(prisma.targetKeyword.findFirst).mock.invocationCallOrder[0]);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 15000 });
+  });
+  it("does not write if the lock fails", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const { POST } = await import("./route");
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.$executeRaw).mockRejectedValueOnce(new Error("database secret"));
+    const response = await POST(new Request("https://app.example.com/api/dashboard/keywords", { method: "POST", body: JSON.stringify({ schoolId: "school-1", keyword: "語句", location: "地点", municipality: "市", nearestStation: "駅" }) }));
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("database secret");
+    expect(prisma.targetKeyword.findFirst).not.toHaveBeenCalled();
+    expect(createKeyword).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
   beforeEach(async () => {
     vi.clearAllMocks();
     const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.$transaction).mockImplementation(async callback => (callback as (tx: typeof prisma) => Promise<unknown>)(prisma));
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
+    vi.mocked(prisma.targetKeyword.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.school.findUnique).mockResolvedValue(schoolFixture({
       id: "school-1",
       name: "大学受験専門塾 iスクール予備校",
@@ -78,7 +111,7 @@ describe("/api/dashboard/rankings", () => {
       },
     ]);
     vi.mocked(prisma.keywordRank.findMany).mockResolvedValue([]);
-    createKeyword.mockImplementation(async ({ create: data }) => ({
+    createKeyword.mockImplementation(async ({ data }) => ({
       ...data,
       id: "keyword-new",
       isActive: true,
@@ -185,10 +218,8 @@ describe("/api/dashboard/rankings", () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(prisma.targetKeyword.upsert).toHaveBeenCalledWith({
-      where: { schoolId_keyword_location: { schoolId: "school-1", keyword: "熊本 医学部 予備校", location: "熊本市中央区下通" } },
-      update: { isActive: true },
-      create: expect.objectContaining({
+    expect(prisma.targetKeyword.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         schoolId: "school-1",
         keyword: "熊本 医学部 予備校",
         location: "熊本市中央区下通",
@@ -217,9 +248,8 @@ describe("/api/dashboard/rankings", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(prisma.targetKeyword.upsert).toHaveBeenCalledWith({
-      where: expect.any(Object), update: { isActive: true },
-      create: expect.objectContaining({
+    expect(prisma.targetKeyword.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         location: "熊本県熊本市中央区下通1丁目12-27",
         municipality: "熊本市中央区",
         radiusMeters: 1500,
@@ -248,9 +278,8 @@ describe("/api/dashboard/rankings", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(prisma.targetKeyword.upsert).toHaveBeenCalledWith({
-      where: expect.any(Object), update: { isActive: true },
-      create: expect.objectContaining({
+    expect(prisma.targetKeyword.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         latitude: undefined,
         longitude: undefined,
         radiusMeters: 100,
@@ -448,7 +477,7 @@ describe("/api/dashboard/rankings", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
     const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.targetKeyword.upsert).mockRejectedValueOnce("db offline");
+    vi.mocked(prisma.targetKeyword.create).mockRejectedValueOnce("db offline");
     const { POST } = await import("./route");
 
     const response = await POST(
@@ -466,7 +495,7 @@ describe("/api/dashboard/rankings", () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body.error).toBe("キーワードを追加できませんでした。");
+    expect(body.error).toBe("キーワードを保存できませんでした。時間をおいて再試行してください。");
     consoleErrorSpy.mockRestore();
   });
 });

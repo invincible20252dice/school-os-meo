@@ -203,10 +203,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const newKeyword = await prisma.targetKeyword.upsert({
-      where: { schoolId_keyword_location: { schoolId, keyword, location } },
-      update: { isActive: true },
-      create: {
+    const data = {
         schoolId,
         keyword,
         location,
@@ -215,7 +212,27 @@ export async function POST(request: Request) {
         latitude: normalizeDecimalInput(body.latitude),
         longitude: normalizeDecimalInput(body.longitude),
         radiusMeters: normalizeRadius(body.radiusMeters),
-      },
+    };
+    const newKeyword = await prisma.$transaction(async tx => {
+      // Serialize this logical key even when the legacy DB lacks its unique index.
+      const lockKey = JSON.stringify([schoolId, keyword, location]);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const existing = await tx.targetKeyword.findFirst({
+        where: { schoolId, keyword, location },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+      if (existing) {
+        return tx.targetKeyword.update({
+          where: { id: existing.id, schoolId },
+          data: { isActive: true, nearestStation, municipality },
+        });
+      }
+      return tx.targetKeyword.create({ data });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      maxWait: 10000,
+      timeout: 15000,
     });
 
     return NextResponse.json({ success: true, keyword: newKeyword });
@@ -232,7 +249,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: status === 400 ? errorMessage : "キーワードを保存できませんでした。時間をおいて再試行してください。",
       },
       { status },
     );
