@@ -68,12 +68,11 @@ async function loadRankingData(schoolId: string, keywordId?: string) {
       })
     : null;
   const keywords = await prisma.targetKeyword.findMany({
-    where: schoolId ? { schoolId } : undefined,
+    where: { schoolId },
     orderBy: [{ createdAt: "asc" }],
     include: {
       rankHistories: {
         orderBy: { checkedAt: "desc" },
-        take: 20,
       },
       aioScoreHistories: {
         orderBy: { checkedAt: "desc" },
@@ -82,9 +81,8 @@ async function loadRankingData(schoolId: string, keywordId?: string) {
     },
   });
   const keywordRanks = await prisma.keywordRank.findMany({
-    where: schoolId ? { schoolId } : undefined,
+    where: { schoolId, ...(keywordId ? { keyword: keywords.find(keyword => keyword.id === keywordId)?.keyword ?? "" } : {}) },
     orderBy: { measuredAt: "desc" },
-    take: 20,
   });
 
   return buildDashboardRankingData({

@@ -257,6 +257,18 @@ function mentionText(value: unknown, key: "chatgpt" | "gemini" | "googleAi") {
   return text(engine);
 }
 
+function dailyHistory(rows: Array<{ date: string; rank: number | null }>) {
+  const latest = rows.find(row => row.date)?.date;
+  if (!latest) return [];
+  const start = new Date(`${latest}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
+  const days = new Map<string, { date: string; rank: number | null }>();
+  for (const row of rows) {
+    if (row.date >= start.toISOString().slice(0, 10) && !days.has(row.date)) days.set(row.date, row);
+  }
+  return [...days.values()].reverse();
+}
+
 export function buildDashboardRankingData({
   school,
   keywords,
@@ -293,13 +305,13 @@ export function buildDashboardRankingData({
   const currentRank = latestRankHistory ? latestRankHistory.rank : latestKeywordRank?.rank ?? null;
   const previousRank = latestRankHistory ? rankHistories[1]?.rank ?? null : latestKeywordRank?.previousRank ?? null;
   const measuredAt = latestRankHistory ? dateLabel(latestRankHistory.checkedAt, true) : latestKeywordRank ? dateLabel(latestKeywordRank.measuredAt, true) : null;
-  const history = rankHistories.length ? rankHistories.slice(0, 7).reverse().map((rank) => ({
+  const history = dailyHistory(rankHistories.length ? rankHistories.map((rank) => ({
     date: dateLabel(rank.checkedAt),
     rank: rank.rank,
-  })) : matchingLegacyRanks.slice(0, 7).reverse().map((rank) => ({
+  })) : matchingLegacyRanks.map((rank) => ({
     date: dateLabel(rank.measuredAt),
     rank: rank.rank,
-  }));
+  })));
   const latestLogRecords = [
     ...activeKeywords.flatMap((keyword) =>
       (keyword.rankHistories || []).map((rank) => ({

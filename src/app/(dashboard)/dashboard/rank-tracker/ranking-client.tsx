@@ -45,7 +45,7 @@ export default function RankingClient() {
   const [selection, setSelection] = useState({ schoolId: "", keywordId: "" });
   const keywordId = selection.schoolId === schoolId ? selection.keywordId : "";
   const [reload, setReload] = useState(0);
-  const [result, setResult] = useState<{ key: string; data?: DashboardRankingData; error?: string }>({ key: "" });
+  const [result, setResult] = useState<{ key: string; data?: DashboardRankingData; error?: string; fetchedAt?: string }>({ key: "" });
   const key = `${schoolId}/${keywordId}/${reload}`;
   const selected = Boolean(schoolId && schoolId !== "all");
   useEffect(() => {
@@ -66,7 +66,7 @@ export default function RankingClient() {
         if (!response.ok || body.success !== true || !body.school || !Array.isArray(body.keywords) || !Array.isArray(body.history) || !Array.isArray(body.competitors)) {
           throw new Error(body.error || "順位データを取得できませんでした。");
         }
-        if (!cancelled) setResult({ key, data: body });
+        if (!cancelled) setResult({ key, data: body, fetchedAt: new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) });
       } catch (error) {
         if (!cancelled) setResult({ key, error: error instanceof Error ? error.message : "順位データを取得できませんでした。" });
       }
@@ -82,10 +82,11 @@ export default function RankingClient() {
     </header>
     {!selected ? <p role="status">ヘッダーから校舎を選択してください。</p> : <>
       <div className={styles.toolbar}>
-        <button type="button" onClick={() => setReload(value => value + 1)}>再取得</button>
+        <button type="button" disabled={!current} onClick={() => setReload(value => value + 1)}>再取得</button>
         <a href={`/dashboard/keywords?schoolId=${encodeURIComponent(schoolId)}`}>キーワード管理</a>
       </div>
       {!current ? <p role="status">順位データを読み込んでいます。</p> : current.error ? <p role="alert">{current.error}</p> : current.data ? <>
+        <p role="status">{reload > 0 ? "保存済みの順位データを再取得しました。" : "データ取得完了。"} 取得日時：{current.fetchedAt}</p>
         <label className={styles.keywordSelect}>対象キーワード
           <select value={current.data.selectedKeyword?.id || ""} onChange={event => setSelection({ schoolId, keywordId: event.target.value })} disabled={!current.data.keywords.length}>
             {!current.data.keywords.length && <option value="">キーワード未登録</option>}
@@ -149,19 +150,19 @@ function RankingView({ dashboard }: { dashboard: DashboardRankingData }) {
           </div>
           <div>
             <span>市町村</span>
-            <strong>{dashboard.school?.municipality || "-"}</strong>
+            <strong>{dashboard.selectedKeyword?.municipality || "未設定"}</strong>
           </div>
           <div>
             <span>最寄り駅</span>
-            <strong>{dashboard.school?.nearestStation || "-"}</strong>
+            <strong>{dashboard.selectedKeyword?.nearestStation || "未設定"}</strong>
           </div>
           <div>
             <span>緯度・経度</span>
             <strong>
-              {dashboard.school?.latitude !== undefined &&
-              dashboard.school?.longitude !== undefined
-                ? `${dashboard.school.latitude}, ${dashboard.school.longitude}`
-                : "-"}
+              {dashboard.selectedKeyword?.latitude !== undefined &&
+              dashboard.selectedKeyword?.longitude !== undefined
+                ? `${dashboard.selectedKeyword.latitude}, ${dashboard.selectedKeyword.longitude}`
+                : "未設定"}
             </strong>
           </div>
           <div>
@@ -170,7 +171,7 @@ function RankingView({ dashboard }: { dashboard: DashboardRankingData }) {
           </div>
           <div>
             <span>計測時刻</span>
-            <strong>{dashboard.measuredAt ? new Date(dashboard.measuredAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "-"}</strong>
+            <strong>{dashboard.measuredAt ? new Date(dashboard.measuredAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "未計測"}</strong>
           </div>
         </div>
       </section>
@@ -181,7 +182,7 @@ function RankingView({ dashboard }: { dashboard: DashboardRankingData }) {
             <TrendIcon />
             <div>
               <h2>順位推移</h2>
-              <p>登録済みキーワードの直近履歴です。</p>
+              <p>最終計測日までの7日間（各日の最終計測）</p>
             </div>
           </div>
           <div className={styles.chart}>

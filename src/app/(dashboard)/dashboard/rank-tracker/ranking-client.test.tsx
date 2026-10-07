@@ -34,6 +34,8 @@ describe("DB-backed ranking screen", () => {
     expect(fetcher.mock.calls[1][0]).toContain("keywordId=k2");
     fireEvent.click(screen.getByRole("button", { name: "再取得" }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    await screen.findByText(/保存済みの順位データを再取得しました/);
+    expect(screen.getByText("2026/10/2 9:00:00")).toBeDefined();
   });
 
   it.each(["", "all"])("does not query cross-school data for %s", schoolId => {

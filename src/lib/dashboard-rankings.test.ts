@@ -7,6 +7,16 @@ const baseKeyword: DashboardTargetKeywordRecord = {
 };
 
 describe("dashboard-rankings", () => {
+  it("groups repeated measurements into seven calendar days without inventing missing dates", () => {
+    const data = buildDashboardRankingData({ school: null, keywords: [{ ...baseKeyword, rankHistories: [
+      { id: "latest", rank: 2, checkedAt: "2026-10-07T12:00:00Z" },
+      { id: "same-day", rank: 3, checkedAt: "2026-10-07T01:00:00Z" },
+      { id: "boundary", rank: null, checkedAt: "2026-10-01T00:00:00Z" },
+      { id: "outside", rank: 7, checkedAt: "2026-09-30T23:59:00Z" },
+    ] }] });
+    expect(data.history).toEqual([{ date: "2026-10-01", rank: null }, { date: "2026-10-07", rank: 2 }]);
+    expect(data.previousRank).toBe(3);
+  });
   it("preserves latest out-of-range results, derives previous rank from history and sorts dates", () => {
     const data = buildDashboardRankingData({ school: null, keywords: [{ ...baseKeyword, rankHistories: [
       { id: "old", rank: 5, checkedAt: "2026-09-29" },
@@ -253,7 +263,7 @@ describe("dashboard-rankings", () => {
     });
 
     expect(data.searchLabel).toBe("熊本 総合型選抜 / 熊本市中央区 / 下通");
-    expect(data.history[0]).toEqual({ date: "", rank: null });
+    expect(data.history).toEqual([]);
     expect(data.competitors[0]).toMatchObject({
       name: "大学受験専門塾 iスクール予備校",
       rating: 5,
