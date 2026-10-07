@@ -1,5 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import { DEMAND_SAMPLE } from "@/lib/mock/demand-sample";
 import {
-  buildMeoExtendedData,
   filterKeywordVolumes,
   getVolumeMunicipalities,
 } from "@/lib/mock/meoExtendedData";
@@ -17,10 +20,9 @@ function DemandIcon() {
 }
 
 export default function KeywordVolumePage() {
-  const data = buildMeoExtendedData();
-  const municipalities = getVolumeMunicipalities(data.keywordVolumes);
-  const selectedMunicipality = "熊本市中央区";
-  const volumes = filterKeywordVolumes(data.keywordVolumes, selectedMunicipality);
+  const municipalities = getVolumeMunicipalities(DEMAND_SAMPLE);
+  const [selectedMunicipality, setSelectedMunicipality] = useState("熊本市中央区");
+  const volumes = filterKeywordVolumes(DEMAND_SAMPLE, selectedMunicipality);
 
   return (
     <main className={styles.page}>
@@ -28,6 +30,7 @@ export default function KeywordVolumePage() {
         <p className={styles.kicker}>Search Demand</p>
         <h1>検索ボリューム＆地域需要チェック</h1>
         <p>市区郡ごとの検索需要、年間トレンド、クリック単価を比較します。</p>
+        <p role="note">シミュレーション・実測値ではありません。熊本地域の運用検証用サンプルです。選択中の校舎の実績ではありません。</p>
       </header>
 
       <section className={styles.panel}>
@@ -35,7 +38,7 @@ export default function KeywordVolumePage() {
           <DemandIcon />
           <div>
             <h2>地域需要フィルター</h2>
-            <p>現在の表示: {selectedMunicipality}</p>
+            <p role="status">現在の表示: {selectedMunicipality}（{volumes.length}件）</p>
           </div>
         </div>
         <div className={styles.filters}>
@@ -43,6 +46,8 @@ export default function KeywordVolumePage() {
             <button
               key={municipality}
               type="button"
+              aria-pressed={municipality === selectedMunicipality}
+              onClick={() => setSelectedMunicipality(municipality)}
               className={municipality === selectedMunicipality ? styles.activeFilter : undefined}
             >
               {municipality}
