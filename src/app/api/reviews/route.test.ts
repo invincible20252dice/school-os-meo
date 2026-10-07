@@ -65,6 +65,19 @@ vi.mock("@/lib/prisma", () => ({
 describe("GET /api/reviews", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("returns the corrected high-school third-year review verbatim without fabricating timestamps or posted replies", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    const comment = "私は必由館高校の高校3年生で、iスクール予備校に通っています。大学受験に向けて何から勉強すべきかわからず、学習習慣も身についていなかったのですが、自分に合った学習計画を立ててもらえることで毎週やることが明確になりました。先生は話をしっかり聞いてくれて、質問もしやすい環境なので、勉強時間も自然と増え、大学受験までの道筋が見えたのがとても助かりました。";
+    const aiReplyDraft = "iスクール予備校への温かい口コミと高評価をいただき、誠にありがとうございます！\n必由館高校での学習や高校3年生という大切な時期に、自分専用の学習計画をもとに迷わず学習に取り組んでいただけているとのこと、大変嬉しく拝見いたしました。「大学受験までの道筋が見えた」「勉強時間が増えた」という実感は、日々の努力の賜物です。質問しやすい環境と親身なサポートを大切にしながら、志望校現役合格に向けて全力で伴走してまいります。これからも一緒に頑張りましょう！";
+    const postedReply = "必由館高校での学習や高校2年生という大切な時期に、ありがとうございます。";
+    vi.mocked(prisma.review.findMany).mockResolvedValueOnce([reviewFixture({ ...reviewRow, id: "review_real_003", authorName: "Google ユーザー（必由館高校・高3）", originalText: null, comment, aiReplyDraft, replyText: postedReply, status: "REPLIED" })]);
+    const response = await GET(new Request("https://app.example.com/api/dashboard/reviews?schoolId=school-1"));
+    const body = await response.json();
+    expect(body.reviews[0]).toMatchObject({ id: "review_real_003", authorName: "Google ユーザー（必由館高校・高3）", originalText: comment, comment, aiReplyDraft, source: "GOOGLE", status: "REPLIED", createdAt: reviewRow.createdAt.toISOString(), replyText: postedReply });
+    expect(JSON.stringify([body.reviews[0].authorName, body.reviews[0].comment, body.reviews[0].aiReplyDraft])).not.toMatch(/高校2年生|必由館高校・高2/);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
   it.each([
     [null, null], ["manual-imported-review", "manual-imported-review"],
     ["real_gbp_003", null], [null, "gbp_003"],
