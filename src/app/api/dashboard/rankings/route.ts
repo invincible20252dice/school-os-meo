@@ -9,6 +9,7 @@ import {
   type DashboardTargetKeywordRecord,
 } from "@/lib/dashboard-rankings";
 import { prisma } from "@/lib/prisma";
+import { withRankingSimulation } from "@/lib/ranking-simulation";
 import {
   buildScopedSchoolFilter,
   resolveRequestAccess,
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
     }
     if (!schoolId) return NextResponse.json({ success: false, error: "校舎を選択してください。" }, { status: 400 });
     const keywordId = url.searchParams.get("keywordId") || undefined;
-    const data = await loadRankingData(schoolId, keywordId);
+    const data = withRankingSimulation(await loadRankingData(schoolId, keywordId), keywordId);
     if (!data.school || (keywordId && !data.selectedKeyword)) return NextResponse.json({ success: false, error: "校舎またはキーワードが見つかりません。" }, { status: 404 });
 
     return NextResponse.json({ success: true, ...data });

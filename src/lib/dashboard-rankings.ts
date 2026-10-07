@@ -93,6 +93,7 @@ export type DashboardRankingLog = {
 };
 
 export type DashboardRankingData = {
+  dataSource?: "DATABASE" | "SIMULATION";
   school: {
     id: string;
     name: string;

@@ -86,7 +86,8 @@ export default function RankingClient() {
         <a href={`/dashboard/keywords?schoolId=${encodeURIComponent(schoolId)}`}>キーワード管理</a>
       </div>
       {!current ? <p role="status">順位データを読み込んでいます。</p> : current.error ? <p role="alert">{current.error}</p> : current.data ? <>
-        <p role="status">{reload > 0 ? "保存済みの順位データを再取得しました。" : "データ取得完了。"} 取得日時：{current.fetchedAt}</p>
+        {current.data.dataSource === "SIMULATION" && <p role="note"><strong>シミュレーション・実測値ではありません</strong>。順位・位置・日時・競合情報は運用検証用サンプルです。</p>}
+        <p role="status">{reload > 0 ? (current.data.dataSource === "SIMULATION" ? "シミュレーションデータを再取得しました。" : "保存済みの順位データを再取得しました。") : "データ取得完了。"} 取得日時：{current.fetchedAt}</p>
         <label className={styles.keywordSelect}>対象キーワード
           <select value={current.data.selectedKeyword?.id || ""} onChange={event => setSelection({ schoolId, keywordId: event.target.value })} disabled={!current.data.keywords.length}>
             {!current.data.keywords.length && <option value="">キーワード未登録</option>}
@@ -170,7 +171,7 @@ function RankingView({ dashboard }: { dashboard: DashboardRankingData }) {
             <strong>{dashboard.selectedKeyword ? `${dashboard.selectedKeyword.radiusMeters}m` : "-"}</strong>
           </div>
           <div>
-            <span>計測時刻</span>
+            <span>{dashboard.dataSource === "SIMULATION" ? "サンプル日時" : "計測時刻"}</span>
             <strong>{dashboard.measuredAt ? new Date(dashboard.measuredAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : "未計測"}</strong>
           </div>
         </div>
@@ -231,7 +232,7 @@ function RankingView({ dashboard }: { dashboard: DashboardRankingData }) {
         <div className={styles.panelTitle}>
             <MapIcon />
             <div>
-              <h2>上位20店舗</h2>
+              <h2>{dashboard.dataSource === "SIMULATION" ? `競合サンプル ${competitors.length}店舗` : "上位20店舗"}</h2>
               <p>取得済みの競合データを表示します。</p>
             </div>
           </div>

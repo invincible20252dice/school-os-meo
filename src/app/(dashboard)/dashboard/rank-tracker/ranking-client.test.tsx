@@ -17,6 +17,16 @@ beforeEach(() => { state.schoolId = "s1"; state.session = true; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("DB-backed ranking screen", () => {
+  it("labels simulation throughout refresh without claiming a real measurement", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ ...data(), dataSource: "SIMULATION" })));
+    render(<RankingClient />);
+    await screen.findByText("シミュレーション・実測値ではありません");
+    expect(screen.getByText("サンプル日時")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "競合サンプル 2店舗" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "再取得" }));
+    await screen.findByText(/シミュレーションデータを再取得しました/);
+    expect(screen.queryByText(/保存済みの順位データを再取得しました/)).toBeNull();
+  });
   it("renders measured data, sends auth, switches keywords and reloads", async () => {
     const initial = data();
     const second = { ...data(6), selectedKeyword: initial.keywords[1], currentKeyword: "個別指導" };
