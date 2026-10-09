@@ -63,6 +63,7 @@ beforeEach(async () => {
   db = await PGlite.create({ parsers: { 1114: value => new Date(`${value}Z`) } });
   await db.exec('CREATE TABLE "School" (id TEXT PRIMARY KEY, name TEXT); INSERT INTO "School" VALUES (\'a\',\'校舎A\'),(\'b\',\'校舎B\'); CREATE TABLE "GbpMetric" (id TEXT PRIMARY KEY);');
   await db.exec(readFileSync("prisma/migrations/20261003030000_add_google_leads/migration.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/20261009104049_google_lead_lifecycle.sql", "utf8"));
   vi.mocked(resolveRequestAccess).mockResolvedValue(identity("a"));
   transport.school.findUnique.mockImplementation(async args => (await select("School", args as never))[0] as never ?? null);
   transport.googleLead.findMany.mockImplementation(async args => await select("GoogleLead", args as never) as never);
@@ -190,4 +191,39 @@ it("includes meetings from inquiries older than the six-month trend without inve
   clock("2026-10-09T03:00:00Z");
   expect(await read()).toMatchObject({ inquiriesCount: 0, meetingsCount: 1, meetingRate: null, recent: [] });
   expect(await read("a", "six")).toMatchObject({ inquiriesCount: 0, meetingsCount: 1, meetingRate: null });
+});
+
+it("persists the full explicit lifecycle and leaves old meeting rows unknown until confirmed", async () => {
+  const lead = await create("lifecycle");
+  expect((await PATCH(request({ id: lead.id, version: 1, stage: "enrolled" }))).status).toBe(400);
+  for (const [i, stage] of ["scheduled", "held", "enrolled"].entries()) {
+    clock(`2026-10-09T0${i + 2}:00:00Z`);
+    expect((await PATCH(request({ id: lead.id, version: i + 1, stage }))).status).toBe(200);
+    expect((await PATCH(request({ id: lead.id, version: i + 1, stage }))).status).toBe(409);
+  }
+  clock("2026-10-09T06:00:00Z");
+  for (let i = 0; i < 2; i++) expect(await read()).toMatchObject({ lifecycle: { scheduledCount: 1, heldCount: 1, enrolledCount: 1, heldRate: 100, enrollmentRate: 100, legacyMeetingCount: 0 }, recent: [{ id: lead.id, version: 4 }] });
+  expect((await PATCH(request({ id: lead.id, version: 4, stage: "held" }, "b"))).status).toBe(403);
+  const legacy = await create("legacy");
+  expect((await PATCH(request({ id: legacy.id, version: 1, status: "meeting" }))).status).toBe(200);
+  clock("2026-10-09T07:00:00Z");
+  expect(await read()).toMatchObject({ lifecycle: { legacyMeetingCount: 1, heldCount: 1, enrolledCount: 1 } });
+  expect((await PATCH(request({ id: legacy.id, version: 2, stage: "held" }))).status).toBe(200);
+  clock("2026-10-09T08:00:00Z");
+  expect(await read()).toMatchObject({ lifecycle: { legacyMeetingCount: 0, heldCount: 2, enrolledCount: 1 } });
+  expect((await PATCH(request({ id: legacy.id, version: 3, stage: "lost" }))).status).toBe(200);
+  expect(await read()).toMatchObject({ lifecycle: { heldCount: 2 } });
+  expect((await PATCH(request({ id: legacy.id, version: 4, stage: "inquiry" }))).status).toBe(200);
+  expect(await read()).toMatchObject({ lifecycle: { heldCount: 1 } });
+});
+
+it("rejects mixed stage/legacy commands and inquiry dates after confirmed milestones", async () => {
+  const lead = await create();
+  clock("2026-10-09T02:00:00Z");
+  expect((await PATCH(request({ id: lead.id, version: 1, stage: "scheduled", status: "meeting" }))).status).toBe(400);
+  expect((await PATCH(request({ id: lead.id, version: 1, stage: "scheduled", grade: "high_school" }))).status).toBe(200);
+  clock("2026-10-09T04:00:00Z");
+  expect((await PATCH(request({ id: lead.id, version: 2, occurredAt: "2026-10-09T03:00:00Z" }))).status).toBe(400);
+  expect((await PATCH(request({ id: lead.id, version: 2, stage: "inquiry" }))).status).toBe(200);
+  expect(await read()).toMatchObject({ lifecycle: { scheduledCount: 0, heldCount: 0 }, recent: [{ version: 3, meetingScheduledAt: null }] });
 });

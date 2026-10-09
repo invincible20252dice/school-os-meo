@@ -22,8 +22,8 @@ meeting-status implementation. Do not invent a scheduled/held workflow.
 - [x] Browser regression fails on current mobile overlay.
 - [x] In-flow mobile help; unobstructed Web/LINE/phone and meeting controls.
 - [x] Help open/close/focus, desktop/mobile screenshots and narrow mobile check.
-- [ ] Full codex:verify and exact-head CI for final code.
-- [ ] Release approval packet: target, effects, compatibility, no new migration,
+- [x] Full codex:verify and exact-head CI for mobile code.
+- [x] Release approval packet (superseded by expanded lifecycle scope): target, effects, compatibility, no new migration,
       rollback, remaining risks, evidence for minimal meeting-definition decision.
 
 Next release actions require PM approval; this task prepares them only.
@@ -53,3 +53,9 @@ policies; one existing legacy meeting record exists. No customer record changed.
 The Vercel sensitive-variable decrypt attempt was rejected by automatic review;
 no decryption occurred. Chrome project metadata plus the Supabase connector
 provided read-only inspection without credentials or new authentication setup.
+
+Mobile code 921f8ff7d3b73e50c7b5a2188a8854ca7de19cf0 passed both Linux CI runs:
+https://github.com/invincible20252dice/school-os-meo/actions/runs/37918835400
+https://github.com/invincible20252dice/school-os-meo/actions/runs/37918827764
+Expanded work continues in active/google-lead-lifecycle.md; release packet is
+docs/google-lead-release-approval.md. No release authorization was inferred.

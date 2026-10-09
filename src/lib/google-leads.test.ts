@@ -44,8 +44,9 @@ describe("Google lead reporting and validation", () => {
   });
   it("accepts optional grade clearing and explicit edits, rejects malformed or future dates", () => {
     expect(parseLeadEdit({ channel: "other", grade: "high_school", status: "lost", occurredAt: "2026-10-02T10:00+09:00" }, now)).toEqual({ channel: "other", grade: "high_school", status: "lost", occurredAt: new Date("2026-10-02T01:00Z") });
+    expect(parseLeadEdit({ occurredAt: "2024-02-29T12:00Z" }, now).occurredAt).toEqual(new Date("2024-02-29T12:00Z"));
     expect(parseLeadEdit({ grade: null }, now)).toEqual({ grade: null });
     expect(() => parseLeadEdit({}, now)).toThrow("変更");
-    for (const occurredAt of [1, "not-date", "2026-99-01T00:00Z", "2027-01-01T00:00Z", "1999-01-01T00:00Z"]) expect(() => parseLeadEdit({ occurredAt }, now)).toThrow("日時");
+    for (const occurredAt of [1, "not-date", "2026-99-01T00:00Z", "2026-00-01T00:00Z", "2026-01-00T00:00Z", "2026-02-30T00:00Z", "2026-04-31T00:00Z", "2026-10-01T24:00Z", "2027-01-01T00:00Z", "1999-01-01T00:00Z"]) expect(() => parseLeadEdit({ occurredAt }, now)).toThrow("日時");
   });
 });

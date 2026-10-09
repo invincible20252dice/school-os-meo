@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 it("scopes the two list queries and includes old inquiries converted this month", async () => {
   await loadGoogleLeads("a", "month", now);
-  expect(prisma.googleLead.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { schoolId: "a", source: "google", deletedAt: null, OR: [{ occurredAt: { gte: new Date("2026-04-30T15:00Z"), lt: now } }, { meetingAt: { gte: new Date("2026-04-30T15:00Z"), lt: now } }] } }));
+  expect(prisma.googleLead.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { schoolId: "a", source: "google", deletedAt: null, OR: [{ occurredAt: { gte: new Date("2026-04-30T15:00Z"), lt: now } }, { meetingAt: { gte: new Date("2026-04-30T15:00Z"), lt: now } }, ...["meetingScheduledAt", "meetingHeldAt", "enrolledAt"].map(field => ({ [field]: { gte: new Date("2026-04-30T15:00Z"), lt: now } }))] } }));
   expect(prisma.googleLead.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({ take: 20, where: { schoolId: "a", source: "google", deletedAt: null, occurredAt: { gte: new Date("2026-09-30T15:00Z"), lt: now } } }));
   expect((await loadGoogleLeads("a", "month")).inquiriesCount).toBe(0);
 });

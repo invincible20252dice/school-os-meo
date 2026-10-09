@@ -371,11 +371,11 @@ substitutes demonstration metrics. No schema migration is needed for this change
   aggregator's response and operate the rendered DOM, including retries and
   stale success/error responses after switching schools.
 
-### Google inquiry / meeting SQL acceptance
+### Google inquiry / meeting / enrollment acceptance
 
 `src/lib/google-lead-persistence.test.ts` connects the actual Google results
 GET/POST/PATCH/DELETE handlers, access checks, store and aggregation to the exact
-GoogleLead migration in a fresh in-memory PGlite database per case. Only session
+GoogleLead migrations in a fresh in-memory PGlite database per case. Only session
 identity and the Prisma transport are replaced. The test adapter translates the
 supplied filters, projection, sort and limit to parameterized SQL; it does not add
 school/version/deletion predicates missing from application arguments. Timestamp
@@ -393,6 +393,22 @@ This closes a route/store/SQL integration gap, not live production acceptance.
 It does not use a real Prisma engine, Supabase connection/session, production RLS
 roles, durable process restart, or customer data. Browser reload remains covered
 with synthetic API responses in `e2e/google-results.spec.ts`. Automatic Google
-attribution, scheduled versus held meetings and enrollment remain product scope
-decisions, not capabilities proved by these tests. No migration or product
-behavior was changed by this acceptance follow-up.
+attribution is outside this manual flow.
+
+The subsequently authorized lifecycle extension covers explicit scheduled, held
+and enrolled transitions, stale-version rejection, mixed legacy/new requests,
+chronology, legacy unknown meetings, correction and event/cohort aggregation.
+`google-lead-lifecycle.test.ts` applies the exact additive migration and verifies
+unchanged legacy fields, old SQL compatibility and chronology constraints.
+`google-lead-auth.test.ts` exercises the real access resolver against a mocked
+Supabase boundary: only stored active profiles and assigned schools authorize
+requests; editable metadata cannot elevate a manager and requests do not accept
+invitations. `google-lead-acceptance.test.ts` verifies the proposed fixture SQL
+preserves unrelated data and refuses conflicting identities/excess records.
+
+Desktop and mobile E2E operate inquiry -> scheduled -> held -> enrolled, reload,
+saved-write/read-failure recovery, school changes, touch controls and help focus.
+The 320px control hit tests and screenshots supplement the normal mobile view.
+Local full verification: 1,949 tests and 32 browser cases passed on 2026-10-09;
+live Supabase/Prisma persistence and production release remain NOT RUN. The
+concrete approval boundary is in `google-lead-release-approval.md`.

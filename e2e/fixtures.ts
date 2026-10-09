@@ -4,6 +4,7 @@ import { snapshot } from "../src/test/challenge-fixtures";
 import { buildEmptySchoolSetting } from "../src/lib/settings";
 import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
 import { aggregateLeads, leadPeriod, type LeadFact } from "../src/lib/google-leads";
+import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead-lifecycle";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
@@ -64,13 +65,13 @@ async function install(page: Page): Promise<FixtureState> {
       if (request.method() === "PATCH") {
         const body = request.postDataJSON(), row = rows.find(r => r.id === body.id);
         if (!row || row.version !== body.version) return json({ success: false, error: "更新競合" }, 409);
-        row.status = body.status; row.meetingAt = body.status === "meeting" ? new Date() : null; row.version++;
+        Object.assign(row, body.stage ? advanceLeadStage(row, body.stage, new Date()) : { status: body.status }); row.meetingAt = row.status === "meeting" ? row.meetingAt ?? new Date() : null; row.version++;
         return json({ success: true, id: row.id });
       }
       if (request.method() === "GET") {
         if (state.failNextLeadRead) { state.failNextLeadRead = false; return json({ success: false, error: "検証用の再取得失敗" }, 503); }
         const period = leadPeriod(url.searchParams.get("period") || "month", new Date(Date.now() + 1));
-        return json({ success: true, school, period: { name: period.period, from: period.from, to: period.to }, ...aggregateLeads(rows, period), recent: rows.filter(r => !r.deletedAt && r.occurredAt >= period.from && r.occurredAt < period.to).slice(-20).reverse() });
+        return json({ success: true, school, period: { name: period.period, from: period.from, to: period.to }, ...aggregateLeads(rows, period), lifecycle: aggregateLeadLifecycle(rows, period), recent: rows.filter(r => !r.deletedAt && r.occurredAt >= period.from && r.occurredAt < period.to).slice(-20).reverse() });
       }
     }
     if (url.pathname === "/api/dashboard/challenge") {

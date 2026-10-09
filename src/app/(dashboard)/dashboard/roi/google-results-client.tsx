@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { leadChannels, leadGrades, leadStatuses, type LeadChannel, type LeadGrade, type LeadStatus } from "@/lib/google-leads";
+import { leadChannels, leadGrades, type LeadChannel, type LeadGrade, type LeadStatus } from "@/lib/google-leads";
 import type { loadGoogleLeads } from "@/lib/google-lead-store";
 import type { loadPerformance } from "@/lib/google-performance";
 import styles from "./page.module.css";
+import { leadStage, leadStageLabels, leadStageChoices, type LeadStage } from "@/lib/google-lead-lifecycle";
 
-type RecordRow = { id: string; channel: LeadChannel; grade: LeadGrade | null; status: LeadStatus; occurredAt: string; version: number };
+type RecordRow = { id: string; channel: LeadChannel; grade: LeadGrade | null; status: LeadStatus; occurredAt: string; version: number; stage?: LeadStage; meetingScheduledAt?: string | null; meetingHeldAt?: string | null; enrolledAt?: string | null };
 type Results = Omit<Awaited<ReturnType<typeof loadGoogleLeads>>, "recent"> & { school: { id: string; name: string }; recent: RecordRow[] };
 type Performance = Awaited<ReturnType<typeof loadPerformance>>;
 const periods = { month: "今月", previous: "先月", six: "過去6ヶ月" };
@@ -100,10 +101,14 @@ export default function GoogleResultsClient() {
     {state.key === key && state.error ? <p role="alert" className={styles.error}>{state.error}</p> : !data ? <p role="status">成果を読み込んでいます…</p> : null}
     {data ? <>
       <section className={styles.kpis} aria-label="実際の成果">
-        <div className={styles.primary}><h2>{periods[period]}のGoogle経由面談</h2><strong>{data.meetingsCount}<small>件</small></strong><p>前月 {data.previousMeetings}件 → 今月 {data.currentMeetings}件 <b>{data.meetingDiff > 0 ? "+" : ""}{data.meetingDiff}件</b></p></div>
-        <div><h2>Google経由問い合わせ</h2><strong>{data.inquiriesCount}<small>件</small></strong><p>面談化率 <b>{data.meetingRate === null ? "—" : `${data.meetingRate}%`}</b></p><p className={styles.caption}>期間内の問い合わせ {data.inquiriesCount}件のうち、現在面談 {data.convertedCount}件</p></div>
+        <div className={styles.primary}><h2>{periods[period]}の面談実施</h2><strong>{data.lifecycle.heldCount}<small>件</small></strong><p>確認して記録したGoogle経由の面談実施</p></div>
+        <div><h2>{periods[period]}の入塾</h2><strong>{data.lifecycle.enrolledCount}<small>件</small></strong><p>面談実施後に確認して記録した入塾</p></div>
+        <div><h2>面談予定の登録</h2><strong>{data.lifecycle.scheduledCount}<small>件</small></strong><p className={styles.caption}>予定を確認して登録した件数。実施件数とは別です。</p></div>
+        <div><h2>Google経由問い合わせ</h2><strong>{data.inquiriesCount}<small>件</small></strong><p>問い合わせ→実施率 <b>{data.lifecycle.heldRate === null ? "—" : `${data.lifecycle.heldRate}%`}</b></p><p>問い合わせ→入塾率 <b>{data.lifecycle.enrollmentRate === null ? "—" : `${data.lifecycle.enrollmentRate}%`}</b></p></div>
+        <p className={styles.caption}>期間内の問い合わせ {data.inquiriesCount}件のうち、集計終了までに面談実施 {data.lifecycle.cohortHeldCount}件・入塾 {data.lifecycle.cohortEnrolledCount}件</p>
       </section>
-      <section className={styles.section}><h2>Google経由問い合わせを記録</h2><p className={styles.caption}>Google検索・Googleマップ経由と確認できた問い合わせ</p>
+      {data.lifecycle.legacyMeetingCount > 0 ? <p className={styles.warning}>旧面談 {data.lifecycle.legacyMeetingCount}件は予定・実施が未確認です。実施・入塾の件数には含めていません。</p> : null}
+      <section className={styles.section}><h2>Google経由問い合わせを記録</h2><p className={styles.caption}>Google検索・Googleマップ経由と確認できた問い合わせ。予定・実施・入塾は確認した段階で記録します。</p>
         <div className={styles.addButtons}>{(["line", "phone", "web"] as const).map(channel => <button key={channel} disabled={busy} onClick={() => add(channel)}>{leadChannels[channel]} +1</button>)}</div>
         <p role="status" className={styles.notice}>{busy ? "保存しています…" : notice}</p>
         {created ? <div className={styles.optional}><span>学年を追加しますか？（任意）</span><div className={styles.controls}>{Object.entries(leadGrades).map(([grade, label]) => <button key={grade} disabled={busy} onClick={() => update(created, { grade })}>{label}</button>)}<button disabled={busy} onClick={() => setCreated(null)}>あとで</button></div></div> : null}
@@ -113,30 +118,32 @@ export default function GoogleResultsClient() {
         {metrics?.updatedAt ? <p className={styles.caption}>{metrics.from}〜{metrics.to}（取得済み {metrics.measuredDays}日分）・最終更新 {dateText(metrics.updatedAt)}</p> : null}<p className={styles.caption}>クリック数と、手動記録された問い合わせ・面談数は別の指標です。</p>
       </section>
       <section className={styles.section}><h2>最近のGoogle経由問い合わせ <small>{periods[period]}・最新20件</small></h2>
-        {!data.recent.length ? <p>まだGoogle経由の問い合わせ記録がありません。問い合わせが来たら、上の +1 ボタンから記録してください。</p> : <ul className={styles.list}>{data.recent.map(row => <li key={row.id}>
+        {!data.recent.length ? <p>まだGoogle経由の問い合わせ記録がありません。問い合わせが来たら、上の +1 ボタンから記録してください。</p> : <ul className={styles.list}>{data.recent.map(row => { const stage = leadStage(row); return <li key={row.id}>
           <div><time dateTime={row.occurredAt}>{dateText(row.occurredAt)}</time><p>{row.grade ? leadGrades[row.grade] : "学年未設定"} ｜ {leadChannels[row.channel]}</p></div>
-          <span className={row.status === "meeting" ? styles.meeting : styles.status}>{leadStatuses[row.status]}</span>
+          <span className={row.status === "meeting" ? styles.meeting : styles.status}>{leadStageLabels[stage]}</span>
           <div className={styles.rowActions}>
-            {row.status === "inquiry" ? <button disabled={busy} onClick={() => update(row, { status: "meeting" })}>面談になった</button> : null}
+            {stage === "inquiry" || stage === "legacy_meeting" ? <button disabled={busy} onClick={() => update(row, { stage: "scheduled" })}>{stage === "legacy_meeting" ? "面談予定を確認" : "面談予定にする"}</button> : null}
+            {stage === "scheduled" || stage === "legacy_meeting" ? <button disabled={busy} onClick={() => update(row, { stage: "held" })}>{stage === "legacy_meeting" ? "面談実施を確認" : "実施を記録"}</button> : null}
+            {stage === "held" ? <button disabled={busy} onClick={() => update(row, { stage: "enrolled" })}>入塾を記録</button> : null}
             <details onClick={event => { if (event.target instanceof HTMLButtonElement) event.currentTarget.open = false; }}>
               <summary aria-label={`${dateText(row.occurredAt)}の操作`} title="記録の操作">⋯</summary>
               <div className={styles.menu}>
-                <button disabled={busy} onClick={() => setEditing(row)}>編集</button>
-                <button disabled={busy || row.status === "lost"} onClick={() => update(row, { status: "lost" })}>見送り</button>
+                <button disabled={busy} onClick={() => setEditing({ ...row, stage })}>編集</button>
+                <button disabled={busy || stage === "lost" || stage === "enrolled"} onClick={() => update(row, { stage: "lost" })}>見送り</button>
                 <button disabled={busy} onClick={() => setDeleting(row)}>削除</button>
               </div>
             </details>
           </div>
-        </li>)}</ul>}
+        </li>; })}</ul>}
       </section>
-      <section className={styles.section}><h2>月次推移 <small>手動記録・直近6ヶ月</small></h2><table className={styles.table}><thead><tr><th>月</th><th>問い合わせ</th><th>面談</th></tr></thead><tbody>{data.monthlyTrend.map(row => <tr key={row.month}><th>{row.month}</th><td>{row.inquiries}件</td><td>{row.meetings}件</td></tr>)}</tbody></table><p className={styles.caption}>日本時間。問い合わせは発生日、面談は面談に更新した日で集計。0件は未記録を含みます。</p><p className={styles.caption}>{data.channelBreakdown.map(row => `${row.label} ${row.count}件`).join(" / ")}</p></section>
+      <section className={styles.section}><h2>月次推移 <small>手動記録・直近6ヶ月</small></h2><table className={styles.table}><thead><tr><th>月</th><th>問い合わせ</th><th>予定登録</th><th>実施</th><th>入塾</th></tr></thead><tbody>{data.lifecycle.monthlyTrend.map(row => <tr key={row.month}><th>{row.month}</th><td>{row.inquiries}件</td><td>{row.scheduled}件</td><td>{row.held}件</td><td>{row.enrolled}件</td></tr>)}</tbody></table><p className={styles.caption}>日本時間。問い合わせは発生日、予定・実施・入塾はそれぞれ確認して記録した日で集計。予定の予約日時とは別に、各段階の記録日を集計します。0件は未記録を含みます。</p><p className={styles.caption}>{data.channelBreakdown.map(row => `${row.label} ${row.count}件`).join(" / ")}</p></section>
     </> : null}
     <dialog ref={dialog} className={styles.dialog} aria-label={deleting ? "問い合わせの削除" : "問い合わせの編集"} onCancel={event => { event.preventDefault(); closeDialog(); }}>
-      {deleting ? <><h2>この問い合わせ記録を削除しますか？</h2><p>誤登録の記録を集計から除外します。実際に問い合わせがあった場合は「見送り」を選択してください。</p><div className={styles.controls}><button disabled={busy} onClick={closeDialog}>キャンセル</button><button disabled={busy} onClick={() => void mutate("DELETE", { id: deleting.id, version: deleting.version }, "問い合わせ記録を削除しました。")}>削除する</button></div></> : editing ? <form onSubmit={event => { event.preventDefault(); update(editing, { channel: editing.channel, grade: editing.grade, status: editing.status, occurredAt: editing.occurredAt }); }}>
+      {deleting ? <><h2>この問い合わせ記録を削除しますか？</h2><p>誤登録の記録を集計から除外します。実際に問い合わせがあった場合は「見送り」を選択してください。</p><div className={styles.controls}><button disabled={busy} onClick={closeDialog}>キャンセル</button><button disabled={busy} onClick={() => void mutate("DELETE", { id: deleting.id, version: deleting.version }, "問い合わせ記録を削除しました。")}>削除する</button></div></> : editing ? <form onSubmit={event => { event.preventDefault(); update(editing, { channel: editing.channel, grade: editing.grade, occurredAt: editing.occurredAt, ...(editing.stage !== leadStage(editing) ? { stage: editing.stage } : {}) }); }}>
         <h2>問い合わせの編集</h2><label>経路<select value={editing.channel} onChange={e => setEditing({ ...editing, channel: e.target.value as LeadChannel })}>{Object.entries(leadChannels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label>学年<select value={editing.grade || ""} onChange={e => setEditing({ ...editing, grade: e.target.value as LeadGrade || null })}><option value="">未設定</option>{Object.entries(leadGrades).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label>問い合わせ日時（日本時間）<input required type="datetime-local" value={localDate(editing.occurredAt)} onChange={e => { if (e.target.value) setEditing({ ...editing, occurredAt: `${e.target.value}:00+09:00` }); }} /></label>
-        <label>状態<select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value as LeadStatus })}>{Object.entries(leadStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className={styles.controls}><button type="button" disabled={busy} onClick={closeDialog}>キャンセル</button><button disabled={busy}>保存</button></div>
+        <label>状態<select value={editing.stage} onChange={e => setEditing({ ...editing, stage: e.target.value as LeadStage })}>{leadStageChoices(editing).map(key => <option key={key} value={key}>{leadStageLabels[key]}</option>)}</select></label>{editing.stage === "inquiry" && leadStage(editing) !== "inquiry" ? <p className={styles.warning}>問い合わせに戻すと、予定・実施・入塾の記録日時を取り消します。誤登録の訂正にだけ使ってください。</p> : null}<div className={styles.controls}><button type="button" disabled={busy} onClick={closeDialog}>キャンセル</button><button disabled={busy}>保存</button></div>
       </form> : null}
       {notice && (editing || deleting) ? <p role="status">{notice}</p> : null}
     </dialog>
