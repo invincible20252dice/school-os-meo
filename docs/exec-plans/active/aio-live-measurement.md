@@ -13,6 +13,13 @@ until explicit approval of this rollout. Never copy ai-tutor credentials.
 
 ## Vercel-only pilot revision
 
+Linux CI run 37888542388 reached tooling checks (7 passed) but Prisma generate
+needed a fresh Linux engine download, blocked by the verification network guard.
+The workflow now installs only @prisma/engines binaries before isolation, alongside
+browser/dependency preparation. No application install hook or DB command runs.
+Network blocking inside codex:verify remains unchanged; a tooling regression check
+requires this ordering and forbids production secrets/migration/deploy commands.
+
 2026-10-09 continuation: no production approval inferred from "continue development".
 Removed a leftover bulk update of stale RUNNING records. Added red/green unit and
 PGlite preservation checks plus E2E assertions for 100%, read-only access, and

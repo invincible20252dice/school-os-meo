@@ -85,3 +85,12 @@ test("Vercel builds never run database preparation or migrations", () => {
     assert.equal(pkg.scripts[hook], undefined);
   assert.equal(pkg.scripts.postinstall, "prisma generate");
 });
+
+test("Linux CI prepares Prisma engines before isolated verification without app install hooks", () => {
+  const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
+  const install = workflow.indexOf("run: npm ci --ignore-scripts");
+  const engines = workflow.indexOf("run: node node_modules/@prisma/engines/scripts/postinstall.js");
+  const verify = workflow.indexOf("run: npm run codex:verify");
+  assert.ok(install >= 0 && engines > install && verify > engines);
+  assert.doesNotMatch(workflow, /secrets\.|prisma (?:migrate|db)|supabase db|vercel --prod/);
+});
