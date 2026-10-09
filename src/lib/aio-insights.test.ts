@@ -47,3 +47,12 @@ it("only offers up to three existing guide actions for successful recommendation
   expect(aioActions(row(), [], true, 0).map(a => a.key)).not.toContain("request-reviews");
   expect(extractCompetitors("おすすめの塾はありません。\n1. **架空塾**\n大学受験を指導。", "自校塾")).toEqual([]);
 });
+it("does not attach an unlinked school's description to the preceding candidate", () => {
+  const response = "おすすめの予備校です。\n\n**[A予備校](https://example.org/a)**\n**営業時間外 · 受験予備校**\n少人数授業です。\n\n**〒000-0000 別の予備校**\n**営業時間外 · 建造物**\n別校の自習室があります。\n\n**[B予備校](https://example.org/b)**\n個別指導です。";
+  const candidates = extractCompetitors(response, "自校塾");
+  expect(candidates.map(c => c.name)).toEqual(["A予備校", "B予備校"]);
+  expect(candidates[0].evidence).toContain("少人数授業");
+  expect(candidates[0].evidence).not.toContain("別の予備校");
+  expect(candidates[0].evidence).not.toContain("自習室");
+  expect(aioActions(row(), candidates).map(a => a.key)).not.toContain("check-2-photo4");
+});
