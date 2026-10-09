@@ -75,3 +75,10 @@ requirement on read-only production inspection; preserve school authorization
 and secrets, and distinguish SELECT/metadata reads from writes. None was needed
 against production Supabase in this task. Merge is not authorized by the PM's
 current development request, regardless of passing checks.
+
+Screenshot follow-up: the rerun mobile recovery screenshot shows the fixed help
+button overlapping the Web +1 control at the iPhone 13 viewport. Record this as a
+separate existing UI usability issue, not a failure of SQL acceptance. The next
+small product fix should reproduce the overlap in that viewport, adjust the help
+placement/flow, and add an actionable-control E2E assertion. Real Prisma engine
+acceptance remains the next infrastructure verification gap after that UI fix.
