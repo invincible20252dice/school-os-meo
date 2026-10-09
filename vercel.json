@@ -3,7 +3,8 @@
   "git": {
     "deploymentEnabled": {
       "codex/aio-linux-verification": false,
-      "codex/aio-phase2": false
+      "codex/aio-phase2": false,
+      "codex/aio-phase3": false
     }
   }
 }

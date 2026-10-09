@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { loadAioMeasurements, runAioMeasurement } from "./aio-measurement";
+import { loadAioMeasurements, loadAioMeasurementDetail, runAioMeasurement } from "./aio-measurement";
 
 let pg: PGlite;
 type Args = { where: Record<string, any>; data: Record<string, any>; select?: unknown; orderBy?: unknown };
@@ -31,7 +31,9 @@ beforeEach(async () => {
     INSERT INTO "AioScoreHistory" VALUES ('legacy','a',99);`);
   await pg.exec(readFileSync("supabase/migrations/20261008120000_aio_live_pilot.sql", "utf8"));
   const measurements = {
-    findFirst: ({ where }: Args) => first('SELECT * FROM "AioMeasurement" WHERE "schoolId"=$1 AND provider=$2 AND source=$3 AND status <> $4 ORDER BY "createdAt", id LIMIT 1', [where.schoolId, where.provider, where.source, where.status.not]),
+    findFirst: ({ where }: Args) => where.id
+      ? first('SELECT * FROM "AioMeasurement" WHERE "schoolId"=$1 AND provider=$2 AND source=$3 AND id=$4', [where.schoolId, where.provider, where.source, where.id])
+      : first('SELECT * FROM "AioMeasurement" WHERE "schoolId"=$1 AND provider=$2 AND source=$3 AND status <> $4 ORDER BY "createdAt", id LIMIT 1', [where.schoolId, where.provider, where.source, where.status.not]),
     findUnique: ({ where }: Args) => first('SELECT * FROM "AioMeasurement" WHERE "schoolId"=$1 AND "requestId"=$2', [where.schoolId_requestId.schoolId, where.schoolId_requestId.requestId]),
     findMany: ({ where }: Args) => rows('SELECT * FROM "AioMeasurement" WHERE "schoolId"=$1 AND provider=$2 AND source=$3 AND "createdAt">=$4', [where.schoolId, where.provider, where.source, where.createdAt.gte]),
     create: async ({ data }: Args) => {
@@ -120,6 +122,10 @@ it("a later remeasurement appends history and never overwrites the accepted pilo
   try { await runAioMeasurement(adapter, "a", "ka", randomUUID()); } finally { clock.mockRestore(); }
   expect(await rows('SELECT * FROM "AioMeasurement" WHERE id=$1', [before[0].id])).toEqual(before);
   expect((await loadAioMeasurements(adapter, "a")).keywords[0].history).toHaveLength(2);
+  const after = await rows('SELECT * FROM "AioMeasurement" ORDER BY id');
+  expect(await loadAioMeasurementDetail(adapter, "a", before[0].id)).toMatchObject({ id: before[0].id, response: before[0].response });
+  await expect(loadAioMeasurementDetail(adapter, "b", before[0].id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  expect(await rows('SELECT * FROM "AioMeasurement" ORDER BY id')).toEqual(after);
 });
 it("database constraints independently reject cross-school and false-zero records", async () => {
   expect(await rows("SELECT relrowsecurity FROM pg_class WHERE relname='AioMeasurement'")).toEqual([{ relrowsecurity: true }]);

@@ -4,12 +4,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { measurementState, type AioViewData } from "@/lib/aio-view";
-import { aggregateAio, aioHistory, extractCompetitors, aioActions } from "@/lib/aio-insights";
-import { aioCompetitorDifference } from "@/lib/aio-context";
+import { measurementState, type AioViewData, type MeasurementView } from "@/lib/aio-view";
+import { aggregateAio, aioHistory, extractCompetitors } from "@/lib/aio-insights";
 import { aioCost } from "@/lib/aio-audit";
-import { guideForAction } from "@/lib/action-guides";
-import { ActionExecutionGuide } from "../challenge/action-guide";
+import { AioComparison } from "./comparison";
 import styles from "./live.module.css";
 
 class AioUiError extends Error {}
@@ -30,6 +28,8 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
   const [selected, setSelected] = useState(""), [retry, setRetry] = useState(0), [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null), saving = useRef(false);
   const pending = useRef<{ keywordId: string; requestId: string } | null>(null);
+  const [detail, setDetail] = useState<{ keywordId: string; record: MeasurementView } | null>(null);
+  const detailRequest = useRef(0);
   const endpoint = `/api/dashboard/aio?schoolId=${encodeURIComponent(schoolId)}`;
   const href = (path: string) => `${path}${path.includes("?") ? "&" : "?"}schoolId=${encodeURIComponent(schoolId)}`;
   useEffect(() => {
@@ -46,8 +46,15 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
   const state = measurementState(record, data?.configured || false);
   const totals = aggregateAio(data?.keywords.map(k => k.latest) || []), history = aioHistory(data?.keywords || []);
   const disabled = busy || data?.keywords.some(k => measurementState(k.latest, true).label === "計測中") || !data?.configured || !data.canMeasure;
-  const candidates = record?.status === "SUCCESS" ? extractCompetitors(record.response || "", record.schoolName || data?.school?.name || "") : [];
   const cost = record?.usage ? aioCost(record.usage, record.model) : null;
+
+  async function historyDetail(id: string) {
+    const requestNumber = ++detailRequest.current, keywordId = selected, signal = controller.current!.signal;
+    try {
+      const result = await api(`${endpoint}&measurementId=${encodeURIComponent(id)}`, signal);
+      if (requestNumber === detailRequest.current && !signal.aborted) { setDetail({ keywordId, record: result.measurement }); setNotice(""); }
+    } catch { if (requestNumber === detailRequest.current && !signal.aborted) setNotice("過去の回答を取得できませんでした。実測は再実行していません。"); }
+  }
 
   async function measure(ids: string[]) {
     if (saving.current || disabled) return;
@@ -83,13 +90,10 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
         <p className={styles.caption}>1校舎につき24時間で5回まで。直近10分の同一キーワードは再課金せず既存結果を表示します。</p><p role="status">{notice}</p>
         <section className={styles.section} aria-label="改善余地がある検索テーマ"><h2>改善余地がある検索テーマ</h2>
           {totals.allRecommended ? <p>現在、OpenAI検索回答では登録キーワードすべてで推奨されています。</p> : null}
-          {data.keywords.filter(k => measurementState(k.latest, true).label === "計測成功" && !k.latest!.recommended).map(k => {
-            const competitors = extractCompetitors(k.latest!.response || "", k.latest!.schoolName || data.school?.name || "");
-            const gaps = competitors.flatMap(c => { const gap = aioCompetitorDifference(c, data.school?.name || k.latest!.schoolName || "", data.competitors || []).reviewGap; return gap === null ? [] : [gap]; });
-            return <div className={styles.theme} key={k.id}><h3>{k.keyword}</h3><p>OpenAI検索回答：推奨なし</p><ol className={styles.actions}>{aioActions(k.latest, competitors, data.school?.schoolSetting?.googleConnected, gaps.length ? Math.max(...gaps) : null).map(action => <li key={action.key}><h3>{action.title}</h3><p>{action.reason}</p><ActionExecutionGuide guide={guideForAction(action.key)} schoolId={schoolId} /><Link href={href(action.path)}>改善を始める</Link></li>)}</ol></div>;
-          })}
+          {data.keywords.filter(k => measurementState(k.latest, true).label === "計測成功" && !k.latest!.recommended).map(k => <div className={styles.theme} key={k.id}><h3>{k.keyword}</h3><p>OpenAI検索回答：推奨なし</p></div>)}
           {!totals.successful ? <p>計測成功後に改善テーマを確認できます。</p> : null}
         </section>
+        <AioComparison data={data} schoolId={schoolId} />
         <section className={styles.section}><h2>キーワード別結果</h2><div className={styles.tableScroll}><table><thead><tr><th>キーワード</th><th>OpenAI</th><th>最終試行日時</th></tr></thead><tbody>{data.keywords.map(k => {
           const s = measurementState(k.latest, data.configured);
           return <tr key={k.id}><th><button disabled={busy} onClick={() => setSelected(k.id)}>{k.keyword}</button></th><td>{s.label === "計測成功" ? k.latest!.recommended ? "推奨あり" : "推奨なし" : `— / ${s.label}`}</td><td>{k.latest ? date(k.latest.measuredAt || k.latest.createdAt) : "—"}</td></tr>;
@@ -101,12 +105,6 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
             <dl className={styles.facts}><div><dt>自塾表示</dt><dd>{record.brandDetected ? "あり" : "なし"}</dd></div><div><dt>推奨判定</dt><dd>{record.recommended ? "あり" : "なし"}</dd></div><div><dt>モデル</dt><dd>{record.model}</dd></div><div><dt>計測日時</dt><dd><time dateTime={record.measuredAt!}>{date(record.measuredAt!)}</time></dd></div></dl>
             <details><summary>AI回答を見る</summary><h3>検索質問</h3><p className={styles.response}>{record.query}</p><h3>API回答</h3><p className={styles.response}>{record.response}</p>{record.evidence ? <><h3>推奨判定の根拠</h3><blockquote>{record.evidence}</blockquote></> : null}</details>
             <details><summary>出典を見る（{record.citations?.length || 0}件）</summary><ul>{record.citations?.map(citation => <li key={citation.url}><a href={citation.url} target="_blank" rel="noopener noreferrer">{citation.title}</a></li>)}</ul></details>
-            <h3>回答で推奨された競合候補</h3><p className={styles.caption}>明示的なおすすめ一覧から抽出した候補です。網羅性・掲載順位は保証しません。情報差とAIの推薦理由に因果関係があるとは断定できません。</p>
-            {!candidates.length ? <p>根拠付きの競合候補は未抽出です。</p> : candidates.map(c => {
-              const comparison = aioCompetitorDifference(c, data.school?.name || record.schoolName || "", data.competitors || []);
-              const saved = comparison.other;
-              return <div className={styles.competitor} key={c.name}><h3>{c.name}</h3><blockquote>{c.evidence}</blockquote><p>保存済み評価：{saved?.rating ?? "不明"} / Google口コミ数：{saved?.reviewCount ?? "不明"}</p><p>自校舎の保存済み評価：{comparison.own?.rating ?? "不明"} / 口コミ数：{comparison.own?.reviewCount ?? "不明"}</p><p>競合との差（競合 − 自校舎）：評価 {comparison.ratingGap ?? "不明"} / 口コミ {comparison.reviewGap ?? "不明"}件</p><p>写真・投稿・サービスの比較データ：未取得。回答中の記述と実際の提供内容の照合が必要です。</p>{saved ? <p>競合計測日時：{date(saved.checkedAt)} / 住所：{saved.address || "不明"}</p> : <p>同一名称の保存済み競合データは未確認です。</p>}</div>;
-            })}<Link href={href("/dashboard/keywords/competitors")}>競合校区分析を開く</Link>
           </> : null}
           {record ? <details><summary>API利用記録</summary><p>モデル：{record.model}</p>{record.usage ? <><p>リクエスト {record.usage.requests}回 / 検索 {record.usage.searchCalls}回 / {record.usage.usageComplete ? `入力 ${record.usage.inputTokens}・出力 ${record.usage.outputTokens} tokens` : "トークン使用量：一部または全部が未取得"}</p><p>{cost ? `概算 $${cost.lower.toFixed(4)}～$${cost.upper.toFixed(4)} USD（2026-10-09単価、検索トークン重複の有無による幅。請求額ではありません）` : "概算費用：不明（使用量未取得・失敗・未対応モデル）"}</p></> : <p>この既存記録には使用量情報がありません。</p>}</details> : null}
         </section>
@@ -115,7 +113,8 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
             {history.map((p, i) => { const x = 60 + i * 540 / Math.max(1, history.length - 1), prev = history[i - 1]; return p.rate === null ? null : <g key={p.date}>{prev && prev.rate !== null ? <line x1={60 + (i - 1) * 540 / Math.max(1, history.length - 1)} y1={145 - prev.rate * 1.2} x2={x} y2={145 - p.rate * 1.2} stroke="#247a64" strokeWidth="2" /> : null}<circle cx={x} cy={145 - p.rate * 1.2} r="4" fill="#247a64"><title>{p.date}：{p.rate}%</title></circle></g>; })}<text x="60" y="172" fontSize="12">{history[0].date}</text>{history.length > 1 ? <text x="600" y="172" textAnchor="end" fontSize="12">{history.at(-1)!.date}</text> : null}</svg>
           <details><summary>日別の値を見る</summary><ul>{history.map(p => <li key={p.date}>{p.date}：{p.rate === null ? "— / 成功計測なし" : `${p.rate}%`}（{p.recommended}/{p.successful}成功、失敗{p.failed}）</li>)}</ul></details></>}
           <p className={styles.caption}>各キーワード最新50試行の表示範囲内で、日本時間の日末の最新状態を集計。未計測・失敗は0%にしません。現在有効なキーワードが対象です。</p>{data.keywords.some(k => k.historyTruncated) ? <p>古い履歴は表示範囲外です。保存データは削除していません。</p> : null}
-          <details><summary>選択キーワードの履歴</summary><ul>{keyword.history?.map(r => <li key={r.id}>{date(r.measuredAt || r.createdAt)}：{measurementState(r, true).label} / {measurementState(r, true).value}</li>)}</ul></details>
+          <details><summary>選択キーワードの履歴</summary><ul>{keyword.history?.map(r => <li key={r.id}>{date(r.measuredAt || r.createdAt)}：{measurementState(r, true).label} / {measurementState(r, true).value} <button type="button" onClick={() => void historyDetail(r.id)}>保存回答を開く</button></li>)}</ul></details>
+          {detail?.keywordId === selected ? <article aria-label="過去の保存回答"><h3>{date(detail.record.measuredAt || detail.record.createdAt)}の保存回答</h3><p>{measurementState(detail.record, true).label} / {measurementState(detail.record, true).value}</p><p className={styles.response}>{detail.record.response || "回答なし"}</p><ul>{detail.record.citations?.map(c => <li key={c.url}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.title}</a></li>)}</ul><p>回答内の競合候補：{extractCompetitors(detail.record.response || "", detail.record.schoolName || "").map(c => c.name).join("、") || "未抽出"}</p></article> : null}
         </section><section className={styles.section}><h2>総合AIOスコア</h2><p>— / 一部provider未計測</p></section>
       </> : null}
     </>}

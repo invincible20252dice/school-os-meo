@@ -43,7 +43,7 @@ export function extractCompetitors(response: string, ownName: string): AioCompet
     const match = /^(?:#{1,4}\s*|\d+[.)．、]\s*|[-*]\s+|(?=\*\*\[))\*{0,2}(?:\[([^\]]+)\]\([^\s)]+\)|([^*\n:：]+))/.exec(heading);
     if (!match) continue;
     const name = (match[1] || match[2]).trim();
-    if (name.length > 80 || !/(塾|予備校|アカデミー)/.test(name) || /(ランキング|サイト|検索|市役所|教育委員会|大学$|高校$|高等学校$|駅$)/.test(name)) continue;
+    if (name.length > 80 || !/(塾|予備校|アカデミー)/.test(name) || /(ランキング|サイト|検索|選び方|一覧|記事|おすすめ|教育委員会|市役所$|大学$|高校$|高等学校$|駅$)/.test(name) || /^(学習塾|個別指導塾|予備校|進学塾)$/.test(name)) continue;
     if (/(おすすめしません|推奨しません|非推奨|おすすめできません|おすすめではありません|推奨対象外|比較サイト|検索サービス|行政機関)/.test(block)) continue;
     if (normalizeSchoolName(name) === normalizeSchoolName(ownName) || candidates.some(c => normalizeSchoolName(c.name) === normalizeSchoolName(name))) continue;
     if (!/(指導|学習|受験|授業|自習|個別|生徒|予備校|学習塾)/.test(block.slice(heading.length))) continue;

@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { buildAioQuery, loadAioMeasurements, runAioMeasurement } from "./aio-measurement";
+import { buildAioQuery, loadAioMeasurements, loadAioMeasurementDetail, runAioMeasurement } from "./aio-measurement";
 import { AioProviderError } from "./aio-provider";
 const requestId = "00000000-0000-4000-8000-000000000001";
 const mock = {
@@ -122,4 +122,21 @@ it("loads at most 50 attempts while preserving old citation arrays and signaling
   const result = await loadAioMeasurements(db, "s");
   expect(result.keywords[0].history).toHaveLength(50);
   expect(result.keywords[0]).toMatchObject({ historyTruncated: true, latest: { citations, usage: null } });
+});
+it("loads one past real answer scoped to school without a provider call or mutation", async () => {
+  mock.aioMeasurement.findFirst.mockResolvedValue({ id: "old", citations: [], response: "保存回答" });
+  expect(await loadAioMeasurementDetail(db, "s", "old")).toMatchObject({ response: "保存回答" });
+  expect(mock.aioMeasurement.findFirst).toHaveBeenCalledWith({ where: { id: "old", schoolId: "s", provider: "openai-web-search", source: "openai-search-v1" } });
+  expect(mock.aioMeasurement.update).not.toHaveBeenCalled();
+  mock.aioMeasurement.findFirst.mockResolvedValue(null);
+  await expect(loadAioMeasurementDetail(db, "s", "foreign")).rejects.toMatchObject({ code: "NOT_FOUND" });
+  for (const id of ["", "a".repeat(201)]) await expect(loadAioMeasurementDetail(db, "s", id)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+});
+it("reads execution history in the authorized school's relation without returning notes or actors", async () => {
+  const document = { schemaVersion: 1, missions: Array.from({ length: 7 }, (_, i) => ({ day: i + 1, completedAt: null, note: "private-note", actorId: "private-actor" })), nextActionHistory: [] };
+  mock.targetKeyword.findMany.mockResolvedValue([{ id: "k", aioMeasurements: [], rankHistories: [], school: { name: "A塾", challenge: { document } } }]);
+  const result = await loadAioMeasurements(db, "s");
+  expect(result.comparisonContext.history.status).toBe("AVAILABLE");
+  expect(JSON.stringify(result)).not.toMatch(/private-note|private-actor|schemaVersion/);
+  expect(result.school).toEqual({ name: "A塾" });
 });

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import AioDashboardPage from "./page";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import type { AioViewData, MeasurementView } from "@/lib/aio-view";
+import { readActionHistory } from "@/lib/aio-comparison";
 vi.mock("@/lib/supabase", () => ({ createBrowserSupabaseClient: vi.fn() }));
 let schoolId = "school-a";
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams({ schoolId }) }));
@@ -122,4 +123,35 @@ it("stops an uncertain batch instead of silently retrying or spending on the rem
   fireEvent.click(await screen.findByRole("button", { name: "OpenAIで2件を計測" }));
   await screen.findByText("計測を完了できませんでした。再取得して状態を確認してください。");
   expect(fetcher.mock.calls.filter(call => call[1].method === "POST")).toHaveLength(1);
+});
+
+it("reads full historical answers without measurement POST and keeps history errors separate", async () => {
+  const latest = record("SUCCESS", false);
+  state.keywords[0] = { ...state.keywords[0], latest, history: [latest] };
+  fetcher.mockImplementation(async (url: string) => new Response(JSON.stringify(url.includes("measurementId=")
+    ? { success: true, measurement: { ...latest, response: "過去の保存された回答", citations: [{ title: "当時の出典", url: "https://example.org/past" }] } }
+    : { success: true, ...state })));
+  render(<AioDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "保存回答を開く" }));
+  await screen.findByText("過去の保存された回答");
+  expect(screen.getByRole("link", { name: "当時の出典" }).getAttribute("href")).toBe("https://example.org/past");
+  expect(fetcher.mock.calls.every(call => call[1].method === "GET")).toBe(true);
+  fetcher.mockRejectedValueOnce(new Error("read failed"));
+  fireEvent.click(screen.getByRole("button", { name: "保存回答を開く" }));
+  await screen.findByText("過去の回答を取得できませんでした。実測は再実行していません。");
+  expect(screen.getByText("0%", { exact: true })).toBeDefined();
+});
+
+it("shows unknown comparison, consolidates actions, and fails closed without execution history", async () => {
+  state.comparisonContext = { asOf: new Date().toISOString(), places: [], history: readActionHistory(null) };
+  state.keywords = ["k1", "k2"].map(id => ({ ...base().keywords[0], id, latest: { ...record("SUCCESS", false), response: "おすすめの塾です。\n1. **検証予備校**\n自習室で受験を支援します。" } }));
+  const view = render(<AioDashboardPage />);
+  await screen.findByText(/比較データ未取得。/);
+  expect(screen.getAllByRole("link", { name: "改善を始める" })).toHaveLength(3);
+  expect(screen.getAllByRole("heading", { name: "自習の写真を撮る" })).toHaveLength(1);
+  expect(screen.getAllByText(/根拠：OpenAI回答のみ/)).toHaveLength(3);
+  view.unmount(); state.comparisonContext.history = readActionHistory(undefined);
+  render(<AioDashboardPage />);
+  await screen.findByText(/実行履歴を確認できない/);
+  expect(screen.queryByRole("link", { name: "改善を始める" })).toBeNull();
 });

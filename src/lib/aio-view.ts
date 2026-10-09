@@ -1,5 +1,6 @@
 import type { AioUsage } from "./aio-audit";
 import type { SavedAioCompetitor } from "./aio-context";
+import type { ComparisonHistory, GoogleObservation } from "./aio-comparison";
 export type MeasurementView = {
   id: string; status: string; query: string; response: string | null;
   brandDetected: boolean | null; recommended: boolean | null; score: number | null;
@@ -9,8 +10,9 @@ export type MeasurementView = {
 };
 export type AioViewData = {
   configured: boolean; pilotKeywordId: string | null; canMeasure: boolean;
-  school?: { name: string; prefecture: string | null; city: string | null; addressLine: string | null; websiteUrl: string | null; schoolSetting: { googleConnected: boolean } | null } | null;
+  school?: { name: string; googlePlaceId?: string | null; prefecture: string | null; city: string | null; addressLine: string | null; websiteUrl: string | null; schoolSetting: { googleConnected: boolean } | null } | null;
   competitors?: SavedAioCompetitor[];
+  comparisonContext?: { asOf: string; places: GoogleObservation[]; history: ComparisonHistory };
   keywords: Array<{ id: string; keyword: string; municipality: string; nearestStation: string; latest: MeasurementView | null; history?: MeasurementView[]; historyTruncated?: boolean }>;
 };
 export function measurementState(record: MeasurementView | null, configured: boolean, now = Date.now()) {

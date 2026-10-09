@@ -56,3 +56,7 @@ it("does not attach an unlinked school's description to the preceding candidate"
   expect(candidates[0].evidence).not.toContain("自習室");
   expect(aioActions(row(), candidates).map(a => a.key)).not.toContain("check-2-photo4");
 });
+it("keeps a city-hall-front branch but rejects articles and generic school categories", () => {
+  const text = "おすすめの塾です。\n1. **A予備校 市役所前校**\n大学受験の指導です。\n2. **学習塾**\n個別指導です。\n3. **塾の選び方**\n受験の記事です。\n4. **熊本大学**\n指導します。";
+  expect(extractCompetitors(text, "自校塾").map(c => c.name)).toEqual(["A予備校 市役所前校"]);
+});

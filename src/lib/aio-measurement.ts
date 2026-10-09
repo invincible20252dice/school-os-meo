@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { AIO_MODEL, AIO_PROVIDER, AIO_VERSION, AioProviderError, measureOpenAi } from "./aio-provider";
 import { aioMetadata } from "./aio-audit";
 import { savedAioCompetitors } from "./aio-context";
+import { readActionHistory, readPlaceSnapshots } from "./aio-comparison";
 
 export class AioRequestError extends Error {
   constructor(public readonly code: string, public readonly status: number) { super(code); }
@@ -27,13 +28,16 @@ export async function loadAioMeasurements(db: PrismaClient, schoolId: string) {
   const keywords = await db.targetKeyword.findMany({
     where: { schoolId, isActive: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, keyword: true, municipality: true, nearestStation: true,
-      school: { select: { name: true, prefecture: true, city: true, addressLine: true, websiteUrl: true, schoolSetting: { select: { googleConnected: true } } } },
-      rankHistories: { orderBy: { checkedAt: "desc" }, take: 1, select: { checkedAt: true, competitorData: true } },
+      school: { select: { name: true, googlePlaceId: true, prefecture: true, city: true, addressLine: true, websiteUrl: true, schoolSetting: { select: { googleConnected: true } }, challenge: { select: { document: true } } } },
+      rankHistories: { orderBy: { checkedAt: "desc" }, take: 10, select: { checkedAt: true, competitorData: true } },
       aioMeasurements: { where: measurementScope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 },
     },
   });
+  const { challenge, ...school } = keywords.at(0)?.school || {};
+  const asOf = new Date().toISOString();
   return { configured: Boolean(process.env.OPENAI_API_KEY?.trim()), pilotKeywordId: null,
-    school: keywords.at(0)?.school || null,
+    school: keywords.at(0)?.school ? school : null,
+    comparisonContext: { asOf, places: readPlaceSnapshots(keywords.flatMap(k => k.rankHistories || []), asOf), history: readActionHistory(challenge?.document ?? null) },
     competitors: savedAioCompetitors(keywords.flatMap(k => k.rankHistories || [])),
     keywords: keywords.map(({ aioMeasurements, school: _school, rankHistories: _ranks, ...keyword }) => {
       const history = aioMeasurements.slice(0, 50).map(record => {
@@ -45,6 +49,14 @@ export async function loadAioMeasurements(db: PrismaClient, schoolId: string) {
         historyTruncated: aioMeasurements.length > 50 };
     }),
   };
+}
+
+export async function loadAioMeasurementDetail(db: PrismaClient, schoolId: string, id: string) {
+  if (!id || id.length > 200) throw new AioRequestError("INVALID_REQUEST", 400);
+  const record = await db.aioMeasurement.findFirst({ where: { id, schoolId, ...measurementScope } });
+  if (!record) throw new AioRequestError("NOT_FOUND", 404);
+  const { sources, usage } = aioMetadata(record.citations);
+  return { ...record, citations: sources, usage };
 }
 
 export async function runAioMeasurement(db: PrismaClient, schoolId: string, keywordId: string, requestId: string, provider = measureOpenAi) {

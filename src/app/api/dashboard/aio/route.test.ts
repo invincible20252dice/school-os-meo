@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET, POST } from "./route";
 import { resolveRequestAccess } from "@/lib/supabase-access";
-import { AioRequestError, loadAioMeasurements, runAioMeasurement } from "@/lib/aio-measurement";
+import { AioRequestError, loadAioMeasurements, loadAioMeasurementDetail, runAioMeasurement } from "@/lib/aio-measurement";
+import { readActionHistory } from "@/lib/aio-comparison";
 import { aioPilot } from "@/lib/aio-pilot";
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/supabase-access", () => ({ resolveRequestAccess: vi.fn() }));
-vi.mock("@/lib/aio-measurement", async importOriginal => ({ ...await importOriginal<object>(), loadAioMeasurements: vi.fn(), runAioMeasurement: vi.fn() }));
+vi.mock("@/lib/aio-measurement", async importOriginal => ({ ...await importOriginal<object>(), loadAioMeasurements: vi.fn(), loadAioMeasurementDetail: vi.fn(), runAioMeasurement: vi.fn() }));
 const access = { isAuthenticated: true, access: { userId: "u", role: "manager" as const, schoolIds: ["a"], schoolId: "a", status: "active" as const, name: "", email: "", source: "profiles" as const } };
 const request = (schoolId = "a", body?: string) => new Request("http://localhost/api/dashboard/aio?schoolId=" + schoolId, body === undefined ? {} : { method: "POST", body });
 const admin = () => vi.mocked(resolveRequestAccess).mockResolvedValue({ ...access, access: { ...access.access, role: "admin" } });
@@ -13,7 +14,7 @@ const pilotRequest = (requestId = "client-id") => request(aioPilot.schoolId, JSO
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("DATABASE_URL", "unit-test-only-not-connected");
   vi.mocked(resolveRequestAccess).mockResolvedValue(access);
-  vi.mocked(loadAioMeasurements).mockResolvedValue({ keywords: [], configured: true, pilotKeywordId: null, school: null, competitors: [] });
+  vi.mocked(loadAioMeasurements).mockResolvedValue({ keywords: [], configured: true, pilotKeywordId: null, school: null, competitors: [], comparisonContext: { asOf: new Date().toISOString(), places: [], history: readActionHistory(null) } });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("requires login", async () => {
@@ -82,4 +83,15 @@ it("advertises server-derived pilot permission, not a client role", async () => 
   expect(await (await GET(request())).json()).toMatchObject({ canMeasure: false, pilotKeywordId: aioPilot.keywordId });
   admin();
   expect(await (await GET(request(aioPilot.schoolId))).json()).toMatchObject({ canMeasure: true, pilotKeywordId: aioPilot.keywordId });
+});
+it("serves past answers through the same tenant authorization with no new measurement", async () => {
+  vi.mocked(loadAioMeasurementDetail).mockResolvedValue({ id: "old", response: "saved" } as never);
+  const res = await GET(new Request("http://localhost/api/dashboard/aio?schoolId=a&measurementId=old"));
+  expect(await res.json()).toMatchObject({ measurement: { response: "saved" } });
+  expect(loadAioMeasurementDetail).toHaveBeenCalledWith({}, "a", "old");
+  expect(res.headers.get("cache-control")).toContain("no-store");
+  vi.mocked(loadAioMeasurementDetail).mockClear();
+  expect((await GET(new Request("http://localhost/api/dashboard/aio?schoolId=b&measurementId=old"))).status).toBe(403);
+  expect(loadAioMeasurementDetail).not.toHaveBeenCalled();
+  expect(runAioMeasurement).not.toHaveBeenCalled();
 });
