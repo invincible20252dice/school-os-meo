@@ -370,3 +370,29 @@ substitutes demonstration metrics. No schema migration is needed for this change
   query aggregation, and alert-derived actions. Component tests use the actual
   aggregator's response and operate the rendered DOM, including retries and
   stale success/error responses after switching schools.
+
+### Google inquiry / meeting SQL acceptance
+
+`src/lib/google-lead-persistence.test.ts` connects the actual Google results
+GET/POST/PATCH/DELETE handlers, access checks, store and aggregation to the exact
+GoogleLead migration in a fresh in-memory PGlite database per case. Only session
+identity and the Prisma transport are replaced. The test adapter translates the
+supplied filters, projection, sort and limit to parameterized SQL; it does not add
+school/version/deletion predicates missing from application arguments. Timestamp
+parsing explicitly uses UTC to match Prisma's timestamp boundary on both JST and
+UTC hosts. The generated IDs and updatedAt values are test transport substitutes.
+
+Coverage includes inquiry -> meeting -> repeated fresh GET, concurrent identical
+submissions, conflicting/reused keys, soft deletion, school permissions and
+cross-school IDs, body school/source spoofing, two stale version writers, a
+committed insert followed by transport failure, unavailable reads, a real SQL
+constraint rejecting an update, JST month boundaries, current-status meeting
+semantics, and an old inquiry converted outside the inquiry trend window.
+
+This closes a route/store/SQL integration gap, not live production acceptance.
+It does not use a real Prisma engine, Supabase connection/session, production RLS
+roles, durable process restart, or customer data. Browser reload remains covered
+with synthetic API responses in `e2e/google-results.spec.ts`. Automatic Google
+attribution, scheduled versus held meetings and enrollment remain product scope
+decisions, not capabilities proved by these tests. No migration or product
+behavior was changed by this acceptance follow-up.
