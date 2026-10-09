@@ -3,13 +3,14 @@ import { startChallenge, updateChallenge, weeklyActions } from "../src/lib/chall
 import { snapshot } from "../src/test/challenge-fixtures";
 import { buildEmptySchoolSetting } from "../src/lib/settings";
 import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
+import { readActionHistory, readPlaceSnapshots } from "../src/lib/aio-comparison";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { placesFailure?: string; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; aioComparison: boolean; aioRecentRequest: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, aioComparison: false, aioRecentRequest: false, calls: [], unexpected: [] };
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
   await page.addInitScript(() => {
@@ -47,6 +48,12 @@ async function install(page: Page): Promise<FixtureState> {
     if (url.pathname === "/api/dashboard/context") return json({ user: { name: "検証担当", role: "admin" }, schools, currentSchoolId: schoolId, currentSchoolName: schools.find(s => s.id === schoolId)?.name, canSwitchSchool: true });
     const school = schools.find(s => s.id === schoolId);
     if (!school) return json({ success: false, error: "校舎へのアクセス権限がありません。" }, 403);
+    if (url.pathname === "/api/dashboard/aio/places" && request.method() === "POST") {
+      if (state.placesFailure) return json({ success: false, code: state.placesFailure, error: "競合Googleデータを取得できませんでした。" }, 503);
+      const asOf = new Date().toISOString();
+      const places = [{ placeId: schoolId, name: school.name, reviewCount: 3 }, { placeId: "places-competitor", name: "検証予備校", reviewCount: 31 }].map(p => ({ ...p, address: "検証県検証市1-1", source: "google-places", transient: true, checkedAt: asOf, retentionUntil: new Date(Date.now() + 300000).toISOString(), rating: 4.5, photoCount: null, photoAvailable: true, replyRate: null, reviewAge: null, postAge: null, category: "school", services: null, website: true, googleMapsUri: "https://maps.google.com/", attributions: [{ provider: "検証情報提供元", uri: "https://example.org" }] }));
+      return json({ success: true, places, asOf, requests: 3, reservedCalls: 3, competitorLimit: 1, failures: [] });
+    }
     if (url.pathname === "/api/dashboard/challenge") {
       const record = documents.get(schoolId)!;
       if (request.method() === "POST") {
@@ -79,8 +86,24 @@ async function install(page: Page): Promise<FixtureState> {
           evidence: !failed && recommended ? "検証用A校をおすすめします。" : null, citations: [{ url: "https://example.org", title: "検証出典" }],
         });
       }
+      const asOf = new Date().toISOString();
+      const executionHistory = readActionHistory(null);
+      if (state.aioRecentRequest) executionHistory.document.missions[2].completedAt = asOf;
       const data: AioViewData = { configured: state.aioConfigured, canMeasure, pilotKeywordId: "keyword-school-a",
+        school: { name: school.name, googlePlaceId: schoolId, prefecture: "検証県", city: "検証市", addressLine: "1-1", websiteUrl: null, schoolSetting: null },
+        comparisonContext: { asOf, history: executionHistory, places: state.aioComparison ? readPlaceSnapshots([{ checkedAt: new Date(asOf), competitorData: {
+          source: "google-business-profile", retentionUntil: new Date(Date.now() + 86400000).toISOString(),
+          places: [
+            { placeId: schoolId, name: school.name, address: "検証県検証市1-1", rating: 5, reviewCount: 3, photosComplete: true, photoCount: 10, postsComplete: true, lastPostAt: new Date(Date.now() - 30 * 86400000).toISOString(), category: "学習塾" },
+            { placeId: "fixture-competitor", name: "検証予備校", address: "検証県検証市2-2", rating: 4.4, reviewCount: 31, photosComplete: true, photoCount: 41, postsComplete: true, lastPostAt: new Date(Date.now() - 5 * 86400000).toISOString(), category: "学習塾" },
+          ],
+        } }], asOf) : [] },
         keywords: keywords.map(k => { const latest = measurements.get(k.id) || null; return { ...k, latest, history: latest ? [latest, ...(state.aioHistory ? [{ ...latest, id: latest.id + "-prior", status: "SUCCESS", recommended: false, brandDetected: false, score: 0, createdAt: new Date(Date.parse(latest.createdAt) - 86400000).toISOString(), measuredAt: new Date(Date.parse(latest.createdAt) - 86400000).toISOString() }] : [])] : [] }; }) };
+      const detailId = url.searchParams.get("measurementId");
+      if (detailId) {
+        const measurement = data.keywords.flatMap(k => k.history || []).find(m => m.id === detailId);
+        return measurement ? json({ success: true, measurement }) : json({ success: false }, 404);
+      }
       return json({ success: true, ...data });
     }
     if (request.method() !== "GET") { state.unexpected.push(request.method() + " " + url.pathname); return route.abort(); }

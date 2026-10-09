@@ -168,6 +168,8 @@ model School {
   targetKeywords    TargetKeyword[]
   aioScoreHistories AioScoreHistory[]
   aioMeasurements  AioMeasurement[]
+  aioPlaceLinks     AioPlaceLink[]
+  aioPlacesRequests AioPlacesRequest[]
   monthlyReports    MonthlyReport[]
   searchQueryLogs   SearchQueryLog[]
   churnAlerts       ChurnAlert[]
@@ -191,6 +193,29 @@ model TargetDistrict {
   updatedAt DateTime @updatedAt
   school School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   @@unique([schoolId, name])
+}
+
+model AioPlaceLink {
+  schoolId     String
+  candidateKey String
+  placeId      String
+  identifiedAt DateTime @default(now())
+  school School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  @@id([schoolId, candidateKey])
+}
+
+model AioPlacesRequest {
+  schoolId String
+  requestId String
+  reservedCalls Int
+  actualCalls Int @default(0)
+  status String @default("RUNNING")
+  errorCode String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  school School @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  @@id([schoolId, requestId])
+  @@index([schoolId, createdAt])
 }
 
 model SchoolChallenge {

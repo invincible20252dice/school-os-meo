@@ -146,8 +146,10 @@ test("AIO four-keyword mixed batch shows 33%, evidence, actions and persists on 
   await expect(page.getByText("計測失敗 1件", { exact: true })).toBeVisible();
   await expect(page.getByText("計測状態を更新しました。", { exact: false })).toBeVisible();
   expect(fixture.calls.filter(c => c.path === "/api/dashboard/aio" && c.method === "POST")).toHaveLength(4);
-  await expect(page.getByRole("heading", { name: "検証予備校", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "改善余地がある検索テーマ" }).getByRole("heading", { name: "自習の写真を撮る" })).toHaveCount(2);
+  await expect(page.locator("summary").filter({ hasText: "検証予備校" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "今週やること" }).getByRole("heading", { name: "自習の写真を撮る" })).toHaveCount(1);
+  await expect(page.getByTestId("aio-school-actions").locator(":scope > li")).toHaveCount(3);
+  await expect(page.getByText(/比較データ未取得。/)).toBeVisible();
   await expect(page.getByText("AI回答を見る", { exact: true }).locator("..")).not.toHaveAttribute("open", "");
   await expect(page.getByRole("img", { name: "日別OpenAI推奨率の推移" }).locator("circle")).toHaveCount(1);
   await page.reload();
@@ -155,13 +157,45 @@ test("AIO four-keyword mixed batch shows 33%, evidence, actions and persists on 
   await page.getByRole("combobox", { name: "登録キーワード" }).selectOption("keyword-school-a-3");
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("計測失敗（QUOTA）");
   await page.getByRole("combobox", { name: "登録キーワード" }).selectOption("keyword-school-a");
-  await page.getByText("やり方・お手本を見る", { exact: false }).first().click();
+  await page.getByTestId("aio-school-actions").locator("li").filter({ has: page.getByRole("heading", { name: "自習の写真を撮る", exact: true }) }).getByText("やり方・お手本を見る", { exact: false }).click();
   await expect(page.getByAltText("自習写真の撮影お手本（AI生成）")).toBeVisible();
   await expect.poll(() => page.getByAltText("自習写真の撮影お手本（AI生成）").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-mixed.png"), fullPage: true });
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-viewport.png") });
+});
+
+test("AIO Google fixture comparison, seven-day exclusions and historical evidence survive reload without extra calls", async ({ page, fixture }, testInfo) => {
+  fixture.aioCount = 4; fixture.aioComparison = true; fixture.aioHistory = true;
+  await page.goto("/dashboard/aio?schoolId=school-a");
+  await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  const table = page.getByRole("table", { name: "Google保存データの中央値比較" });
+  await expect(table.getByRole("row").filter({ hasText: "口コミ数" })).toContainText("3件31件1店舗");
+  await expect(table.getByRole("row").filter({ hasText: "写真数" })).toContainText("10枚41枚1店舗");
+  await expect(table.getByRole("row").filter({ hasText: "口コミ返信率" })).toContainText("未取得未取得0店舗");
+  await expect(page.getByTestId("aio-school-actions").locator(":scope > li")).toHaveCount(3);
+  await expect(page.getByTestId("aio-school-actions")).toContainText("口コミ数は自塾3件");
+  await page.locator("summary").filter({ hasText: "検証予備校" }).click();
+  await expect(page.getByText(/^取得元：google-business-profile/)).toBeVisible();
+  await page.getByRole("region", { name: "推奨競合との比較" }).screenshot({ path: testInfo.outputPath("aio-phase3-metrics.png") });
+  await page.getByRole("region", { name: "今週やること" }).screenshot({ path: testInfo.outputPath("aio-phase3-actions.png") });
+  await page.reload();
+  await expect(table.getByRole("row").filter({ hasText: "口コミ数" })).toContainText("3件31件1店舗");
+  await page.getByText("選択キーワードの履歴", { exact: true }).click();
+  await page.getByRole("button", { name: "保存回答を開く" }).last().click();
+  await expect(page.getByRole("article", { name: "過去の保存回答" })).toContainText("検証予備校");
+  expect(fixture.calls.filter(c => c.path === "/api/dashboard/aio" && c.method === "POST")).toHaveLength(4);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("aio-phase3-comparison.png"), fullPage: true });
+  fixture.aioRecentRequest = true;
+  await page.reload();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("aio-school-actions")).not.toContainText("口コミ数は自塾3件");
+  await page.getByRole("combobox", { name: "選択校舎" }).selectOption("school-b");
+  await expect(page.getByText("未計測", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("aio-school-actions").locator(":scope > li")).toHaveCount(0);
 });
 
 test("AIO four successful recommended keywords have no forced NEXT ACTION", async ({ page, fixture }, testInfo) => {
@@ -175,4 +209,44 @@ test("AIO four successful recommended keywords have no forced NEXT ACTION", asyn
   await page.reload();
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-all-recommended.png"), fullPage: true });
+});
+test("Places explicit refresh shows current facts and attribution, never persists content on reload", async ({ page, fixture }, testInfo) => {
+  fixture.aioCount = 4;
+  await page.goto("/dashboard/aio?schoolId=school-a");
+  await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(0);
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  const table = page.getByRole("table", { name: "Google現在値の中央値比較" });
+  await expect(table.getByRole("row").filter({ hasText: "口コミ数" })).toContainText("3件31件1店舗");
+  await expect(page.getByText("Google Maps", { exact: true })).toHaveAttribute("translate", "no");
+  await expect(page.getByTestId("aio-school-actions")).toContainText("Google現在値");
+  await page.locator("summary").filter({ hasText: "検証予備校" }).click();
+  await expect(page.getByText(/あり（総数は未取得）/)).toBeVisible();
+  expect(await page.evaluate(() => Object.values(sessionStorage).some(v => /rating|reviewCount|31件|検証予備校/.test(v)))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("region", { name: "推奨競合との比較" }).screenshot({ path: testInfo.outputPath("places-current.png") });
+  await page.getByRole("region", { name: "今週やること" }).screenshot({ path: testInfo.outputPath("places-actions.png") });
+  await page.reload();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  await expect(page.getByText("31件", { exact: true })).toHaveCount(0);
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(1);
+});
+
+test("Places failure clears volatile data while preserving OpenAI and does not auto retry", async ({ page, fixture }) => {
+  fixture.aioCount = 4;
+  await page.goto("/dashboard/aio?schoolId=school-a");
+  await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText("31件", { exact: true })).toBeVisible();
+  fixture.placesFailure = "QUOTA";
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText(/競合Googleデータを取得できませんでした。APIの利用枠/)).toBeVisible();
+  await expect(page.getByText("31件", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  fixture.placesFailure = "NOT_CONFIGURED";
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText(/設定が必要（Places APIキー）/)).toBeVisible();
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(3);
 });

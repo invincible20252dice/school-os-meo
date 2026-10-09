@@ -37,3 +37,15 @@
 .page th button { text-align: left; overflow-wrap: anywhere; }
 .chart { width: 100%; max-height: 250px; aspect-ratio: 640 / 180; display: block; }
 @media (max-width: 700px) { .page { padding: 16px; } .metrics { grid-template-columns: 1fr; } .selection { align-items: stretch; flex-direction: column; } }
+.candidateList { display: grid; gap: 8px; }
+.candidateList summary { cursor: pointer; overflow-wrap: anywhere; }
+.candidateList summary span { color: #52616b; font-size: 12px; margin-left: 12px; }
+.googleAttribution {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0;
+  color: #5e5e5e;
+  white-space: nowrap;
+}

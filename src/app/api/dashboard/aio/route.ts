@@ -4,7 +4,7 @@ import { resolveRequestAccess } from "@/lib/supabase-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { canAccessSchool } from "@/lib/auth-access";
 import { aioPilot } from "@/lib/aio-pilot";
-import { AioRequestError, aioMessages, loadAioMeasurements, runAioMeasurement } from "@/lib/aio-measurement";
+import { AioRequestError, aioMessages, loadAioMeasurements, loadAioMeasurementDetail, runAioMeasurement } from "@/lib/aio-measurement";
 
 export const maxDuration = 90;
 export const dynamic = "force-dynamic";
@@ -23,7 +23,11 @@ async function handle(request: Request) {
     const canMeasure = access.access.role === "admin" && schoolId === aioPilot.schoolId;
     if (request.method === "POST" && !canMeasure) return json({ success: false, error: "指定校舎の管理者のみ計測できます。" }, 403);
     if (!process.env.DATABASE_URL?.trim()) throw new AioRequestError("DB_NOT_CONFIGURED", 503);
-    if (request.method === "GET") return json({ success: true, ...await loadAioMeasurements(prisma, schoolId), canMeasure, pilotKeywordId: aioPilot.keywordId });
+    if (request.method === "GET") {
+      const id = url.searchParams.get("measurementId");
+      if (id !== null) return json({ success: true, measurement: await loadAioMeasurementDetail(prisma, schoolId, id) });
+      return json({ success: true, ...await loadAioMeasurements(prisma, schoolId), canMeasure, pilotKeywordId: aioPilot.keywordId });
+    }
     let body;
     try { body = await request.json(); } catch { throw new AioRequestError("INVALID_REQUEST", 400); }
     if (!body || typeof body.keywordId !== "string" || typeof body.requestId !== "string" || Object.keys(body).some(key => !["keywordId", "requestId"].includes(key))) throw new AioRequestError("INVALID_REQUEST", 400);

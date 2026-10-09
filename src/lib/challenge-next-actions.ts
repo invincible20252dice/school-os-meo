@@ -14,6 +14,27 @@ export type NextActionRecord = NextAction & {
 const dayMs = 86400000;
 const elapsed = (at: string, now: string) => (Date.parse(now) - Date.parse(at)) / dayMs;
 
+export type ActionHistory = {
+  missions: Array<{ day: number; completedAt: string | null }>;
+  nextActionHistory?: Array<Pick<NextActionRecord, "key" | "day" | "status" | "completedAt">>;
+};
+export function availableActionCandidates<T extends NextAction>(candidates: T[], doc: ActionHistory, now: string): T[] {
+  const history = doc.nextActionHistory ?? [];
+  const latest = new Map(history.map(record => [record.key, record]));
+  const recentMission = (day: number) => {
+    const at = doc.missions[day - 1].completedAt;
+    return at !== null && elapsed(at, now) < 7;
+  };
+  return candidates.filter(a => {
+    const record = latest.get(a.key);
+    if (record && (record.status !== "COMPLETED" || elapsed(record.completedAt!, now) < 7)) return false;
+    if (a.key === "request-reviews" && (recentMission(3) || recentMission(4))) return false;
+    if (a.day === 5 && recentMission(5) || a.key === "competitor-improvement" && recentMission(6)) return false;
+    if (a.day === 5 && history.some(r => r.day === 5 && r.status === "COMPLETED" && elapsed(r.completedAt!, now) < 7)) return false;
+    return true;
+  }).sort((a, b) => priorityWeights[b.priority] - priorityWeights[a.priority] || a.day - b.day || a.key.localeCompare(b.key));
+}
+
 export function reviewRequestRecommendation(snapshot: Snapshot): { count: number | null; reason: string } {
   if (!snapshot.reviews) return { count: null, reason: "口コミデータを取得できないため、依頼人数は未判定です。" };
   // One latest measurement avoids counting the same competitor across keywords.
@@ -63,14 +84,7 @@ export function nextActions(doc: ChallengeDocument, snapshot: Snapshot) {
     const at = doc.missions[day - 1].completedAt;
     return at !== null && elapsed(at, snapshot.at) < 7;
   };
-  const available = candidates.filter(a => {
-    const record = latestRecords.get(a.key);
-    if (record && (record.status !== "COMPLETED" || elapsed(record.completedAt!, snapshot.at) < 7)) return false;
-    if (a.key === "request-reviews" && (recentMission(3) || recentMission(4))) return false;
-    if (a.day === 5 && recentMission(5) || a.key === "competitor-improvement" && recentMission(6)) return false;
-    if (a.day === 5 && history.some(r => r.day === 5 && r.status === "COMPLETED" && elapsed(r.completedAt!, snapshot.at) < 7)) return false;
-    return true;
-  }).sort((a, b) => priorityWeights[b.priority] - priorityWeights[a.priority] || a.day - b.day || a.key.localeCompare(b.key));
+  const available = availableActionCandidates(candidates, doc, snapshot.at);
   const active = [...latestRecords.values()].filter(r => r.status !== "COMPLETED");
   const days = missions.map(m => ({ day: m.day, actions: available.filter(a => a.day === m.day).slice(0, 3), active: active.filter(a => a.day === m.day) }));
   const additionalRequest = day3.status !== "COMPLETED" || recentMission(3)

@@ -33,6 +33,7 @@ export default defineConfig({
         "src/app/api/**/route.test.ts",
       ],
       thresholds: {
+        "src/lib/aio-comparison.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-search-keywords.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/dashboard/analytics/queries/sync/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/action-guide*.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
