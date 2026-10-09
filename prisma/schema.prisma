@@ -167,6 +167,7 @@ model School {
   syncedPosts       SyncedPost[]
   targetKeywords    TargetKeyword[]
   aioScoreHistories AioScoreHistory[]
+  aioMeasurements  AioMeasurement[]
   monthlyReports    MonthlyReport[]
   searchQueryLogs   SearchQueryLog[]
   churnAlerts       ChurnAlert[]
@@ -465,7 +466,9 @@ model TargetKeyword {
   school            School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   rankHistories     RankHistory[]
   aioScoreHistories AioScoreHistory[]
+  aioMeasurements  AioMeasurement[]
 
+  @@unique([schoolId, id])
   @@unique([schoolId, keyword, location])
   @@index([schoolId, isActive])
   @@index([nearestStation])
@@ -506,6 +509,36 @@ model AioScoreHistory {
   @@index([schoolId, checkedAt])
   @@index([keywordId, checkedAt])
   @@index([totalScore])
+}
+
+model AioMeasurement {
+  id            String   @id @default(cuid())
+  schoolId      String
+  keywordId     String
+  requestId     String
+  provider      String
+  source        String
+  model         String
+  status        String
+  query         String
+  schoolName    String
+  response      String?
+  citations     Json?
+  evidence      String?
+  brandDetected Boolean?
+  recommended   Boolean?
+  score         Int?
+  measuredAt    DateTime?
+  errorCode     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school  School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  keyword TargetKeyword @relation(fields: [schoolId, keywordId], references: [schoolId, id], onDelete: Restrict)
+
+  @@unique([schoolId, requestId])
+  @@index([schoolId, provider, createdAt])
+  @@index([keywordId, provider, createdAt])
 }
 
 model MonthlyReport {

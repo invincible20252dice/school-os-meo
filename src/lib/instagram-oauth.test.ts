@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildInstagramOAuthUrl,
   exchangeInstagramCode,
@@ -9,6 +9,10 @@ import {
 } from "./instagram-oauth";
 
 const originalEnv = process.env;
+
+beforeEach(() => {
+  process.env = { ...originalEnv, INSTAGRAM_REDIRECT_URI: "", NGROK_URL: "", NEXT_PUBLIC_APP_URL: "" };
+});
 
 afterEach(() => {
   process.env = { ...originalEnv };

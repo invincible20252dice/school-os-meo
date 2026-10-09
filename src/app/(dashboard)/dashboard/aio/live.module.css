@@ -1,0 +1,27 @@
+.page { display: grid; gap: 20px; max-width: 1160px; margin: 0 auto; padding: 24px; color: #222; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.page h1 { font-size: 24px; margin: 0; }
+.page h2 { font-size: 17px; margin: 0 0 12px; }
+.page h3 { font-size: 15px; }
+.page button, .page select { font: inherit; border: 1px solid #b9c3c7; border-radius: 6px; background: white; color: #25393b; padding: 9px 12px; max-width: 100%; }
+.page button { cursor: pointer; }
+.page button:disabled { opacity: .5; cursor: not-allowed; }
+.selection { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #dbe1e3; }
+.selection label { display: grid; gap: 8px; min-width: 0; max-width: 100%; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.metrics article { border: 1px solid #dbe1e3; border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.metrics strong { font-size: 30px; min-height: 40px; }
+.metrics article:first-child { border-top: 3px solid #247a64; }
+.metrics article:nth-child(2) { border-top: 3px solid #838998; }
+.metrics article:nth-child(3) { border-top: 3px solid #b4831c; }
+.section { border-top: 1px solid #dbe1e3; padding-top: 20px; min-width: 0; }
+.caption { font-size: 13px; color: #566166; }
+.error { color: #a02336; }
+.response { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
+.facts { display: flex; flex-wrap: wrap; gap: 20px; }
+.facts dt { font-size: 12px; color: #566166; }
+.facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.page a { color: #166357; overflow-wrap: anywhere; }
+.page blockquote { border-left: 3px solid #247a64; padding-left: 14px; margin: 12px 0; overflow-wrap: anywhere; }
+.page small, .page span { overflow-wrap: anywhere; }
+@media (max-width: 700px) { .page { padding: 16px; } .metrics { grid-template-columns: 1fr; } .selection { align-items: stretch; flex-direction: column; } }

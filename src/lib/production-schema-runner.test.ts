@@ -42,7 +42,7 @@ function fakePrisma(fail: boolean, failKeyword = false) {
     }`);
 }
 
-describe("production deployment schema gate", () => {
+describe("legacy schema runner (not invoked by builds)", () => {
   it.each(["", "preview", "development"])("never modifies the database during %s builds", environment => {
     expect(run(environment).status).toBe(0);
   });
@@ -51,7 +51,7 @@ describe("production deployment schema gate", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Production DATABASE_URL is required");
   });
-  it("executes only the targeted migration before allowing a production build", () => {
+  it("retains its explicit legacy behavior without being invoked by Vercel builds", () => {
     fakePrisma(false);
     const result = run("production", "postgresql://user:pass@localhost/db?pgbouncer=true");
     expect(result.status).toBe(0);
@@ -70,9 +70,9 @@ describe("production deployment schema gate", () => {
     expect(readFileSync(join(cwd, "disconnected"), "utf8")).toBe("true");
     expect(result.stdout).toContain("Prisma query verification completed");
     const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
-    expect(scripts["vercel-build"]).toBe("node scripts/prepare-vercel-database.mjs && npm run build");
+    expect(scripts["vercel-build"]).toBe("npm run build");
   });
-  it("stops deployment when schema alignment fails instead of continuing to build", () => {
+  it("exits unsuccessfully when explicit schema alignment fails", () => {
     fakePrisma(true);
     const result = run("production", "postgresql://localhost/test");
     expect(result.status).toBe(1);

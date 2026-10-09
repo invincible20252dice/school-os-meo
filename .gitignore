@@ -10,4 +10,7 @@ work/
 .DS_Store
 *.log
 .vercel
+playwright-report/
+test-results/
+*.tsbuildinfo
 .env*
