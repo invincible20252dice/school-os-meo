@@ -6,10 +6,10 @@ import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, calls: [], unexpected: [] };
+  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
   await page.addInitScript(() => {
@@ -80,7 +80,7 @@ async function install(page: Page): Promise<FixtureState> {
         });
       }
       const data: AioViewData = { configured: state.aioConfigured, canMeasure, pilotKeywordId: "keyword-school-a",
-        keywords: keywords.map(k => { const latest = measurements.get(k.id) || null; return { ...k, latest, history: latest ? [latest] : [] }; }) };
+        keywords: keywords.map(k => { const latest = measurements.get(k.id) || null; return { ...k, latest, history: latest ? [latest, ...(state.aioHistory ? [{ ...latest, id: latest.id + "-prior", status: "SUCCESS", recommended: false, brandDetected: false, score: 0, createdAt: new Date(Date.parse(latest.createdAt) - 86400000).toISOString(), measuredAt: new Date(Date.parse(latest.createdAt) - 86400000).toISOString() }] : [])] : [] }; }) };
       return json({ success: true, ...data });
     }
     if (request.method() !== "GET") { state.unexpected.push(request.method() + " " + url.pathname); return route.abort(); }

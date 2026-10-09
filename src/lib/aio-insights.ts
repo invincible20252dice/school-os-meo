@@ -32,12 +32,12 @@ export function extractCompetitors(response: string, ownName: string): AioCompet
   // Intentionally high precision, not comprehensive entity recognition. Only named
   // list/heading entries in an explicitly recommended list can become candidates.
   if (!/(おすすめ|お勧め|推奨)/.test(response.slice(0, 300))) return [];
-  const blocks = response.split(/\n(?=(?:#{1,4}\s|\d+[.)．、]\s*|[-*]\s+))/);
+  const blocks = response.split(/\n(?=(?:#{1,4}\s|\d+[.)．、]\s*|[-*]\s+|\*\*\[))/);
   if (/(おすすめ(?:の塾)?はありません|推奨できません|推奨しません)/.test(blocks[0])) return [];
   const candidates: AioCompetitor[] = [];
   for (const block of blocks) {
     const heading = block.split("\n")[0];
-    const match = /^(?:#{1,4}\s*|\d+[.)．、]\s*|[-*]\s+)\*{0,2}(?:\[([^\]]+)\]\([^\s)]+\)|([^*\n:：]+))/.exec(heading);
+    const match = /^(?:#{1,4}\s*|\d+[.)．、]\s*|[-*]\s+|(?=\*\*\[))\*{0,2}(?:\[([^\]]+)\]\([^\s)]+\)|([^*\n:：]+))/.exec(heading);
     if (!match) continue;
     const name = (match[1] || match[2]).trim();
     if (name.length > 80 || !/(塾|予備校|アカデミー)/.test(name) || /(ランキング|サイト|検索|市役所|教育委員会|大学$|高校$|高等学校$|駅$)/.test(name)) continue;

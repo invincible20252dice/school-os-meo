@@ -46,8 +46,9 @@ and transport interruption must be visible, never successful zero.
 ## Progress
 
 - [x] Identity/preflight and existing implementation inspection.
-- [ ] Failing behavior tests, implementation and focused verification.
-- [ ] Full codex:verify, regressions and desktop/mobile browser evidence.
+- [x] Failing behavior tests, implementation and focused verification.
+- [x] Local codex:verify through build (1,914 tests on second run); local E2E
+  blocked by missing Chromium executable. Linux browser evidence still pending.
 - [ ] Verification branch push, Linux CI/E2E and safe repairs.
 - [ ] Report actual results and request production deployment approval.
 
@@ -60,3 +61,18 @@ non-competitor entities and ungrounded actions are excluded; successful recommen
 keywords have no actions; approved school isolation and secrets are preserved.
 Run npm run codex:verify with isolated credentials. Live Phase 2 acceptance remains
 a separate, approval-gated Vercel runtime operation after CI success.
+
+## Verification observations
+
+- Initial aggregate gates passed; Linux initial browser run passed 26/28. Two
+  screenshot-flow assertions checked image pixels before loading completed.
+  Replaced that immediate assertion with a bounded Playwright poll; no gate skipped.
+- Read only the already accepted production answer (one response field, no secrets
+  or writes). Its bold linked place-result format required an additional extraction
+  case. Added a failing synthetic format regression, then implemented and passed it.
+- Versioned JSON retains legacy arrays. Existing SQL/schema unchanged; no database
+  or provider writes have been made in this Phase 2 task.
+- Linux run 37896065355 passed on d920275: 1,916 tests, 28 desktop/mobile E2E,
+  99.24% lines / 97.39% branches, typecheck/lint/build. Screenshots inspected.
+  Final additions (place-result extraction regression, dated chart and two-day
+  browser history case) require the next commit's full CI before approval.

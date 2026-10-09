@@ -26,6 +26,11 @@ it("extracts only explicitly recommended cram-school candidates with verbatim ev
   expect(extractCompetitors("A塾についての情報はありません。", "自校塾")).toEqual([]);
   expect(extractCompetitors("おすすめ：\n- **熊本市**\n- **熊本高校**\n- **学習塾検索サイト**", "自校塾")).toEqual([]);
 });
+it("supports bold linked place results used by the accepted production response", () => {
+  const response = "市でおすすめの予備校を以下にご紹介します。\n\n**[A予備校](https://example.org/a)**  \n**営業時間外 · 受験予備校 · 4.3 (6 件のレビュー)**  \n少人数制の授業を提供します。\n\n**[B予備校](https://example.org/b)**  \n**営業時間外 · 受験予備校**  \n映像授業を活用した学習が可能です。";
+  expect(extractCompetitors(response, "自校塾").map(c => c.name)).toEqual(["A予備校", "B予備校"]);
+  expect(extractCompetitors(response, "A予備校").map(c => c.name)).toEqual(["B予備校"]);
+});
 it("only offers up to three existing guide actions for successful recommendation-negative themes", () => {
   const actions = aioActions(row(), [{ name: "他予備校", evidence: "他予備校は自習室と大学受験の指導をおすすめします。" }]);
   expect(actions.length).toBeLessThanOrEqual(3);

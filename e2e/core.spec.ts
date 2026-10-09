@@ -160,15 +160,18 @@ test("AIO four-keyword mixed batch shows 33%, evidence, actions and persists on 
   await expect.poll(() => page.getByAltText("自習写真の撮影お手本（AI生成）").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-mixed.png"), fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath("aio-phase2-viewport.png") });
 });
 
 test("AIO four successful recommended keywords have no forced NEXT ACTION", async ({ page, fixture }, testInfo) => {
-  fixture.aioCount = 4; fixture.aioRecommended = true;
+  fixture.aioCount = 4; fixture.aioRecommended = true; fixture.aioHistory = true;
   await page.goto("/dashboard/aio?schoolId=school-a");
   await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
   await expect(page.getByText("4 / 4成功計測で推奨", { exact: true })).toBeVisible();
   await expect(page.getByText("現在、OpenAI検索回答では登録キーワードすべてで推奨されています。", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "改善を始める" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "日別OpenAI推奨率の推移" }).locator("circle")).toHaveCount(2);
   await page.reload();
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-all-recommended.png"), fullPage: true });
