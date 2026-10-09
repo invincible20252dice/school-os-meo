@@ -7,7 +7,9 @@ build, and desktop/mobile Playwright tests. It never migrates, seeds or deploys.
 
 ## Codex verification setup
 
-Use Node.js 22 and `npm ci --ignore-scripts`, then `npx playwright install chromium`
+Use Node.js 22 and `npm ci --ignore-scripts`, then
+`node node_modules/@prisma/engines/scripts/postinstall.js` to install engine binaries
+without application hooks or DB access, then `npx playwright install chromium`
 (Linux CI uses `--with-deps`). No production credentials are needed. Run from the
 School OS repository root. Default E2E URL is fixed to `http://127.0.0.1:4317`;
 existing servers are never reused. Stop any conflicting test server before retrying.
@@ -53,16 +55,21 @@ No retry; maximum two API requests (1600 + 500 output tokens) per attempt, one
 search tool call, 35-second deadline per request. Search/model usage is billable.
 School-level reservations enforce a one-minute cooldown and five attempts per
 rolling 24 hours. Missing-key records do not count toward that paid-attempt limit.
-Only the first pilot keyword per school can be measured until the live gate passes.
+The HTTP API additionally restricts measurement to the exact school/keyword and
+server-fixed one-shot request ID in `src/lib/aio-pilot.ts`. No other school or keyword
+can start a paid attempt. Any existing reservation, including failure/configuration
+or interrupted RUNNING, is reused without another provider call.
 
 Required live secrets are OPENAI_API_KEY and DATABASE_URL; DIRECT_URL is unused.
 Do not write dummy values to .env.local or copy another project's credentials.
-Read keys through the existing Next environment loader, never print their values.
-Vercel's 403 means insufficient access, not absent production configuration.
-Before live writes confirm a nonproduction DB and authorized test school/keyword.
-Review/apply only the additive AioMeasurement migration to that test DB; never use
-db:deploy, reset or production build-preparation scripts for this verification.
-Then measure one registered keyword, read the stored result via authenticated GET,
+Secrets remain inside Vercel; do not pull/copy them locally. Vercel's 403 means
+insufficient access, not absent production configuration. The current user-approved
+direction is the existing production Supabase project, not a new test DB. Production
+schema application and deployment still need separate concrete approval. After that
+approval, follow [the pilot runbook](aio-production-pilot.md): read-only schema/count
+checks, then only the reviewed Supabase additive SQL. No Prisma migrate/db push,
+Supabase db push, reset or legacy preparation scripts. Inside the Vercel runtime,
+measure the pinned keyword once, read the stored result via authenticated GET,
 reload the actual AIO screen and confirm the same record/time/content. Record
 evidence without credentials. A mock/CI pass is not this live acceptance gate.
 Do not automatically retry a paid failure repeatedly. Gemini, Google AI Overview,
@@ -77,7 +84,10 @@ without production secrets or deployment permissions. Reports/traces are retaine
 for seven days. Configure a GitHub main ruleset requiring the **Codex Verify**
 check and PRs, with force pushes/deletions disabled. This needs repository-admin
 configuration; workflow YAML alone cannot block merging. Existing Vercel automatic
-deployments are separate and are not disabled by this workflow.
+deployments are separate. `vercel.json` disables automatic deployment only for
+`codex/aio-linux-verification`; this branch is for Linux CI, not a production-backed
+Preview. Main merge, schema application and production deployment are not approved
+by the verification-branch push permission.
 
 ## Measured scope
 

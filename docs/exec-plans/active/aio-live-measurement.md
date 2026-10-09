@@ -26,6 +26,14 @@ The exact known image URL now receives a local static fixture, with all other
 external requests still blocked. Run all browser cases rather than fail-fast so
 remaining independent failures can be diagnosed together; no assertions are skipped.
 
+Run 37888983596: 10/24 browser tests passed. Artifacts show saved/failed-save draft
+values were intact; use textbox accessible names instead of label text containing
+controlled textarea content. Scope alerts to main (exclude Next route announcer),
+and match the actual /api/dashboard/reviews endpoint in fixtures. Mobile artifacts
+also exposed a real header defect: hidden label text removed the school select's
+accessible name and fixed widths caused horizontal overflow. Add stable aria-labels
+and wrapping responsive tracks; E2E now asserts no horizontal overflow as well.
+
 2026-10-09 continuation: no production approval inferred from "continue development".
 Removed a leftover bulk update of stale RUNNING records. Added red/green unit and
 PGlite preservation checks plus E2E assertions for 100%, read-only access, and

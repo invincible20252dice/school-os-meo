@@ -7,4 +7,3 @@ const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start
 });
 for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => child.kill(signal));
 child.on("exit", code => { process.exitCode = code ?? 1; });
-

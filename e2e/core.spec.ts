@@ -14,16 +14,16 @@ test("challenge execution record survives reload and stays isolated across schoo
   await page.goto("/dashboard/challenge?schoolId=school-a&day=1");
   await expect(page.getByRole("heading", { name: "7日間チャレンジ", exact: true })).toBeVisible();
   await page.getByText("メモを追加する（任意）", { exact: true }).click();
-  await page.getByLabel("実行記録・残課題の理由", { exact: true }).fill("A校の実行記録");
+  await page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true }).fill("A校の実行記録");
   await page.getByRole("button", { name: "実行記録を保存", exact: true }).click();
   await expect(page.getByText("実行記録を保存しました。", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByText("メモを確認・編集", { exact: true }).click();
-  await expect(page.getByLabel("実行記録・残課題の理由", { exact: true })).toHaveValue("A校の実行記録");
+  await expect(page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true })).toHaveValue("A校の実行記録");
   await page.getByRole("combobox", { name: "選択校舎" }).selectOption("school-b");
   await expect(page).toHaveURL(/schoolId=school-b/);
   await page.getByText("メモを追加する（任意）", { exact: true }).click();
-  await expect(page.getByLabel("実行記録・残課題の理由", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true })).toHaveValue("");
   expect(fixture.calls.filter(c => c.method === "POST").map(c => c.schoolId)).toEqual(["school-a"]);
   await page.screenshot({ path: testInfo.outputPath("challenge.png"), fullPage: true });
 });
@@ -31,14 +31,14 @@ test("challenge execution record survives reload and stays isolated across schoo
 test("failed save keeps the draft and does not persist a false success", async ({ page, fixture }) => {
   await page.goto("/dashboard/challenge?schoolId=school-a&day=1");
   await page.getByText("メモを追加する（任意）", { exact: true }).click();
-  await page.getByLabel("実行記録・残課題の理由", { exact: true }).fill("保存失敗の記録");
+  await page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true }).fill("保存失敗の記録");
   fixture.failedSave = true;
   await page.getByRole("button", { name: "実行記録を保存", exact: true }).click();
   await expect(page.getByText("テスト用保存エラー", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("実行記録・残課題の理由", { exact: true })).toHaveValue("保存失敗の記録");
+  await expect(page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true })).toHaveValue("保存失敗の記録");
   await page.reload();
   await page.getByText("メモを追加する（任意）", { exact: true }).click();
-  await expect(page.getByLabel("実行記録・残課題の理由", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "実行記録・残課題の理由", exact: true })).toHaveValue("");
 });
 
 test("review and survey lists follow the selected school", async ({ page }) => {
@@ -61,7 +61,7 @@ test("Google connection state follows the selected school without contacting Goo
 
 test("unknown school is rejected by the fixture and UI shows the refusal", async ({ page }) => {
   await page.goto("/dashboard/challenge?schoolId=school-unknown");
-  await expect(page.getByRole("alert")).toContainText("校舎へのアクセス権限がありません。");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("校舎へのアクセス権限がありません。");
 });
 
 test("AIO database failure must not display successful zero metrics", async ({ page, fixture }) => {
@@ -69,7 +69,7 @@ test("AIO database failure must not display successful zero metrics", async ({ p
   await page.goto("/dashboard/aio?schoolId=school-a");
   await expect(page.getByRole("heading", { name: "AIOスコア分析", exact: true })).toBeVisible();
   await expect(page.getByText("0/100", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("計測データを取得できませんでした。");
 });
 
 test("AIO manual result survives reload and stays isolated from another school", async ({ page, fixture }, testInfo) => {
@@ -83,6 +83,7 @@ test("AIO manual result survives reload and stays isolated from another school",
   await expect(page.getByText("他の塾が候補です。", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "1件を計測" })).toBeDisabled();
   expect(fixture.calls.filter(c => c.path === "/api/dashboard/aio" && c.method === "POST")).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("aio-result.png"), fullPage: true });
   await page.getByRole("combobox", { name: "選択校舎" }).selectOption("school-b");
   await expect(page.getByText("未計測", { exact: true })).toBeVisible();
@@ -94,10 +95,10 @@ test("AIO quota failure is not successful zero", async ({ page, fixture }) => {
   fixture.aioFailure = true;
   await page.goto("/dashboard/aio?schoolId=school-a");
   await page.getByRole("button", { name: "1件を計測" }).click();
-  await expect(page.getByRole("alert")).toContainText("計測失敗");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("計測失敗");
   await expect(page.getByText("0%", { exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("alert")).toContainText("計測失敗");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("計測失敗");
   await expect(page.getByRole("button", { name: "1件を計測" })).toBeDisabled();
 });
 

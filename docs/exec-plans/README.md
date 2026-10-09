@@ -11,4 +11,3 @@ operation needing approval. Do not store credentials or production payloads.
 
 On completion move the plan to `completed/` with actual validation results and
 remaining issues. An unfinished/blocked plan stays in active with a concrete next step.
-

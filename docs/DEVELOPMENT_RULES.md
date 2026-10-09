@@ -62,4 +62,3 @@ reviewed separately; this verification-only task does not change them.
 
 Report only: changes and files; DB changes; existing-data impact; executed tests;
 failures and fixes; build result; remaining issues; production follow-up.
-

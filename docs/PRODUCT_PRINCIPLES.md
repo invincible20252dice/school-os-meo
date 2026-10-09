@@ -14,4 +14,3 @@ School OSの最上位コンセプト：
 
 These principles are the target product direction, not a claim that every current
 screen already satisfies it. Known implementation gaps are in ARCHITECTURE.md.
-

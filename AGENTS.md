@@ -20,4 +20,3 @@
   Verification never authorizes deployment. Protect secrets in logs and reports.
 - Final report: changes/files, DB changes, existing-data impact, tests, failure/fix,
   build result, remaining issues and production follow-up. Keep it concise.
-

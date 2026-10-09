@@ -81,7 +81,7 @@ async function install(page: Page): Promise<FixtureState> {
       return json({ success: true, ...data });
     }
     if (request.method() !== "GET") { state.unexpected.push(request.method() + " " + url.pathname); return route.abort(); }
-    if (url.pathname === "/api/reviews") return json({ success: true, reviews: [{
+    if (url.pathname === "/api/dashboard/reviews") return json({ success: true, reviews: [{
       id: "review-" + schoolId, schoolId, schoolName: school.name, source: "GOOGLE",
       authorName: school.name + "の保護者", parentName: "", rating: 5, originalText: "説明が丁寧でした。",
       status: "PENDING", aiReplyText: "", repliedAt: "", replyText: "", googleReviewManagementUrl: "",

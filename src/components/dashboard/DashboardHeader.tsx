@@ -117,6 +117,7 @@ export default function DashboardHeader() {
         <label className={styles.schoolSelect}>
           <span>選択校舎</span>
           <select
+            aria-label="選択校舎"
             value={currentSchoolId}
             onChange={(event) => {
               router.push(withSchoolId(pathname, searchParams, event.target.value));
@@ -140,13 +141,14 @@ export default function DashboardHeader() {
         <AuthAccessBadge />
         <nav className={styles.headerActions} aria-label="アカウント操作">
           <Link
+            aria-label="設定"
             href={withSchoolId("/dashboard/settings", searchParams, currentSchoolId)}
             className={styles.actionLink}
           >
             <HeaderIcon type="settings" />
             <span>設定</span>
           </Link>
-          <Link href="/login" className={styles.logoutLink}>
+          <Link href="/login" className={styles.logoutLink} aria-label="ログアウト">
             <HeaderIcon type="logout" />
             <span>ログアウト</span>
           </Link>
