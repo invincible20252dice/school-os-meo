@@ -41,3 +41,10 @@ it("rejects malformed details, wrong identities and transport failures without l
   await expect(createPlacesClient("x", vi.fn().mockRejectedValue(new Error("secret"))).details("abc")).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
   await expect(createPlacesClient("x", vi.fn().mockRejectedValue(new DOMException("secret", "TimeoutError"))).details("abc")).rejects.toMatchObject({ code: "TIMEOUT" });
 });
+it("keeps non-JSON 429 distinct from a malformed successful response", async () => {
+  for (const status of [429, 200]) {
+    const http = vi.fn().mockResolvedValue(new Response("private upstream text", { status }));
+    await expect(createPlacesClient("x", http).details("abc")).rejects.toMatchObject({ code: status === 429 ? "RATE_LIMIT" : "INVALID_RESPONSE" });
+    expect(http).toHaveBeenCalledTimes(1);
+  }
+});

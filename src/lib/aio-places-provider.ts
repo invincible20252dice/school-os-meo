@@ -60,8 +60,9 @@ export function createPlacesClient(key: string, http: typeof fetch = fetch) {
       const response = await http(`https://places.googleapis.com/v1/${path}`, { method: body ? "POST" : "GET", cache: "no-store", redirect: "error",
         signal: AbortSignal.timeout(8000), headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": mask, "Content-Type": "application/json" },
         body: body ? JSON.stringify(body) : undefined });
-      const data: unknown = await response.json();
+      const data: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new PlacesError(errorCode(response.status, data));
+      if (data === null || typeof data !== "object" || Array.isArray(data)) throw new PlacesError("INVALID_RESPONSE");
       return data;
     } catch (error) {
       if (error instanceof PlacesError) throw error;

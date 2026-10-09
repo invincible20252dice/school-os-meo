@@ -63,4 +63,19 @@ New SQL was applied only to isolated in-memory PGlite; existing fixture rows,
 RLS/privilege denial, FK/check/duplicate-request constraints passed. A route-test
 literal type was corrected after the first typecheck failure.
 Local Playwright could not start: Chromium headless-shell 1208 executable absent.
-This is not an E2E pass. Linux CI and screenshot review remain pending.
+This is not an E2E pass.
+
+## Linux verification / updated authorization
+
+Commit a9513a1 passed Linux CI run 37911505899: 1,979 unit/integration tests,
+typecheck, lint, build and 34 desktop/mobile E2E scenarios. The local Chromium
+limitation is independent of that Linux pass. Evidence artifact: 11606797913.
+A follow-up adds a regression for non-JSON HTTP 429 (still RATE_LIMIT rather
+than a generic failure); its local checks passed through build, with the same
+local browser limitation. Final branch CI must verify that follow-up too.
+
+The user's updated AGENTS.md now conditionally authorizes safe production
+operations after the exact-commit checks. Secret creation/changes, new paid API
+contracts and unknown/exceeded cost caps still require approval. Missing Places
+credentials, unverified Google Cloud project/API/billing, public policy readiness
+and live acceptance remain open; no production migration or deploy was performed.
