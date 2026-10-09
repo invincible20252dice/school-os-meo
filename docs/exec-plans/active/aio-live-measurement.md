@@ -122,17 +122,23 @@ Gemini implementation is deferred until the single-provider gate passes.
 - [x] Exercise SQL persistence, API authorization and UI remount with synthetic data.
 - [x] Execute browser reload acceptance in Playwright (fixtures; Linux run 37889631653).
 - [x] Run codex:verify; investigate failures without weakening gates (E2E environment blocked).
-- [ ] Verify schema application and Vercel deployment have explicit approval.
+- [x] Verify schema application and Vercel deployment have explicit approval (2026-10-09, conditional on pre/post SQL checks).
 - [ ] Real keyword/provider -> result -> DB -> reload -> UI. Record evidence without secrets.
 - [ ] Only after that gate: multiple keywords, additional providers, history,
       competitors and then Cron. These are NOT complete in the initial slice.
 
 ## Blocking and resumption
 
-Credentials stay inside Vercel. Production schema/deploy approval is the current
-gate, not local secret availability. Never apply migrations automatically on a
-heartbeat. After approval use only the pinned school/keyword and one reservation.
+Credentials stay inside Vercel. Conditional production approval is now granted;
+schema/data preservation and verified CI are the current gates. Never apply SQL
+solely because a heartbeat fires. Use only the pinned school/keyword and one reservation.
 Periodic checks stay quiet when unchanged and never repeatedly spend API quota.
+
+2026-10-09 final safety audit: production default grants give browser roles all new
+table privileges. Add a new-table-only revoke to the still-unapplied Supabase SQL;
+test with matching default grants in isolated PGlite before application. No old
+migration or existing-table grant changes. Feature CI checks the complete main
+merge-base diff; main pushes still check their previous main revision.
 
 ## Verification evidence (2026-10-08)
 

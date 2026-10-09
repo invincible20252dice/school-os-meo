@@ -2,8 +2,11 @@
 
 ## Approval boundary
 
-The user approved pushing codex/aio-linux-verification for Linux Actions verification
-on 2026-10-09. No main merge, production schema change or deployment is approved.
+On 2026-10-09 the user conditionally approved the reviewed additive SQL, then main
+merge and production deployment only after existing-data/schema checks pass.
+The first paid measurement remains pinned to one school/keyword/OpenAI attempt.
+Only after full DB/reload/UI success may up to four OpenAI keywords be enabled.
+Gemini, Google AI, competitor aggregation and Cron remain disabled.
 Vercel Git deployment is disabled for this verification branch only; other branches
 retain their existing behavior. CI never uses production credentials or writes data.
 OPENAI_API_KEY and DATABASE_URL stay in Vercel Secret variables.
@@ -61,6 +64,10 @@ statement_timeout=15s. Do not execute both copies.
   and result CHECK constraints, one unique request index and two lookup indexes.
 - Enable RLS on the new table, with no browser policies. Server Prisma requires an
   authorized DB role with table access; verify this inside Vercel before a paid call.
+- Revoke inherited PUBLIC/anon/authenticated privileges on this new table only.
+  The production defaults include TRUNCATE, which RLS does not restrict. Server
+  privileges and all existing-table permissions are unchanged. This extra wrapper
+  protection is Supabase-specific; the unapplied Prisma draft remains unchanged.
 - No existing column deletion/type conversion/NOT NULL change or data UPDATE/DELETE.
   ON DELETE RESTRICT is a foreign-key protection, not a data deletion statement.
 - Old AioScoreHistory stays untouched and is excluded by the new API.

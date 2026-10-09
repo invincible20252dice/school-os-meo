@@ -21,7 +21,9 @@ beforeEach(async () => {
     ],
   }))));
   pg = await PGlite.create();
-  await pg.exec(`CREATE TABLE "School" (id TEXT PRIMARY KEY, name TEXT);
+  await pg.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+    CREATE TABLE "School" (id TEXT PRIMARY KEY, name TEXT);
     CREATE TABLE "TargetKeyword" (id TEXT PRIMARY KEY, "schoolId" TEXT NOT NULL, keyword TEXT, municipality TEXT, "nearestStation" TEXT, "isActive" BOOLEAN DEFAULT true, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO "School" VALUES ('a','検証A塾'), ('b','検証B塾');
     INSERT INTO "TargetKeyword" (id,"schoolId",keyword,municipality,"nearestStation") VALUES ('ka','a','塾','市','駅'), ('kb','b','塾','市','駅');
@@ -109,4 +111,14 @@ it("keeps the reviewed Supabase SQL in sync without altering existing columns or
   expect(await rows('SELECT count(*)::int AS count FROM "School"')).toEqual([{ count: 2 }]);
   expect(await rows('SELECT count(*)::int AS count FROM "TargetKeyword"')).toEqual([{ count: 2 }]);
   expect(await rows('SELECT * FROM "AioScoreHistory"')).toEqual([{ id: "legacy", schoolId: "a", totalScore: 99 }]);
+});
+
+it("removes inherited browser privileges only on the new server-only table", async () => {
+  for (const role of ["anon", "authenticated"]) {
+    for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]) {
+      expect(await rows('SELECT has_table_privilege($1, \'"AioMeasurement"\', $2) AS allowed', [role, privilege])).toEqual([{ allowed: false }]);
+    }
+    expect(await rows('SELECT has_table_privilege($1, \'"School"\', \'SELECT\') AS allowed', [role])).toEqual([{ allowed: true }]);
+  }
+  expect(await rows('SELECT has_table_privilege(\'service_role\', \'"AioMeasurement"\', \'INSERT\') AS allowed')).toEqual([{ allowed: true }]);
 });

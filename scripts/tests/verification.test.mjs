@@ -94,3 +94,8 @@ test("Linux CI prepares Prisma engines before isolated verification without app 
   assert.ok(install >= 0 && engines > install && verify > engines);
   assert.doesNotMatch(workflow, /secrets\.|prisma (?:migrate|db)|supabase db|vercel --prod/);
 });
+
+test("feature CI reviews the full unmerged schema while main protects the previous schema", () => {
+  const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
+  assert.ok(workflow.includes("github.event.pull_request.base.sha || (github.ref == 'refs/heads/main' && github.event.before) || ''"));
+});

@@ -40,7 +40,9 @@ jobs:
       - name: Verify School OS
         run: npm run codex:verify
         env:
-          CODEX_VERIFY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # Check the whole feature branch against main, not only its last push.
+          # On main, preserve the previous main commit as the immutable-schema baseline.
+          CODEX_VERIFY_BASE: ${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/main' && github.event.before) || '' }}
 
       - name: Upload verification evidence
         if: always()

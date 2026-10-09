@@ -43,4 +43,7 @@ CREATE INDEX "AioMeasurement_schoolId_provider_createdAt_idx" ON "AioMeasurement
 CREATE INDEX "AioMeasurement_keywordId_provider_createdAt_idx" ON "AioMeasurement"("keywordId", "provider", "createdAt");
 -- Browser Supabase roles have no policy; access is via the authenticated server API.
 ALTER TABLE "AioMeasurement" ENABLE ROW LEVEL SECURITY;
+-- Default Supabase grants include privileges (such as TRUNCATE) not covered by RLS.
+-- Restrict only this new table; existing tables and server-role access are unchanged.
+REVOKE ALL PRIVILEGES ON TABLE "AioMeasurement" FROM PUBLIC, anon, authenticated;
 COMMIT;
