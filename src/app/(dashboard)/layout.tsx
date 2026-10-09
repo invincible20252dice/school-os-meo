@@ -16,8 +16,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <Suspense fallback={null}>
           <DashboardHeader />
         </Suspense>
-        {children}
         <SupportChat />
+        {children}
       </div>
     </div>
   );
