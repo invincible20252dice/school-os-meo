@@ -55,3 +55,15 @@ production release requires separate explicit approval.
 Implementation and local acceptance complete. Draft PR: https://github.com/invincible20252dice/school-os-meo/pull/7
 Remaining review gate: confirm both push and PR CI for the latest head before
 approving a release. Production root-cause investigation is a separate task.
+
+## Integrated release candidate
+PR #6 head cfc603a3653b6be95bf838be4c77df24a99dbbb6 is merged into
+the PR #7 feature branch by an ordinary merge (no main change or force push).
+Both documentation sections and both disabled Vercel feature-branch entries are
+preserved; the exact configuration test asserts their union. PR #6 remains open
+as the historical record; PR #7 now carries the combined release candidate.
+No schema/migration changes. The manually gated acceptance SQL is not executed
+against production. Full local verification and push/PR CI for the final combined
+head are required before release approval; run IDs are maintained in PR #7.
+Application rollback target must be rechecked read-only before release; preserve
+all existing schema and customer data. Main merge/deployment remain unapproved.

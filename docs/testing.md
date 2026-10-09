@@ -409,9 +409,15 @@ preserves unrelated data and refuses conflicting identities/excess records.
 Desktop and mobile E2E operate inquiry -> scheduled -> held -> enrolled, reload,
 saved-write/read-failure recovery, school changes, touch controls and help focus.
 The 320px control hit tests and screenshots supplement the normal mobile view.
-Local full verification: 1,949 tests and 32 browser cases passed on 2026-10-09;
-live Supabase/Prisma persistence and production release remain NOT RUN. The
-concrete approval boundary is in `google-lead-release-approval.md`.
+Local and release-main verification: 1,949 tests and 32 browser cases passed on
+2026-10-09. The subsequently approved live release and limited Supabase/Prisma
+persistence acceptance are recorded in `google-lead-production-acceptance.md`.
+Fresh OAuth on the canonical domain remains unverified; the real UI acceptance
+used the existing administrator session on the same deployment's Vercel alias.
+Fixture SQL now reuses the unchanged loginless system-user, verifies the owner's
+expected identity, and uses unique CODEX_TEST place markers. The fixture schema
+models School.googlePlaceId's real NOT NULL/UNIQUE boundary, so the formerly
+colliding empty-place setup cannot incorrectly pass again.
 
 ## Search-demand failure diagnostics
 

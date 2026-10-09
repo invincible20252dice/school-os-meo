@@ -5,7 +5,8 @@
       "codex/aio-linux-verification": false,
       "codex/aio-phase2": false,
       "codex/google-lead-measurement": false,
-      "codex/google-data-diagnostics": false
+      "codex/google-data-diagnostics": false,
+      "codex/google-lifecycle-release-record": false
     }
   }
 }
