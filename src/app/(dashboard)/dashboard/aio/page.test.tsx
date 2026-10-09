@@ -90,3 +90,36 @@ it("keeps uncertain failures distinct and allows safe refetch", async () => {
   fireEvent.click(screen.getByRole("button", { name: "再取得" }));
   await waitFor(() => expect(screen.getByText("未計測", { exact: true })).toBeDefined());
 });
+
+it("posts four keywords sequentially, continues stored failures, and computes 1/3 instead of 1/4", async () => {
+  state.keywords = Array.from({ length: 4 }, (_, i) => ({ ...base().keywords[0], id: `k${i}`, keyword: `地域 塾 ${i}` }));
+  const order: string[] = []; let active = 0, maximum = 0;
+  fetcher.mockImplementation(async (_url, init) => {
+    if (init.method === "POST") {
+      active++; maximum = Math.max(maximum, active);
+      const { keywordId } = JSON.parse(init.body); order.push(keywordId);
+      await Promise.resolve();
+      state = { ...state, keywords: state.keywords.map(k => k.id !== keywordId ? k : { ...k, latest: record(keywordId === "k3" ? "FAILED" : "SUCCESS", keywordId === "k3" ? null : keywordId === "k1") }) };
+      active--;
+    }
+    return new Response(JSON.stringify({ success: true, ...state }));
+  });
+  render(<AioDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "OpenAIで4件を計測" }));
+  await screen.findByText("計測失敗 1件");
+  await screen.findByText(/4 \/ 4件確認/);
+  expect(screen.getByText("33%", { exact: true })).toBeDefined();
+  expect(order).toEqual(["k0", "k1", "k2", "k3"]); expect(maximum).toBe(1);
+});
+
+it("stops an uncertain batch instead of silently retrying or spending on the remaining keywords", async () => {
+  state.keywords = [base().keywords[0], { ...base().keywords[0], id: "k2" }];
+  fetcher.mockImplementation(async (_url, init) => {
+    if (init.method === "POST") throw new Error("uncertain transport");
+    return new Response(JSON.stringify({ success: true, ...state }));
+  });
+  render(<AioDashboardPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "OpenAIで2件を計測" }));
+  await screen.findByText("計測を完了できませんでした。再取得して状態を確認してください。");
+  expect(fetcher.mock.calls.filter(call => call[1].method === "POST")).toHaveLength(1);
+});

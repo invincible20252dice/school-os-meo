@@ -34,4 +34,7 @@ it("only offers up to three existing guide actions for successful recommendation
   expect(aioActions(row("SUCCESS", true), [])).toEqual([]);
   expect(aioActions(row("FAILED"), [])).toEqual([]);
   expect(aioActions(null, [])).toEqual([]);
+  expect(aioActions(row(), [], false, 10).map(a => a.key)).toEqual(["google-connect", "request-reviews", "competitor-improvement"]);
+  expect(aioActions(row(), [], true, 0).map(a => a.key)).not.toContain("request-reviews");
+  expect(extractCompetitors("おすすめの塾はありません。\n1. **架空塾**\n大学受験を指導。", "自校塾")).toEqual([]);
 });

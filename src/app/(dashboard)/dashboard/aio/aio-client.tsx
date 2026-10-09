@@ -85,7 +85,8 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
           {totals.allRecommended ? <p>現在、OpenAI検索回答では登録キーワードすべてで推奨されています。</p> : null}
           {data.keywords.filter(k => measurementState(k.latest, true).label === "計測成功" && !k.latest!.recommended).map(k => {
             const competitors = extractCompetitors(k.latest!.response || "", k.latest!.schoolName || data.school?.name || "");
-            return <div className={styles.theme} key={k.id}><h3>{k.keyword}</h3><p>OpenAI検索回答：推奨なし</p><ol className={styles.actions}>{aioActions(k.latest, competitors, data.school?.schoolSetting?.googleConnected).map(action => <li key={action.key}><h3>{action.title}</h3><p>{action.reason}</p><ActionExecutionGuide guide={guideForAction(action.key)} schoolId={schoolId} /><Link href={href(action.path)}>改善を始める</Link></li>)}</ol></div>;
+            const gaps = competitors.flatMap(c => { const gap = aioCompetitorDifference(c, data.school?.name || k.latest!.schoolName || "", data.competitors || []).reviewGap; return gap === null ? [] : [gap]; });
+            return <div className={styles.theme} key={k.id}><h3>{k.keyword}</h3><p>OpenAI検索回答：推奨なし</p><ol className={styles.actions}>{aioActions(k.latest, competitors, data.school?.schoolSetting?.googleConnected, gaps.length ? Math.max(...gaps) : null).map(action => <li key={action.key}><h3>{action.title}</h3><p>{action.reason}</p><ActionExecutionGuide guide={guideForAction(action.key)} schoolId={schoolId} /><Link href={href(action.path)}>改善を始める</Link></li>)}</ol></div>;
           })}
           {!totals.successful ? <p>計測成功後に改善テーマを確認できます。</p> : null}
         </section>

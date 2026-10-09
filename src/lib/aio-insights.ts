@@ -49,10 +49,11 @@ export function extractCompetitors(response: string, ownName: string): AioCompet
   return candidates.slice(0, 10);
 }
 
-export function aioActions(record: MeasurementView | null, competitors: AioCompetitor[], googleConnected?: boolean | null): NextAction[] {
+export function aioActions(record: MeasurementView | null, competitors: AioCompetitor[], googleConnected?: boolean | null, reviewGap?: number | null): NextAction[] {
   if (measurementState(record, true).label !== "計測成功" || record!.recommended) return [];
   const keys: Array<[string, number, string]> = [];
   if (googleConnected === false) keys.push(["google-connect", 1, "保存済み設定ではGoogle店舗が未連携です。対象店舗を確認してください。"]);
+  if (reviewGap != null && reviewGap > 0) keys.push(["request-reviews", 3, `同じ保存済み競合計測では、推奨候補の口コミ数が自校舎より${reviewGap}件多くあります。実際の利用者へ中立的に感想を依頼する導線を確認しましょう。推薦への効果を保証するものではありません。`]);
   const evidence = competitors.map(c => c.evidence).join("\n");
   if (/自習/.test(evidence)) keys.push(["check-2-photo4", 2, "推奨候補の回答に自習環境の記載があります。自校舎で実際に提供している環境と写真を確認しましょう。"]);
   if (competitors.length) keys.push(["check-1-description", 1, "推奨候補の説明と自校舎の対象・指導内容を照合し、確認できた事実を紹介文に反映しましょう。"]);

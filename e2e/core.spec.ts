@@ -157,7 +157,7 @@ test("AIO four-keyword mixed batch shows 33%, evidence, actions and persists on 
   await page.getByRole("combobox", { name: "登録キーワード" }).selectOption("keyword-school-a");
   await page.getByText("やり方・お手本を見る", { exact: false }).first().click();
   await expect(page.getByAltText("自習写真の撮影お手本（AI生成）")).toBeVisible();
-  expect(await page.getByAltText("自習写真の撮影お手本（AI生成）").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  await expect.poll(() => page.getByAltText("自習写真の撮影お手本（AI生成）").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-mixed.png"), fullPage: true });
 });
