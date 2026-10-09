@@ -49,7 +49,7 @@ and transport interruption must be visible, never successful zero.
 - [x] Failing behavior tests, implementation and focused verification.
 - [x] Local codex:verify through build (1,914 tests on second run); local E2E
   blocked by missing Chromium executable. Linux browser evidence still pending.
-- [ ] Verification branch push, Linux CI/E2E and safe repairs.
+- [x] Verification branch push, Linux CI/E2E and safe repairs.
 - [ ] Report actual results and request production deployment approval.
 
 ## Acceptance
@@ -76,3 +76,10 @@ a separate, approval-gated Vercel runtime operation after CI success.
   99.24% lines / 97.39% branches, typecheck/lint/build. Screenshots inspected.
   Final additions (place-result extraction regression, dated chart and two-day
   browser history case) require the next commit's full CI before approval.
+- Final implementation commit 614180c passed Linux run 37896696561: 1,917
+  unit/integration tests across 160 files, 28 desktop/mobile E2E, typecheck,
+  lint (zero errors, six unchanged warnings), build, tooling and migration checks.
+  Coverage: 99.24% statements/lines, 97.39% branches, 99.77% functions.
+  Two-day browser history and image pixels passed. No production API calls,
+  schema writes, data mutation, main merge or deploy. Production rollout remains
+  approval-gated; this plan stays active until real four-keyword acceptance.
