@@ -40,7 +40,7 @@ schema and deploy remain approval gates. No production operations in CI.
 - [x] User approved Place-ID-only storage.
 - [x] Provider and persistence tests, implementation, UI and isolated E2E definitions.
 - [x] Local codex:verify; review desktop/mobile screenshots (2026-10-09 continuation).
-- [ ] Linux CI on the continuation PR's exact head.
+- [x] Linux CI on implementation/verification head `9f3a42c` (run below).
 - [ ] Live one-competitor acceptance (blocked on key/API/schema/deploy readiness).
 
 ## External checks
@@ -96,8 +96,20 @@ environment mutation, schema application or Supabase production query was made.
 The new SQL was reviewed and tested only in isolated PGlite. Live schema, key,
 API/billing readiness and public policy acceptance remain unverified.
 
-Next: create a draft PR, verify Linux CI against its exact head, and retain this
-plan in active until the live gates above are resolved by the PM. Do not mark
+Draft PR: https://github.com/invincible20252dice/school-os-meo/pull/4
+
+Linux Quality push run **37911997786** completed **success** for exact commit
+`9f3a42cf6ac11e78ace93c6632b5469f6d43764f`:
+https://github.com/invincible20252dice/school-os-meo/actions/runs/37911997786
+The same aggregate command, including browser E2E, is required by this workflow.
+Subsequent documentation-only commits must be checked against their own PR
+checks; the successful run above must not be relabelled as a newer commit's run.
+
+PR creation via the connector returned 403 and Chrome was signed out. Creation
+succeeded using existing Git HTTPS authentication via Node's verified HTTPS;
+no credentials were displayed or stored. The draft remains unmerged.
+
+Next: retain this plan in active until the live gates above are resolved by the PM. Do not mark
 Places production-ready or move to unrelated inquiry work while those decisions
 are unresolved. After explicit deferral/closure, the next product priority is
 the existing Google inquiry/meeting measurement flow, beginning with its current
