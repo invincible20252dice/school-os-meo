@@ -11,6 +11,8 @@ const age = (v: unknown, now: string) => { const days = (Date.parse(now) - Date.
 const nameKey = (v: string) => normalizeSchoolName(v).replace(/溪/g, "渓").replace(/\([ぁ-ゖァ-ヺー]+\)/g, "").replace(/^学習塾/, "");
 const addressKey = (v: string) => v.normalize("NFKC").replace(/日本[,、]?|〒\d{3}-?\d{4}|[\s_]/g, "");
 export type GoogleObservation = {
+  transient?: boolean; photoAvailable?: boolean | null; websiteUri?: string | null; googleMapsUri?: string | null;
+  attributions?: Array<{ provider: string; uri: string | null }>;
   placeId: string; name: string; address: string; source: "google-places" | "google-business-profile";
   checkedAt: string; retentionUntil: string; rating: number | null; reviewCount: number | null;
   photoCount: number | null; replyRate: number | null; reviewAge: number | null; postAge: number | null;
@@ -75,7 +77,7 @@ const metricDefinitions = [
 ] as const;
 export type ComparisonSchool = { name: string; googlePlaceId?: string | null; city?: string | null; addressLine?: string | null; prefecture?: string | null };
 type Keyword = { id: string; keyword: string; municipality: string; latest: { status: string; recommended: boolean | null; brandDetected: boolean | null; score: number | null; measuredAt: string | null; createdAt: string; response: string | null; schoolName?: string } | null };
-export type EvidenceAction = NextAction & { basis: "Google保存データ" | "OpenAI回答のみ"; fact: string; keywordIds: string[]; impact: number; gap: number };
+export type EvidenceAction = NextAction & { basis: "Google保存データ" | "Google現在値" | "OpenAI回答のみ"; fact: string; keywordIds: string[]; impact: number; gap: number };
 
 export function compareAioPlaces(input: { school: ComparisonSchool; keywords: Keyword[]; places: GoogleObservation[]; history: ComparisonHistory; now: string }) {
   const { school, keywords, now, history } = input;
@@ -109,7 +111,7 @@ export function compareAioPlaces(input: { school: ComparisonSchool; keywords: Ke
     const guide = guideForAction(key); if (!guide || !keywordIds.length) return;
     const previous = actions.find(a => a.key === key);
     if (previous) { previous.keywordIds = [...new Set([...previous.keywordIds, ...keywordIds])]; return; }
-    actions.push({ key, day, title: guide.title, reason, fact, basis, keywordIds, impact, gap, priority: impact >= 3 ? "S" : basis === "Google保存データ" ? "A" : "B", minutes: 10, source: "保存済みデータ", path: `/dashboard/challenge?day=${day}` });
+    actions.push({ key, day, title: guide.title, reason, fact, basis: basis === "Google保存データ" && places.some(p => p.transient) ? "Google現在値" : basis, keywordIds, impact, gap, priority: impact >= 3 ? "S" : basis === "Google保存データ" ? "A" : "B", minutes: 10, source: "保存済みデータ", path: `/dashboard/challenge?day=${day}` });
   };
   for (const m of metrics) {
     if (m.gap === null) continue;

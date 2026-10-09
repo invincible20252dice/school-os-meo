@@ -210,3 +210,43 @@ test("AIO four successful recommended keywords have no forced NEXT ACTION", asyn
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("aio-phase2-all-recommended.png"), fullPage: true });
 });
+test("Places explicit refresh shows current facts and attribution, never persists content on reload", async ({ page, fixture }, testInfo) => {
+  fixture.aioCount = 4;
+  await page.goto("/dashboard/aio?schoolId=school-a");
+  await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(0);
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  const table = page.getByRole("table", { name: "Google現在値の中央値比較" });
+  await expect(table.getByRole("row").filter({ hasText: "口コミ数" })).toContainText("3件31件1店舗");
+  await expect(page.getByText("Google Maps", { exact: true })).toHaveAttribute("translate", "no");
+  await expect(page.getByTestId("aio-school-actions")).toContainText("Google現在値");
+  await page.locator("summary").filter({ hasText: "検証予備校" }).click();
+  await expect(page.getByText(/あり（総数は未取得）/)).toBeVisible();
+  expect(await page.evaluate(() => Object.values(sessionStorage).some(v => /rating|reviewCount|31件|検証予備校/.test(v)))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("region", { name: "推奨競合との比較" }).screenshot({ path: testInfo.outputPath("places-current.png") });
+  await page.getByRole("region", { name: "今週やること" }).screenshot({ path: testInfo.outputPath("places-actions.png") });
+  await page.reload();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  await expect(page.getByText("31件", { exact: true })).toHaveCount(0);
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(1);
+});
+
+test("Places failure clears volatile data while preserving OpenAI and does not auto retry", async ({ page, fixture }) => {
+  fixture.aioCount = 4;
+  await page.goto("/dashboard/aio?schoolId=school-a");
+  await page.getByRole("button", { name: "OpenAIで4件を計測" }).click();
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText("31件", { exact: true })).toBeVisible();
+  fixture.placesFailure = "QUOTA";
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText(/競合Googleデータを取得できませんでした。APIの利用枠/)).toBeVisible();
+  await expect(page.getByText("31件", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("0 / 4成功計測で推奨", { exact: true })).toBeVisible();
+  fixture.placesFailure = "NOT_CONFIGURED";
+  await page.getByRole("button", { name: "最新情報を取得" }).click();
+  await expect(page.getByText(/設定が必要（Places APIキー）/)).toBeVisible();
+  expect(fixture.calls.filter(c => c.path.endsWith("/places"))).toHaveLength(3);
+});

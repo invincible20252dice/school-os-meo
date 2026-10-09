@@ -33,11 +33,12 @@ export async function loadAioMeasurements(db: PrismaClient, schoolId: string) {
       aioMeasurements: { where: measurementScope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 },
     },
   });
-  const { challenge, ...school } = keywords.at(0)?.school || {};
+  const selectedSchool = keywords.at(0)?.school;
+  const { challenge, ...school } = selectedSchool || {} as NonNullable<typeof selectedSchool>;
   const asOf = new Date().toISOString();
   return { configured: Boolean(process.env.OPENAI_API_KEY?.trim()), pilotKeywordId: null,
     school: keywords.at(0)?.school ? school : null,
-    comparisonContext: { asOf, places: readPlaceSnapshots(keywords.flatMap(k => k.rankHistories || []), asOf), history: readActionHistory(challenge?.document ?? null) },
+    comparisonContext: { asOf, places: readPlaceSnapshots(keywords.flatMap(k => k.rankHistories || []), asOf).filter(p => p.source !== "google-places"), history: readActionHistory(challenge?.document ?? null) },
     competitors: savedAioCompetitors(keywords.flatMap(k => k.rankHistories || [])),
     keywords: keywords.map(({ aioMeasurements, school: _school, rankHistories: _ranks, ...keyword }) => {
       const history = aioMeasurements.slice(0, 50).map(record => {

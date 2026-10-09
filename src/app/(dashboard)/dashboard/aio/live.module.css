@@ -40,3 +40,12 @@
 .candidateList { display: grid; gap: 8px; }
 .candidateList summary { cursor: pointer; overflow-wrap: anywhere; }
 .candidateList summary span { color: #52616b; font-size: 12px; margin-left: 12px; }
+.googleAttribution {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0;
+  color: #5e5e5e;
+  white-space: nowrap;
+}

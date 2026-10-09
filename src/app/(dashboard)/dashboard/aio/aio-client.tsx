@@ -10,7 +10,9 @@ import { aioCost } from "@/lib/aio-audit";
 import { AioComparison } from "./comparison";
 import styles from "./live.module.css";
 
-class AioUiError extends Error {}
+class AioUiError extends Error {
+  constructor(message: string, public readonly code?: string) { super(message); }
+}
 async function api(url: string, signal: AbortSignal, body?: unknown) {
   const { data } = await createBrowserSupabaseClient().auth.getSession();
   if (!data.session) throw new AioUiError("ログインしてください。");
@@ -18,7 +20,7 @@ async function api(url: string, signal: AbortSignal, body?: unknown) {
   const response = await fetch(url, { method: body ? "POST" : "GET", cache: "no-store", signal,
     headers: { Authorization: `Bearer ${data.session.access_token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const result = await response.json();
-  if (!response.ok || !result.success) throw new AioUiError(result.error || "計測データを取得・保存できませんでした。");
+  if (!response.ok || !result.success) throw new AioUiError(result.error || "計測データを取得・保存できませんでした。", result.code);
   return result;
 }
 const date = (value: string) => new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
@@ -93,7 +95,7 @@ function SchoolAio({ schoolId }: { schoolId: string }) {
           {data.keywords.filter(k => measurementState(k.latest, true).label === "計測成功" && !k.latest!.recommended).map(k => <div className={styles.theme} key={k.id}><h3>{k.keyword}</h3><p>OpenAI検索回答：推奨なし</p></div>)}
           {!totals.successful ? <p>計測成功後に改善テーマを確認できます。</p> : null}
         </section>
-        <AioComparison data={data} schoolId={schoolId} />
+        <AioComparison data={data} schoolId={schoolId} requestPlaces={data.canMeasure ? requestId => api(`/api/dashboard/aio/places?schoolId=${encodeURIComponent(schoolId)}`, controller.current!.signal, { requestId }) : undefined} />
         <section className={styles.section}><h2>キーワード別結果</h2><div className={styles.tableScroll}><table><thead><tr><th>キーワード</th><th>OpenAI</th><th>最終試行日時</th></tr></thead><tbody>{data.keywords.map(k => {
           const s = measurementState(k.latest, data.configured);
           return <tr key={k.id}><th><button disabled={busy} onClick={() => setSelected(k.id)}>{k.keyword}</button></th><td>{s.label === "計測成功" ? k.latest!.recommended ? "推奨あり" : "推奨なし" : `— / ${s.label}`}</td><td>{k.latest ? date(k.latest.measuredAt || k.latest.createdAt) : "—"}</td></tr>;
