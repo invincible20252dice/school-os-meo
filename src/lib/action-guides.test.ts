@@ -54,3 +54,15 @@ describe("execution guide registry", () => {
     for (const demand of [undefined, []]) expect(postTopics({ ...snapshot(), demand })).toMatchObject({ topics: [], message: expect.stringContaining("保存データがありません") });
   });
 });
+
+it.each(["API_ERROR", "DB_ERROR", "DISCONNECTED", "EMPTY"] as const)("hides stale keyword theme choices in %s", demandStatus => {
+  const data = { ...snapshot(), demandStatus, demandStage: "OAUTH" as const, demandHttpStatus: 400, demand: [{ query: "stale", month: "2026-09", impressions: 99, updatedAt: "2026-10-01" }] };
+  expect(postTopics(data).topics).toEqual([]);
+  if (demandStatus === "API_ERROR") expect(postTopics(data).message).toContain("HTTP 400");
+});
+
+it("does not diagnose a Google API quota failure from an OAuth-stage 429", () => {
+  const result = postTopics({ ...snapshot(), demand: null, demandStatus: "API_ERROR", demandStage: "OAUTH", demandHttpStatus: 429 });
+  expect(result.message).toContain("認証情報の更新で失敗しました（HTTP 429）");
+  expect(result.message).not.toContain("Google検索語句APIの利用枠制限");
+});

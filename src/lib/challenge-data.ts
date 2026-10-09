@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import type { Snapshot } from "./challenge";
+import { googleDiagnostic } from "./google-diagnostics";
 import { loadSearchKeywords } from "./google-search-keywords";
 
 async function read<T>(label: string, query: () => Promise<T>, errors: string[]): Promise<T | null> {
@@ -42,7 +43,8 @@ export async function loadChallengeData(schoolId: string, startedAt: string | nu
     at: now.toISOString(),
     latestReviewAt: latestReview,
     demandStatus: demand.status,
-    demandHttpStatus: demand.diagnostic?.httpStatus ?? null,
+    demandHttpStatus: googleDiagnostic(demand.diagnostic).httpStatus,
+    demandStage: googleDiagnostic(demand.diagnostic).stage,
     demand: demand.status === "AVAILABLE" || demand.status === "EMPTY" ? demand.rows.flatMap(d => d.impressions === null ? [] : [{ query: d.query, month: demand.diagnostic.month, impressions: d.impressions, updatedAt: demand.fetchedAt! }]) : null,
     google: errors.includes("Google連携を取得できませんでした。") ? null : Boolean(settings?.googleConnected && settings.selectedGbpLocationId),
     instagram: errors.some(e => e.startsWith("Instagram")) ? null : Boolean(instagram?.instagramBusinessAccountId),

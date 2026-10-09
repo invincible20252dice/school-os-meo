@@ -77,7 +77,7 @@ test("Vercel builds never run database preparation or migrations", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
   assert.equal(vercel.buildCommand, "npm run build");
-  assert.deepEqual(vercel.git?.deploymentEnabled, { "codex/aio-linux-verification": false, "codex/aio-phase2": false, "codex/google-lead-measurement": false });
+  assert.deepEqual(vercel.git?.deploymentEnabled, { "codex/aio-linux-verification": false, "codex/aio-phase2": false, "codex/google-lead-measurement": false, "codex/google-data-diagnostics": false, "codex/google-lifecycle-release-record": false });
   assert.equal(pkg.scripts["vercel-build"], "npm run build");
   assert.equal(pkg.scripts.build, "npm run prisma:generate && next build");
   assert.equal(pkg.scripts["prisma:generate"], "prisma generate");

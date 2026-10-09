@@ -48,7 +48,7 @@ export function nextActions(doc: ChallengeDocument, snapshot: Snapshot) {
   if (request.count === null) add("review-measurement", requestDay, "口コミ・競合の保存データを確認する", request.reason, "/dashboard/rankings", "B");
   if (snapshot.reviews && snapshot.reviews.pending > 0) add("pending-replies", 4, `未対応口コミ${snapshot.reviews.pending}件に返信する`, "保存済み口コミに未対応の記録があります。依頼を増やす前に、届いた声へ対応しましょう。", "/dashboard/reviews", "S");
   const demand = snapshot.demand;
-  const themes = demand?.filter(d => d.impressions > 0).slice(0, 3) ?? [];
+  const themes = postTopics(snapshot).topics;
   for (const theme of themes) add(`publish-${theme.query}`, 5, `${theme.query}に応える投稿を作る`, `${theme.month}の保存済み検索表示${theme.impressions}回。保護者が知りたい教室情報を、この検索テーマに沿って整理しましょう。`, snapshot.instagram ? "/dashboard/instagram" : "/dashboard/settings/google", "A");
   if (!themes.length) add("publish-manual", 5, "教室の学習支援を伝える投稿テーマを選ぶ", snapshot.demandStatus ? postTopics(snapshot).message : demand === null ? "検索需要の取得に失敗しました。需要に基づく推薦ではなく、実際の自習室・質問対応などから手動でテーマを選べます。" : "検索需要の保存データがありません。実際の定期テスト対策・自習室・面談内容から手動でテーマを選んでください。", snapshot.instagram ? "/dashboard/instagram" : "/dashboard/settings/google", "B", "手動テーマ");
   if (!snapshot.comparisons?.length) add("competitor-measurement", 6, "競合の実測データを準備する", snapshot.comparisons === null ? "競合計測を取得できませんでした。再取得してください。" : "保存済み競合計測がないため、比較結果は未判定です。", "/dashboard/rankings", "B");

@@ -92,3 +92,10 @@ describe("next action workflows", () => {
     expect(screen.getByText(/保存した提案：2件 \/ 完了した改善：1件 \/ 対応中・残課題：1件/)).toBeDefined();
   });
 });
+
+it("shows bounded failure context alongside TOP1 without treating old demand as current", () => {
+  const s = { ...snapshot(), demandStatus: "API_ERROR" as const, demandStage: "OAUTH" as const, demandHttpStatus: 400 };
+  render(<ActionPanel doc={challengeDocument()} snapshot={s} schoolId="a" save={vi.fn()} busy={false} />);
+  expect(screen.getByRole("status", { name: "検索需要の取得状態" }).textContent).toContain("認証情報の更新で失敗しました（HTTP 400）");
+  expect(screen.getByRole("status", { name: "検索需要の取得状態" }).textContent).toContain("情報不足のため未判定");
+});
