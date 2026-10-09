@@ -1,6 +1,6 @@
 # Current architecture
 
-Evidence reviewed against the local repository on 2026-10-08. This describes code,
+Evidence reviewed against the local repository on 2026-10-09. This describes code,
 not a certification of deployed credentials, migrations or provider availability.
 
 | Area | Current implementation / evidence |
@@ -16,7 +16,7 @@ not a certification of deployed credentials, migrations or provider availability
 | Rankings | `api/dashboard/rankings`, `api/dashboard/keywords`, `lib/dashboard-rankings.ts`; TargetKeyword, RankHistory and legacy KeywordRank. `ranking-simulation.ts` is a separate simulated-data path, not evidence of live measurement. |
 | Competitors | `dashboard/keywords/competitors`; competitorData from ranking histories. This is separate from AIO competitor scoring. |
 | AIO | `dashboard/aio/aio-client.tsx` (also aio-score alias), authenticated `api/dashboard/aio`, `lib/aio-provider.ts`, `aio-measurement.ts`, new AioMeasurement. OpenAI API search only; manual single-keyword pilot awaiting live acceptance. Legacy AioScoreHistory retained, excluded from new AIO API. |
-| Google outcomes | `dashboard/roi/google-results-client.tsx`, `api/dashboard/google-results`, `lib/google-leads.ts`, `google-lead-store.ts`, GoogleLead; inquiry, meeting and enrollment tracking. |
+| Google outcomes | `dashboard/roi/google-results-client.tsx`, `api/dashboard/google-results`, `lib/google-leads.ts`, `google-lead-lifecycle.ts`, `google-lead-store.ts`, GoogleLead; manual inquiry -> scheduled -> held -> enrolled confirmations, event counts and inquiry-cohort rates. Legacy meeting rows remain explicitly unclassified. Three additive milestone columns are implemented and tested locally; production migration/deployment and real persistence acceptance remain pending. See `google-lead-release-approval.md`. |
 | Diagnostics | `api/dashboard/reports`, `lib/dashboard-reports.ts`, `dashboard/report`; database aggregates, not guaranteed causal attribution. |
 | Tests | Vitest + Testing Library, provider/route mocks and PGlite SQL persistence. Browser tests add UI/navigation coverage with synthetic API boundaries. |
 

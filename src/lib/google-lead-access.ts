@@ -8,7 +8,7 @@ import { LeadError, leadObject } from "./google-leads";
 export const leadHeaders = { "Cache-Control": "private, no-store" };
 export async function leadScope(request: Request) {
   const url = new URL(request.url);
-  const { access, isAuthenticated } = await resolveRequestAccess(request, url);
+  const { access, isAuthenticated } = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
   if (!isAuthenticated) throw new LeadError("ログインしてください。", 401);
   if (!isApprovedAccess(access)) throw new LeadError("アカウントの承認が必要です。", 403);
   const schoolId = url.searchParams.get("schoolId");

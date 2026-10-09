@@ -45,6 +45,10 @@ export function parseLeadEdit(body: Record<string, unknown>, now: Date) {
   if (body.status !== undefined) edit.status = leadChoice(body.status, leadStatuses);
   if (body.occurredAt !== undefined) {
     if (typeof body.occurredAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{3})?)?(Z|[+-]\d{2}:\d{2})$/.test(body.occurredAt)) throw new LeadError("問い合わせ日時を確認してください。");
+    const [datePart, timePart] = body.occurredAt.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (month < 1 || month > 12 || day < 1 || day > lastDay || Number(timePart.slice(0, 2)) > 23) throw new LeadError("問い合わせ日時を確認してください。");
     const date = new Date(body.occurredAt);
     if (!Number.isFinite(date.getTime()) || date > now || date < new Date("2000-01-01")) throw new LeadError("問い合わせ日時を確認してください。");
     edit.occurredAt = date;

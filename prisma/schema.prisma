@@ -211,6 +211,9 @@ model GoogleLead {
   status         String   @default("inquiry")
   occurredAt     DateTime @default(now())
   meetingAt      DateTime?
+  meetingScheduledAt DateTime?
+  meetingHeldAt  DateTime?
+  enrolledAt     DateTime?
   closedAt       DateTime?
   deletedAt      DateTime?
   idempotencyKey String
@@ -222,6 +225,9 @@ model GoogleLead {
   @@unique([schoolId, idempotencyKey])
   @@index([schoolId, occurredAt])
   @@index([schoolId, meetingAt])
+  @@index([schoolId, meetingScheduledAt])
+  @@index([schoolId, meetingHeldAt])
+  @@index([schoolId, enrolledAt])
 }
 
 model SurveySetting {

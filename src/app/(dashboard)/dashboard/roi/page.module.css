@@ -32,7 +32,7 @@
 .list time { color: #626c65; font-size: 13px; }
 .status, .meeting { font-size: 13px; }
 .meeting { color: #157347; font-weight: 700; }
-.rowActions { display: flex; gap: 8px; align-items: center; }
+.rowActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .rowActions details { position: relative; }
 .rowActions summary { list-style: none; width: 44px; text-align: center; font-size: 20px; }
 .rowActions summary::-webkit-details-marker { display: none; }
@@ -58,3 +58,6 @@
   .list li { gap: 8px; }
   .rowActions { margin-left: auto; }
 }
+
+.kpis > .caption { grid-column: 1 / -1; }
+@media (max-width: 600px) { .table { font-size: 12px; } .table th, .table td { padding: 10px 3px; } }

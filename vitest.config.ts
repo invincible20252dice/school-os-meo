@@ -39,6 +39,7 @@ export default defineConfig({
         "src/app/**/challenge/action-guide.tsx": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/app/api/dashboard/challenge/guide-draft/route.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-leads.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
+        "src/lib/google-lead-lifecycle.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-lead-store.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-lead-access.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },
         "src/lib/google-performance.ts": { lines: 95, functions: 95, branches: 95, statements: 95 },

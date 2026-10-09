@@ -18,3 +18,8 @@
 .form p { color: #b91c1c; font-size: 13px; margin: 0; overflow-wrap: anywhere; }
 .panel button:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 480px) { .panel { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); } .launcher { right: 12px; } .log { height: min(300px, 40dvh); } }
+
+/* Mobile actions must never sit beneath a floating help trigger. */
+@media (max-width: 880px) {
+  .launcher { position: static; display: block; margin: 12px 18px 0 auto; }
+}

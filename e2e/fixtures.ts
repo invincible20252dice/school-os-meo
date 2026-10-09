@@ -3,13 +3,16 @@ import { startChallenge, updateChallenge, weeklyActions } from "../src/lib/chall
 import { snapshot } from "../src/test/challenge-fixtures";
 import { buildEmptySchoolSetting } from "../src/lib/settings";
 import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
+import { aggregateLeads, leadPeriod, type LeadFact } from "../src/lib/google-leads";
+import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead-lifecycle";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const state: FixtureState = { failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const leads = new Map<string, Array<LeadFact & { id: string; idempotencyKey: string; version: number; grade: null }>>(schools.map(s => [s.id, []]));
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
   await page.addInitScript(() => {
@@ -47,6 +50,30 @@ async function install(page: Page): Promise<FixtureState> {
     if (url.pathname === "/api/dashboard/context") return json({ user: { name: "検証担当", role: "admin" }, schools, currentSchoolId: schoolId, currentSchoolName: schools.find(s => s.id === schoolId)?.name, canSwitchSchool: true });
     const school = schools.find(s => s.id === schoolId);
     if (!school) return json({ success: false, error: "校舎へのアクセス権限がありません。" }, 403);
+    if (url.pathname === "/api/dashboard/google-results/performance") return json({ success: true, data: { state: "unavailable", websiteClicks: null, phoneClicks: null, updatedAt: null, measuredDays: 0 } });
+    if (url.pathname === "/api/dashboard/google-results") {
+      const rows = leads.get(schoolId)!;
+      if (request.method() === "POST") {
+        const body = request.postDataJSON();
+        let row = rows.find(r => r.idempotencyKey === body.idempotencyKey);
+        if (!row) {
+          row = { id: `lead-${schoolId}-${rows.length}`, idempotencyKey: body.idempotencyKey, version: 1, grade: null, source: "google", status: "inquiry", channel: body.channel, occurredAt: new Date(), meetingAt: null, deletedAt: null };
+          rows.push(row);
+        }
+        return json({ success: true, lead: row });
+      }
+      if (request.method() === "PATCH") {
+        const body = request.postDataJSON(), row = rows.find(r => r.id === body.id);
+        if (!row || row.version !== body.version) return json({ success: false, error: "更新競合" }, 409);
+        Object.assign(row, body.stage ? advanceLeadStage(row, body.stage, new Date()) : { status: body.status }); row.meetingAt = row.status === "meeting" ? row.meetingAt ?? new Date() : null; row.version++;
+        return json({ success: true, id: row.id });
+      }
+      if (request.method() === "GET") {
+        if (state.failNextLeadRead) { state.failNextLeadRead = false; return json({ success: false, error: "検証用の再取得失敗" }, 503); }
+        const period = leadPeriod(url.searchParams.get("period") || "month", new Date(Date.now() + 1));
+        return json({ success: true, school, period: { name: period.period, from: period.from, to: period.to }, ...aggregateLeads(rows, period), lifecycle: aggregateLeadLifecycle(rows, period), recent: rows.filter(r => !r.deletedAt && r.occurredAt >= period.from && r.occurredAt < period.to).slice(-20).reverse() });
+      }
+    }
     if (url.pathname === "/api/dashboard/challenge") {
       const record = documents.get(schoolId)!;
       if (request.method() === "POST") {
