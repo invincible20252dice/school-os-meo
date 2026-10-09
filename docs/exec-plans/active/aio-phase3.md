@@ -51,8 +51,8 @@ and consolidate outstanding approvals rather than requesting them repeatedly.
 
 - [x] Repository/preflight and existing pipeline investigated.
 - [x] Implement and verify read-only comparison and action integration.
-- [ ] Linux CI and browser evidence.
-- [ ] Report live Google acquisition blocker and release boundary.
+- [x] Linux CI and browser evidence (initial implementation, exact run below).
+- [x] Document live Google acquisition blocker and release boundary in docs/aio-phase3.md.
 
 ## Local verification
 
@@ -63,3 +63,26 @@ An E2E fixture type omission was corrected. Local aggregate verification stops a
 Playwright because Chromium headless-shell 1208 is absent, before any browser
 scenario runs. This is not a browser pass. Linux CI installs the pinned browser
 and must validate PC/mobile behavior and screenshots before release.
+
+## Linux evidence
+
+Commit `319c55445bd9ffb815eee07b9b28614b4e8980b9` passed GitHub Actions run
+37907564795: 1,939 unit/integration tests, build and 30 desktop/mobile E2E tests.
+No browser retry or skipped E2E. Downloaded artifact 11605176973 and inspected PC
+and mobile full-page comparison plus initial-viewport screenshots; no page-wide
+horizontal overflow, existing responsive header retained. All Google observations
+and measurements in these screenshots are isolated fixtures, not production.
+
+Final hardening additionally checks the school's prefecture to avoid same-named
+wards in another prefecture, and gives aio-comparison its own 95% coverage gates.
+The local aggregate rerun again passed through build, with the same absent-browser
+limitation. Final branch CI must pass for that follow-up commit too.
+
+## Remaining acceptance gate
+
+There is still no live Google competitor acquisition source in the existing
+pipeline. No production DB/API read or write, paid measurement, main merge or
+deployment was performed for this Phase 3 task. A real-data Google acceptance
+run cannot be reported complete until source/credentials/storage terms/cost are
+settled and ingestion is implemented. Do not merge simulated or legacy numeric
+data into the comparison to bypass this gate.

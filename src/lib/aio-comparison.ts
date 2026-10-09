@@ -57,10 +57,10 @@ export function readActionHistory(value: unknown): ComparisonHistory {
   return { status: "AVAILABLE", document: { missions: missions.map(m => ({ day: Number(m.day), completedAt: m.completedAt as string | null })), nextActionHistory: records.map(r => ({ key: str(r.key), day: Number(r.day), status: r.status as NextActionRecord["status"], completedAt: validDate(r.completedAt) ? str(r.completedAt) : null })) } };
 }
 
-export function matchAioPlace(candidate: AioCompetitor, places: GoogleObservation[], region: string) {
+export function matchAioPlace(candidate: AioCompetitor, places: GoogleObservation[], region: string, prefecture = "") {
   const names = places.filter(p => nameKey(p.name) === nameKey(candidate.name));
   const address = /(?:^|\n)_([^_\n]+)_/.exec(candidate.evidence)?.[1];
-  const regional = names.filter(p => region.trim() && addressKey(p.address).includes(addressKey(region)));
+  const regional = names.filter(p => region.trim() && addressKey(p.address).includes(addressKey(region)) && (!prefecture.trim() || addressKey(p.address).includes(addressKey(prefecture))));
   const exact = address ? regional.filter(p => addressKey(p.address) === addressKey(address)) : regional;
   if (exact.length === 1) return { confidence: address ? "HIGH" as const : "MEDIUM" as const, place: exact[0], reason: address ? "店舗名・地域・住所が一致" : "校舎名を含む店舗名・地域が一致" };
   return { confidence: names.length ? "LOW" as const : "NONE" as const, place: null, reason: exact.length > 1 ? "同名の店舗が複数あり未確定" : names.length ? "地域・住所を確認できず未確定" : "一致するGoogle保存データなし" };
@@ -93,7 +93,7 @@ export function compareAioPlaces(input: { school: ComparisonSchool; keywords: Ke
   }
   const own = school.googlePlaceId ? places.find(p => p.placeId === school.googlePlaceId && addressKey(p.address) === addressKey([school.prefecture, school.city, school.addressLine].filter(Boolean).join(""))) || null : null;
   const candidates = [...selected.values()].map(c => {
-    const matches = c.observations.map(o => matchAioPlace(o.candidate, places, o.region));
+    const matches = c.observations.map(o => matchAioPlace(o.candidate, places, o.region, school.prefecture || ""));
     const ids = new Set(matches.flatMap(m => m.place ? [m.place.placeId] : []));
     const match = ids.size === 0 || ids.size === 1 && matches.every(m => m.place) ? matches[0] : { confidence: "LOW" as const, place: null, reason: "検索地域ごとの照合が未確定" };
     return { ...c, ...match };

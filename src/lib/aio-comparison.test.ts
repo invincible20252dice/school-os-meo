@@ -24,6 +24,7 @@ it("matches name, branch and region; address strengthens confidence but conflict
   expect(matchAioPlace(candidate, saved([place(), place("A予備校", "other")]), school.city).place).toBeNull();
   expect(matchAioPlace({ name: "A予備校別校", evidence: "" }, places, school.city).place).toBeNull();
   expect(matchAioPlace(candidate, [], school.city).confidence).toBe("NONE");
+  expect(matchAioPlace(candidate, saved([{ ...place(), address: "東京都中央区1-1" }]), "中央区", "熊本県").place).toBeNull();
 });
 it("normalizes width and kana readings without merging different branches", () => {
   expect(matchAioPlace({ name: "壺溪塾（こけいじゅく）坪井本校", evidence: "" }, saved([place("壺渓塾 坪井本校")]), school.city).confidence).toBe("MEDIUM");

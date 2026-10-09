@@ -179,6 +179,8 @@ test("AIO Google fixture comparison, seven-day exclusions and historical evidenc
   await expect(page.getByTestId("aio-school-actions")).toContainText("口コミ数は自塾3件");
   await page.locator("summary").filter({ hasText: "検証予備校" }).click();
   await expect(page.getByText(/^取得元：google-business-profile/)).toBeVisible();
+  await page.getByRole("region", { name: "推奨競合との比較" }).screenshot({ path: testInfo.outputPath("aio-phase3-metrics.png") });
+  await page.getByRole("region", { name: "今週やること" }).screenshot({ path: testInfo.outputPath("aio-phase3-actions.png") });
   await page.reload();
   await expect(table.getByRole("row").filter({ hasText: "口コミ数" })).toContainText("3件31件1店舗");
   await page.getByText("選択キーワードの履歴", { exact: true }).click();
