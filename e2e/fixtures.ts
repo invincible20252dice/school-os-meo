@@ -23,6 +23,11 @@ async function install(page: Page): Promise<FixtureState> {
   });
   await page.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url());
+    // The login background is external in production; tests serve a local asset only.
+    if (request.resourceType() === "image" && url.origin === "https://images.unsplash.com"
+      && url.pathname === "/photo-1523050854058-8df90110c9f1") {
+      return route.fulfill({ contentType: "image/png", path: "public/service-logo.png" });
+    }
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json",
       headers: { "access-control-allow-origin": origin, "access-control-allow-headers": "authorization,apikey,content-type,x-client-info", "access-control-allow-methods": "GET,POST,OPTIONS" },
       body: JSON.stringify(body) });

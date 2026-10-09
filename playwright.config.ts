@@ -4,7 +4,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
-  maxFailures: 1,
+  maxFailures: 0,
   workers: 1,
   timeout: 45000,
   reporter: [["list"], ["html", { open: "never" }]],

@@ -20,6 +20,12 @@ browser/dependency preparation. No application install hook or DB command runs.
 Network blocking inside codex:verify remains unchanged; a tooling regression check
 requires this ordering and forbids production secrets/migration/deploy commands.
 
+Run 37888706224 passed typecheck, lint, unit/integration coverage and build. Linux
+Chromium launched; login E2E found the production background image was unmocked.
+The exact known image URL now receives a local static fixture, with all other
+external requests still blocked. Run all browser cases rather than fail-fast so
+remaining independent failures can be diagnosed together; no assertions are skipped.
+
 2026-10-09 continuation: no production approval inferred from "continue development".
 Removed a leftover bulk update of stale RUNNING records. Added red/green unit and
 PGlite preservation checks plus E2E assertions for 100%, read-only access, and
