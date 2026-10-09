@@ -21,7 +21,8 @@ description: Verify School OS changes, regression scope, database safety and UI 
    Never lower coverage or hide failures. Stop if resolution needs destructive DB
    changes, production data changes, increased spend, auth redesign or major product changes.
 6. Manually review schema/SQL even when static checks pass. Production migrations
-   and deployments require explicit task authorization; verification is not approval.
+   and deployments must satisfy AGENTS.md's conditional authorization and safety
+   gates; verification alone is not approval. Preapproved feature push/CI work
+   does not need another confirmation.
 7. Report changes/files, DB/data impact, tests, failure/fix, build, remaining gaps
    and production follow-up. Mocked tests do not prove live provider availability.
-

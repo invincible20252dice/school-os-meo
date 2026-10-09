@@ -1,5 +1,8 @@
 # Development rules
 
+[AGENTS.md](../AGENTS.md) governs current authorization and automation. These
+details supplement it; old task plans do not revoke its conditional approvals.
+
 ## Before changes
 
 Run preflight; inspect git status and preserve unrelated work. Read affected
@@ -44,21 +47,26 @@ Use `npm run codex:verify:strict` to require known product-gap checks too.
 No production secrets are needed. See [testing](testing.md) for boundaries.
 Do not lower the existing 95% coverage gates, skip newly failing tests, or broaden
 exclusions to pass. On FAIL inspect evidence, fix safely, rerun affected checks,
-then rerun the aggregate command. Stop when resolution requires production data,
-destructive operations, increased billing, auth redesign or major product changes.
+then rerun the aggregate command. Stop the affected operation when it hits
+AGENTS.md's explicit approval gates or cannot satisfy its safety conditions.
 Report failures honestly. Known product gaps must be explicit, bounded and removable.
 
 ## Deployment and GitHub
 
-Verification does not push, migrate or deploy. Obtain explicit approval for concrete
-production migrations/deployments unless already granted for that operation.
+Feature push, PRs and Preview are preapproved by AGENTS.md. Main merge, production
+deploy, additive migration and smoke tests are conditionally preapproved only
+after exact-commit CI/E2E success, no destructive/data-deleting changes, no
+auth/permission-model changes and established API cost caps. Missing evidence is
+not success. Secret/billing/model changes and other explicit gates still require
+approval. Preview must not migrate or write test data to production.
 Check the exact commit, environment, schema compatibility and rollback plan first.
 In GitHub rulesets for main, require pull requests and the `Codex Verify` status,
 block force pushes/deletions and avoid bypass permissions. The workflow cannot
 configure or prove those settings. Existing Vercel Git auto-deploy settings must be
-reviewed separately; this verification-only task does not change them.
+reviewed separately; passing CI alone does not prove those settings safe.
 
 ## Final report
 
-Report only: changes and files; DB changes; existing-data impact; executed tests;
-failures and fixes; build result; remaining issues; production follow-up.
+Use the five brief AGENTS.md sections: changes, verification, existing-data impact,
+remaining issues and required user decisions. Include actual results and relevant
+files without dumping internal logs.
