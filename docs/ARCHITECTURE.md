@@ -20,6 +20,17 @@ not a certification of deployed credentials, migrations or provider availability
 | Diagnostics | `api/dashboard/reports`, `lib/dashboard-reports.ts`, `dashboard/report`; database aggregates, not guaranteed causal attribution. |
 | Tests | Vitest + Testing Library, provider/route mocks and PGlite SQL persistence. Browser tests add UI/navigation coverage with synthetic API boundaries. |
 
+## Search-demand diagnostic boundary
+
+`google-search-keywords.ts` retains existing month/location storage and auth scope.
+Failed cached results return neither old rows nor an old success fetchedAt.
+`google-diagnostics.ts` allowlists stage and HTTP status for UI/logging. Provider
+error bodies, arbitrary scopes/codes and identifiers are not spread into logs.
+`action-guides.ts` is the common status-aware topic selector for guides and
+`challenge-next-actions.ts`; daily/weekly notices distinguish information shortage
+from a successful empty month. No inquiry/milestone or performance-sync route is
+changed by this diagnostic work; no production validation is implied.
+
 ## AIO live-pilot boundaries
 
 - The legacy aio-analyzer still contains sample helpers, but no production caller

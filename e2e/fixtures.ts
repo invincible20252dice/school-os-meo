@@ -8,10 +8,10 @@ import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { demandFailure: boolean; failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const state: FixtureState = { demandFailure: false, failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
   const leads = new Map<string, Array<LeadFact & { id: string; idempotencyKey: string; version: number; grade: null }>>(schools.map(s => [s.id, []]));
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
@@ -76,6 +76,9 @@ async function install(page: Page): Promise<FixtureState> {
     }
     if (url.pathname === "/api/dashboard/challenge") {
       const record = documents.get(schoolId)!;
+      const demandSnapshot = state.demandFailure ? { ...snapshot(), demandStatus: schoolId === "school-a" ? "API_ERROR" as const : "AVAILABLE" as const,
+        demandStage: "OAUTH" as const, demandHttpStatus: schoolId === "school-a" ? 400 : 200,
+        demand: [{ query: "検証用の検索テーマ", month: "2026-09", impressions: 99, updatedAt: "2026-10-01" }] } : snapshot();
       if (request.method() === "POST") {
         if (state.failedSave) return json({ success: false, error: "テスト用保存エラー" }, 500);
         const command = request.postDataJSON();
@@ -84,7 +87,7 @@ async function install(page: Page): Promise<FixtureState> {
         catch { return json({ success: false, error: "実行記録を確認してください。" }, 400); }
       }
       return json({ success: true, school: { ...school, phoneNumber: null, addressLine: null, websiteUrl: null },
-        ...record, snapshot: snapshot(), surveys: [], actions: weeklyActions(record.document, snapshot()) });
+        ...record, snapshot: demandSnapshot, surveys: [], actions: weeklyActions(record.document, demandSnapshot) });
     }
     if (url.pathname === "/api/dashboard/aio") {
       if (state.aioReadFailure) return json({ success: false, code: "STORAGE_FAILED", error: "計測データを取得できませんでした。" }, 503);

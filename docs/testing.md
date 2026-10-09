@@ -412,3 +412,22 @@ The 320px control hit tests and screenshots supplement the normal mobile view.
 Local full verification: 1,949 tests and 32 browser cases passed on 2026-10-09;
 live Supabase/Prisma persistence and production release remain NOT RUN. The
 concrete approval boundary is in `google-lead-release-approval.md`.
+
+## Search-demand failure diagnostics
+
+`google-diagnostics.test.ts` bounds diagnostic stages and HTTP statuses; keyword
+loader tests cover OAuth/provider/network/parse/DB failures, cached failures with
+retained successful rows/timestamps, unknown cached states and secret-marker
+exclusion from returned diagnostics, existing storage writes and console logs.
+No production calls or new persistence are required. The new response-only stage
+is omitted from persisted challenge baseline/after snapshots.
+
+Recommendation/guide tests reject retained demand for API_ERROR, DB_ERROR,
+DISCONNECTED and EMPTY while keeping a successful empty response distinct from
+information shortage. The daily/weekly UI uses one non-secret failure notice.
+`e2e/google-data-diagnostics.spec.ts` exercises that notice, manual fallback,
+reload, hidden stale theme choices and school switching to healthy data on both
+Chromium desktop/mobile. It asserts no writes and no unmocked external requests.
+The public inquiry/milestone code is unchanged and its existing E2E remains in
+full verification. Exact-head CI is tracked in the draft PR, not inferred from a
+previous code SHA. Production performance error cause remains unconfirmed.

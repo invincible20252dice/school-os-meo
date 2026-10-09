@@ -37,6 +37,7 @@ export type Snapshot = {
   latestReviewAt?: string | null;
   demandStatus?: import("./google-search-keywords").KeywordState;
   demandHttpStatus?: number | null;
+  demandStage?: import("./google-diagnostics").GoogleDiagnostic["stage"];
   demand?: Array<{ query: string; month: string; impressions: number; updatedAt: string }> | null;
   reviews: { count: number; rating: number | null; pending: number; replyRate: number | null; newCount: number | null } | null;
   surveyResponses: number | null;
@@ -45,6 +46,12 @@ export type Snapshot = {
   google: boolean | null; instagram: boolean | null;
   errors: string[];
 };
+// Current-response diagnostics do not introduce another persisted diagnostic field.
+function snapshotForStorage(snapshot: Snapshot): Snapshot {
+  const saved = { ...snapshot };
+  delete saved.demandStage;
+  return saved;
+}
 export type MissionProgress = { day: number; status: ChallengeStatus; evidence: Evidence; note: string; updatedAt: string | null; completedAt: string | null; actorId: string | null };
 // Shared by the form and server; only a save changes persisted progress.
 export function photoConfirmation(evidence: Evidence, note: string) {
@@ -93,7 +100,7 @@ export function startChallenge(target: unknown, snapshot: Snapshot): ChallengeDo
   if (additionalTarget < 1) throw new ChallengeError("追加依頼の目標人数は1名以上にしてください。");
   return { schemaVersion: 1, startedAt: snapshot.at, completedAt: null, additionalTarget,
     missions: missions.map(m => ({ day: m.day, status: "NOT_STARTED", evidence: {}, note: "", updatedAt: null, completedAt: null, actorId: null })),
-    baseline: snapshot, after: null, actions: {}, inquiries: null };
+    baseline: snapshotForStorage(snapshot), after: null, actions: {}, inquiries: null };
 }
 export function readDocument(value: unknown): ChallengeDocument {
   const row = object(value);
@@ -158,6 +165,6 @@ export function updateChallenge(doc: ChallengeDocument, command: Record<string, 
     completedAt: status === "COMPLETED" ? previous.completedAt ?? snapshot.at : null };
   const complete = next.missions.every(m => m.status === "COMPLETED");
   next.completedAt = complete ? doc.completedAt ?? snapshot.at : null;
-  if ((mission.day === 7 && status === "COMPLETED" && previous.status !== "COMPLETED") || complete && !doc.completedAt) next.after = snapshot;
+  if ((mission.day === 7 && status === "COMPLETED" && previous.status !== "COMPLETED") || complete && !doc.completedAt) next.after = snapshotForStorage(snapshot);
   return next;
 }

@@ -152,3 +152,12 @@ describe("school challenge rules", () => {
     for (const value of [{}, { schemaVersion: 1 }, { schemaVersion: 1, missions: [] }]) expect(() => readDocument(value)).toThrow();
   });
 });
+
+it("does not persist the new current-response diagnostic stage", () => {
+  const current = { ...snapshot(), demandStage: "OAUTH" as const, demandStatus: "API_ERROR" as const, demandHttpStatus: 400 };
+  const doc = startChallenge(10, current);
+  expect(doc.baseline).not.toHaveProperty("demandStage");
+  const finished = updateChallenge(doc, completeCommand(7), current, "actor");
+  expect(finished.after).not.toHaveProperty("demandStage");
+  expect(current.demandStage).toBe("OAUTH");
+});
