@@ -6,10 +6,10 @@ import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, calls: [], unexpected: [] };
+  const state: FixtureState = { failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, calls: [], unexpected: [] };
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
   await page.addInitScript(() => {
@@ -62,22 +62,25 @@ async function install(page: Page): Promise<FixtureState> {
     if (url.pathname === "/api/dashboard/aio") {
       if (state.aioReadFailure) return json({ success: false, code: "STORAGE_FAILED", error: "計測データを取得できませんでした。" }, 503);
       const canMeasure = state.aioCanMeasure && schoolId === "school-a";
+      const keywords = Array.from({ length: state.aioCount }, (_, i) => ({ id: "keyword-" + schoolId + (i ? "-" + i : ""), keyword: ["地域 塾", "地域 大学受験 塾", "地域 高校生 塾", "地域 自習室 塾"][i] || "地域 塾 " + i, municipality: "検証市", nearestStation: "検証駅" }));
       if (request.method() === "POST") {
         if (!canMeasure) return json({ success: false, error: "計測権限がありません。" }, 403);
         const body = request.postDataJSON();
-        if (body.keywordId !== "keyword-" + schoolId || !body.requestId) return json({ success: false }, 400);
-        if (!measurements.has(schoolId)) measurements.set(schoolId, {
-          id: "measurement-" + schoolId, status: state.aioFailure ? "FAILED" : "SUCCESS",
-          query: "検証地域のおすすめの塾", response: state.aioFailure ? null : state.aioRecommended ? "検証用A校をおすすめします。" : "他の塾が候補です。",
-          brandDetected: state.aioFailure ? null : state.aioRecommended, recommended: state.aioFailure ? null : state.aioRecommended,
-          score: state.aioFailure ? null : state.aioRecommended ? 100 : 0, measuredAt: state.aioFailure ? null : new Date().toISOString(),
-          createdAt: new Date().toISOString(), model: "gpt-4.1-mini", errorCode: state.aioFailure ? "QUOTA" : null,
-          evidence: !state.aioFailure && state.aioRecommended ? "検証用A校をおすすめします。" : null, citations: [{ url: "https://example.org", title: "検証出典" }],
+        const index = keywords.findIndex(k => k.id === body.keywordId);
+        if (index < 0 || !body.requestId) return json({ success: false }, 400);
+        const failed = state.aioFailure || (state.aioMixed && index === 3);
+        const recommended = state.aioRecommended || (state.aioMixed && index === 1);
+        if (!measurements.has(body.keywordId)) measurements.set(body.keywordId, {
+          id: "measurement-" + body.keywordId, schoolName: "検証用A校", status: failed ? "FAILED" : "SUCCESS",
+          query: "検証地域のおすすめの塾", response: failed ? null : recommended ? "検証用A校をおすすめします。" : state.aioCount > 1 ? "おすすめの学習塾です。\n1. **検証予備校**\n自習室で大学受験を支援します。" : "他の塾が候補です。",
+          brandDetected: failed ? null : recommended, recommended: failed ? null : recommended,
+          score: failed ? null : recommended ? 100 : 0, measuredAt: failed ? null : new Date().toISOString(),
+          createdAt: new Date().toISOString(), model: "gpt-4.1-mini", errorCode: failed ? "QUOTA" : null,
+          evidence: !failed && recommended ? "検証用A校をおすすめします。" : null, citations: [{ url: "https://example.org", title: "検証出典" }],
         });
       }
-      const latest = measurements.get(schoolId) || null;
       const data: AioViewData = { configured: state.aioConfigured, canMeasure, pilotKeywordId: "keyword-school-a",
-        keywords: [{ id: "keyword-" + schoolId, keyword: "地域 塾", municipality: "検証市", nearestStation: "検証駅", latest }] };
+        keywords: keywords.map(k => { const latest = measurements.get(k.id) || null; return { ...k, latest, history: latest ? [latest] : [] }; }) };
       return json({ success: true, ...data });
     }
     if (request.method() !== "GET") { state.unexpected.push(request.method() + " " + url.pathname); return route.abort(); }

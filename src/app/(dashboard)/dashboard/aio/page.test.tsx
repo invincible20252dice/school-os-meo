@@ -37,11 +37,11 @@ it("shows missing API configuration and disables paid action", async () => {
   state.configured = false;
   render(<AioDashboardPage />);
   await screen.findByText("設定が必要");
-  expect((screen.getByRole("button", { name: "1件を計測" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "このキーワードを計測" }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("saves one request, refetches, and displays the persisted answer after a remount", async () => {
   const view = render(<AioDashboardPage />);
-  fireEvent.click(await screen.findByRole("button", { name: "1件を計測" }));
+  fireEvent.click(await screen.findByRole("button", { name: "このキーワードを計測" }));
   await screen.findByText("0%", { exact: true });
   expect(fetcher.mock.calls.filter(call => call[1].method === "POST")).toHaveLength(1);
   expect(JSON.parse(fetcher.mock.calls.find(call => call[1].method === "POST")![1].body)).toMatchObject({ keywordId: "k", requestId: expect.any(String) });
@@ -49,6 +49,7 @@ it("saves one request, refetches, and displays the persisted answer after a remo
   render(<AioDashboardPage />);
   await screen.findByText("検証回答", { exact: true });
   expect(screen.getByText("0%", { exact: true })).toBeDefined();
+  fireEvent.click(screen.getByText("出典を見る（1件）"));
   expect(screen.getByRole("link", { name: "出典" }).getAttribute("href")).toBe("https://example.org");
 });
 it("shows DB failures as errors, not zero", async () => {
@@ -60,18 +61,18 @@ it("shows DB failures as errors, not zero", async () => {
 it("disables measurement for read-only members", async () => {
   state.canMeasure = false;
   render(<AioDashboardPage />);
-  expect((await screen.findByRole("button", { name: "1件を計測" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((await screen.findByRole("button", { name: "このキーワードを計測" }) as HTMLButtonElement).disabled).toBe(true);
 });
-it("selects another school's existing keyword without permitting the pilot", async () => {
-  state.pilotKeywordId = "foreign-pilot";
+it("selects an active keyword without the obsolete single-keyword gate", async () => {
+  state.pilotKeywordId = "foreign-pilot"; state.canMeasure = false;
   render(<AioDashboardPage />);
   await screen.findByText("未計測", { exact: true });
-  expect((screen.getByRole("button", { name: "1件を計測" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "このキーワードを計測" }) as HTMLButtonElement).disabled).toBe(true);
 });
-it.each(["SUCCESS", "FAILED", "CONFIG_REQUIRED"])("never offers another paid attempt after %s", async status => {
+it.each(["SUCCESS", "FAILED", "CONFIG_REQUIRED"])("allows deliberate remeasurement after %s; server enforces deduplication", async status => {
   state.keywords[0].latest = record(status, status === "SUCCESS" ? false : null);
   render(<AioDashboardPage />);
-  expect((await screen.findByRole("button", { name: "1件を計測" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((await screen.findByRole("button", { name: "このキーワードを計測" }) as HTMLButtonElement).disabled).toBe(false);
 });
 it("requires a school, and drops old school's data on school changes", async () => {
   const view = render(<AioDashboardPage />);
@@ -82,7 +83,7 @@ it("requires a school, and drops old school's data on school changes", async () 
 });
 it("keeps uncertain failures distinct and allows safe refetch", async () => {
   render(<AioDashboardPage />);
-  const button = await screen.findByRole("button", { name: "1件を計測" });
+  const button = await screen.findByRole("button", { name: "このキーワードを計測" });
   fetcher.mockRejectedValueOnce(new Error("offline"));
   fireEvent.click(button);
   await screen.findByText("計測を完了できませんでした。再取得して状態を確認してください。");

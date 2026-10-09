@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { AIO_MODEL, AIO_PROVIDER, AIO_VERSION, AioProviderError, measureOpenAi } from "./aio-provider";
+import { aioMetadata } from "./aio-audit";
+import { savedAioCompetitors } from "./aio-context";
 
 export class AioRequestError extends Error {
   constructor(public readonly code: string, public readonly status: number) { super(code); }
@@ -13,9 +15,8 @@ export const aioMessages: Record<string, string> = {
   PROVIDER_FAILED: "APIから回答を取得できませんでした。",
   INVALID_RESPONSE: "検索結果または推奨判定を確認できませんでした。",
   INTERRUPTED: "計測が中断されました。再計測してください。",
-  BUSY: "計測中、または直前の計測から1分以内です。",
+  BUSY: "この校舎で別の計測を実行中です。再取得して確認してください。",
   DAILY_LIMIT: "検証期間中は1校舎につき24時間で5回までです。",
-  PILOT_LIMIT: "最初のキーワードの実測検証が完了するまで、別キーワードの計測は停止しています。",
   NOT_FOUND: "有効な登録キーワードが見つかりません。",
   INVALID_REQUEST: "キーワードとリクエストIDを確認してください。",
   SAVE_FAILED: "結果を保存できませんでした。再取得して状態を確認してください。",
@@ -26,12 +27,23 @@ export async function loadAioMeasurements(db: PrismaClient, schoolId: string) {
   const keywords = await db.targetKeyword.findMany({
     where: { schoolId, isActive: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, keyword: true, municipality: true, nearestStation: true,
-      aioMeasurements: { where: measurementScope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 },
+      school: { select: { name: true, prefecture: true, city: true, addressLine: true, websiteUrl: true, schoolSetting: { select: { googleConnected: true } } } },
+      rankHistories: { orderBy: { checkedAt: "desc" }, take: 1, select: { checkedAt: true, competitorData: true } },
+      aioMeasurements: { where: measurementScope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 },
     },
   });
-  const first = await db.aioMeasurement.findFirst({ where: { schoolId, ...measurementScope, status: { not: "CONFIG_REQUIRED" } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { keywordId: true } });
-  return { configured: Boolean(process.env.OPENAI_API_KEY?.trim()), pilotKeywordId: first?.keywordId || null,
-    keywords: keywords.map(({ aioMeasurements, ...keyword }) => ({ ...keyword, latest: aioMeasurements[0] || null })),
+  return { configured: Boolean(process.env.OPENAI_API_KEY?.trim()), pilotKeywordId: null,
+    school: keywords.at(0)?.school || null,
+    competitors: savedAioCompetitors(keywords.flatMap(k => k.rankHistories || [])),
+    keywords: keywords.map(({ aioMeasurements, school: _school, rankHistories: _ranks, ...keyword }) => {
+      const history = aioMeasurements.slice(0, 50).map(record => {
+        const { sources, usage } = aioMetadata(record.citations);
+        return { ...record, citations: sources, usage };
+      });
+      return { ...keyword, latest: history[0] || null,
+        history: history.map(r => ({ ...r, query: "", response: null, evidence: null, citations: [] })),
+        historyTruncated: aioMeasurements.length > 50 };
+    }),
   };
 }
 
@@ -40,25 +52,25 @@ export async function runAioMeasurement(db: PrismaClient, schoolId: string, keyw
   const reservation = await db.$transaction(async tx => {
     // Serialize reservations only, never hold a database transaction during provider calls.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"aio:" + schoolId}, 0))`;
-    const keyword = await tx.targetKeyword.findFirst({ where: { id: keywordId, schoolId, isActive: true }, include: { school: { select: { name: true } } } });
+    const keyword = await tx.targetKeyword.findFirst({ where: { id: keywordId, schoolId, isActive: true }, include: { school: { select: { name: true, prefecture: true, city: true, addressLine: true } } } });
     if (!keyword) throw new AioRequestError("NOT_FOUND", 404);
     const prior = await tx.aioMeasurement.findUnique({ where: { schoolId_requestId: { schoolId, requestId } } });
     if (prior) {
       if (prior.keywordId !== keywordId) throw new AioRequestError("INVALID_REQUEST", 409);
       return { record: prior, execute: false };
     }
-    const first = await tx.aioMeasurement.findFirst({ where: { schoolId, ...measurementScope, status: { not: "CONFIG_REQUIRED" } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    if (first && first.keywordId !== keywordId) throw new AioRequestError("PILOT_LIMIT", 409);
     const now = Date.now();
     const recent = await tx.aioMeasurement.findMany({ where: { schoolId, ...measurementScope, createdAt: { gte: new Date(now - 86400_000) } } });
-    if (recent.some(row => row.createdAt.getTime() > now - 60_000 || (row.status === "RUNNING" && row.createdAt.getTime() > now - 300_000))) throw new AioRequestError("BUSY", 409);
+    const duplicate = recent.filter(row => row.keywordId === keywordId && row.createdAt.getTime() > now - 600_000).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))[0];
+    if (duplicate) return { record: duplicate, execute: false };
+    if (recent.some(row => row.status === "RUNNING" && row.createdAt.getTime() > now - 300_000)) throw new AioRequestError("BUSY", 409);
     if (recent.filter(row => row.status !== "CONFIG_REQUIRED").length >= 5) throw new AioRequestError("DAILY_LIMIT", 429);
     const configured = Boolean(process.env.OPENAI_API_KEY?.trim());
     const record = await tx.aioMeasurement.create({ data: {
       schoolId, keywordId, requestId, ...measurementScope, model: AIO_MODEL,
       status: configured ? "RUNNING" : "CONFIG_REQUIRED", errorCode: configured ? null : "NOT_CONFIGURED",
       schoolName: keyword.school.name,
-      query: JSON.stringify({ municipality: keyword.municipality, nearestStation: keyword.nearestStation, keyword: keyword.keyword }) + "\nこの地域と検索語に合う、おすすめの学習塾を理由と出典付きで教えてください。",
+      query: buildAioQuery(keyword),
     } });
     return { record, execute: configured };
   });
@@ -69,9 +81,20 @@ export async function runAioMeasurement(db: PrismaClient, schoolId: string, keyw
     result = await provider({ query: record.query, schoolName: record.schoolName });
   } catch (error) {
     const code = error instanceof AioProviderError ? error.code : "PROVIDER_FAILED";
-    return db.aioMeasurement.update({ where: { id: record.id }, data: { status: code === "NOT_CONFIGURED" ? "CONFIG_REQUIRED" : "FAILED", errorCode: code } });
+    return db.aioMeasurement.update({ where: { id: record.id }, data: { status: code === "NOT_CONFIGURED" ? "CONFIG_REQUIRED" : "FAILED", errorCode: code,
+      ...(error instanceof AioProviderError && error.audit ? { citations: { version: 2, sources: [], usage: { ...error.audit } } } : {}),
+    } });
   }
   try {
-    return await db.aioMeasurement.update({ where: { id: record.id }, data: { ...result, status: "SUCCESS", errorCode: null, measuredAt: new Date() } });
+    const { usage, ...answer } = result;
+    return await db.aioMeasurement.update({ where: { id: record.id }, data: { ...answer,
+      citations: usage ? { version: 2, sources: answer.citations, usage: { ...usage } } : answer.citations,
+      status: "SUCCESS", errorCode: null, measuredAt: new Date() } });
   } catch { throw new AioRequestError("SAVE_FAILED", 500); }
+}
+
+export function buildAioQuery(keyword: { keyword: string; municipality: string; nearestStation: string; school: { prefecture?: string | null; city?: string | null; addressLine?: string | null } }) {
+  const region = [keyword.school.prefecture, keyword.municipality || keyword.school.city, keyword.nearestStation].filter(Boolean).join("・");
+  // Do not send the school name or street address: these identify and bias retrieval.
+  return `${region ? region + "周辺で、" : ""}「${keyword.keyword}」を調べている生徒・保護者向けに、この検索意図に合う学習塾・予備校を、おすすめする理由と出典付きで教えてください。地域・学年・サービスの条件を勝手に追加せず、不明な点は不明としてください。`;
 }

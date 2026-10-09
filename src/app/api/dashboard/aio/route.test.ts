@@ -13,7 +13,7 @@ const pilotRequest = (requestId = "client-id") => request(aioPilot.schoolId, JSO
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("DATABASE_URL", "unit-test-only-not-connected");
   vi.mocked(resolveRequestAccess).mockResolvedValue(access);
-  vi.mocked(loadAioMeasurements).mockResolvedValue({ keywords: [], configured: true, pilotKeywordId: null });
+  vi.mocked(loadAioMeasurements).mockResolvedValue({ keywords: [], configured: true, pilotKeywordId: null, school: null, competitors: [] });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("requires login", async () => {
@@ -50,7 +50,7 @@ it.each(["{", "null", "{}", '{"keywordId":1}', '{"keywordId":"k","requestId":"id
 it("runs one keyword only", async () => {
   admin();
   expect((await POST(pilotRequest())).status).toBe(200);
-  expect(runAioMeasurement).toHaveBeenCalledWith({}, aioPilot.schoolId, aioPilot.keywordId, aioPilot.requestId);
+  expect(runAioMeasurement).toHaveBeenCalledWith({}, aioPilot.schoolId, aioPilot.keywordId, "client-id");
 });
 it("redacts unknown failures and handles safe known errors", async () => {
   vi.mocked(loadAioMeasurements).mockRejectedValue(new Error("secret"));
@@ -65,17 +65,18 @@ it("denies managers even with access to the pilot school", async () => {
   expect((await POST(pilotRequest())).status).toBe(403);
   expect(runAioMeasurement).not.toHaveBeenCalled();
 });
-it("denies other schools and keywords even for an admin", async () => {
+it("denies other schools even for an admin and delegates owned-keyword validation", async () => {
   admin();
   expect((await POST(request("a", '{"keywordId":"k","requestId":"id"}'))).status).toBe(403);
-  expect((await POST(request(aioPilot.schoolId, '{"keywordId":"k","requestId":"id"}'))).status).toBe(409);
   expect(runAioMeasurement).not.toHaveBeenCalled();
+  vi.mocked(runAioMeasurement).mockRejectedValue(new AioRequestError("NOT_FOUND", 404));
+  expect((await POST(request(aioPilot.schoolId, '{"keywordId":"foreign","requestId":"id"}'))).status).toBe(404);
 });
-it("pins retries from different clients to the same reservation", async () => {
+it("passes request IDs to transaction-protected deduplication, allowing later new history", async () => {
   admin();
   await POST(pilotRequest("tab-one"));
   await POST(pilotRequest("tab-two"));
-  expect(vi.mocked(runAioMeasurement).mock.calls.map(call => call[3])).toEqual([aioPilot.requestId, aioPilot.requestId]);
+  expect(vi.mocked(runAioMeasurement).mock.calls.map(call => call[3])).toEqual(["tab-one", "tab-two"]);
 });
 it("advertises server-derived pilot permission, not a client role", async () => {
   expect(await (await GET(request())).json()).toMatchObject({ canMeasure: false, pilotKeywordId: aioPilot.keywordId });

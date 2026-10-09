@@ -183,7 +183,7 @@ function fullAddress(school: DashboardSchoolRecord | null) {
     .join("");
 }
 
-function normalizeCompetitorData(value: unknown, school: DashboardSchoolRecord | null) {
+export function normalizeCompetitorData(value: unknown, school: DashboardSchoolRecord | null) {
   const items = Array.isArray(value) ? value : [];
 
   return items.slice(0, 20).flatMap((item, index) => {
