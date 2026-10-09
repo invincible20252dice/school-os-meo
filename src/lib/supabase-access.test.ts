@@ -215,6 +215,34 @@ function buildProfileErrorClient() {
 }
 
 describe("supabase-access", () => {
+  it("read-only profile access never accepts invitations or writes profiles", async () => {
+    const client = buildInvitationClient();
+    const request = new Request("http://localhost/api", { headers: { authorization: "Bearer test-token" } });
+    const result = await resolveRequestAccess(request, new URL(request.url), client as never, { requireActiveProfile: true });
+    expect(result.access.status).toBe("pending");
+    expect(client.profileUpsert).not.toHaveBeenCalled();
+    expect(client.invitationUpdate).not.toHaveBeenCalled();
+    expect(client.from).toHaveBeenCalledTimes(1);
+  });
+  it.each([null, "", "pending", "suspended"])("read-only access rejects profile status %s", async status => {
+    const client = buildClient({ role: "admin", status });
+    const request = new Request("http://localhost/api", { headers: { authorization: "Bearer test-token" } });
+    const result = await resolveRequestAccess(request, new URL(request.url), client as never, { requireActiveProfile: true });
+    expect(result.access.status).toBe("pending");
+    expect(client.from).toHaveBeenCalledTimes(1);
+  });
+  it("read-only access trusts stored roles, never editable user metadata", async () => {
+    const client = buildClient({ role: null, school_id: "school-a", status: "active" }, { role: "admin", school_id: "foreign" });
+    const request = new Request("http://localhost/api", { headers: { authorization: "Bearer test-token" } });
+    const result = await resolveRequestAccess(request, new URL(request.url), client as never, { requireActiveProfile: true });
+    expect(result.access).toMatchObject({ role: "manager", schoolId: "school-a", status: "active" });
+  });
+  it("read-only access permits an already active stored admin", async () => {
+    const client = buildClient({ role: "admin", status: "active" });
+    const request = new Request("http://localhost/api", { headers: { authorization: "Bearer test-token" } });
+    const result = await resolveRequestAccess(request, new URL(request.url), client as never, { requireActiveProfile: true });
+    expect(result).toMatchObject({ isAuthenticated: true, access: { role: "admin", status: "active", source: "profiles" } });
+  });
   it("falls back to existing headers when bearer auth is absent", async () => {
     const request = new Request(
       "http://localhost/api?ownerId=user-fallback&userSchoolId=school-1",

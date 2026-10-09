@@ -200,6 +200,7 @@ export async function resolveRequestAccess(
   request: Request,
   url: URL,
   client?: SupabaseAccessClient,
+  options: { requireActiveProfile?: boolean } = {},
 ): Promise<RequestAccessResult> {
   const token = getBearerToken(request);
 
@@ -226,6 +227,15 @@ export async function resolveRequestAccess(
   }
 
   let profile = profileResult.data as SupabaseProfileRecord | null;
+
+  // Opt-in for write-sensitive routes: no invitation side effects or metadata roles.
+  if (options.requireActiveProfile) {
+    const access = resolveUserAccessFromSupabase({ ...data.user, user_metadata: {} }, profile);
+    return {
+      isAuthenticated: true,
+      access: { ...access, status: profile?.status === "active" ? access.status : "pending" },
+    };
+  }
 
   if (!profile || profile.status !== "active") {
     profile = (await applyProfileInvitation(supabaseClient, data.user)) || profile;

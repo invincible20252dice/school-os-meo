@@ -1,5 +1,5 @@
 import { schoolSettingFixture } from "@/test/db-fixtures";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
@@ -14,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const originalEnv = process.env;
+afterEach(() => { process.env = originalEnv; vi.restoreAllMocks(); });
 
 describe("GET /api/auth/instagram", () => {
   beforeEach(async () => {
@@ -21,6 +22,7 @@ describe("GET /api/auth/instagram", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     process.env = {
       ...originalEnv,
+      DATABASE_URL: "",
       META_APP_ID: "",
       NGROK_URL: "",
       NEXT_PUBLIC_APP_URL: "",

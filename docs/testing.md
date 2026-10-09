@@ -1,7 +1,83 @@
 # Testing and coverage
 
-Run `npm run test:ci` before deployment. This runs coverage checks followed by
-Prisma Client generation and the Next.js production build.
+Run `npm run codex:verify` before reporting a change verified (`test:ci` is an alias).
+It runs repository identity and migration safety checks, tooling tests, Prisma
+generation, typecheck, ESLint, existing unit/integration coverage, a plain Next.js
+build, and desktop/mobile Playwright tests. It never migrates, seeds or deploys.
+
+## Codex verification setup
+
+Use Node.js 22 and `npm ci --ignore-scripts`, then `npx playwright install chromium`
+(Linux CI uses `--with-deps`). No production credentials are needed. Run from the
+School OS repository root. Default E2E URL is fixed to `http://127.0.0.1:4317`;
+existing servers are never reused. Stop any conflicting test server before retrying.
+`PLAYWRIGHT_BROWSERS_PATH` can point to a writable local browser cache.
+If a restricted desktop runtime denies Chromium's macOS Mach IPC at startup,
+verification must fail. Run the same command in an authorized ordinary terminal
+or GitHub Actions. Do not skip E2E or report browser tests passed in that case.
+
+`codex:verify` supplies dummy loopback credentials, blanks environment-file keys,
+and blocks external Node HTTP. The build uses `.next-codex`; normal development
+uses `.next`. Browser fixtures abort external/unhandled API requests. API writes
+in browser tests operate only on per-test in-memory records. Existing PGlite
+tests separately check real SQL persistence, optimistic concurrency and school
+isolation. Browser reload tests do not certify production DB persistence.
+
+Migration checks compare the working tree (including untracked SQL) against
+`CODEX_VERIFY_BASE` when supplied; otherwise against the merge-base with
+`origin/main` (HEAD fallback for local checkouts without that ref). CI supplies
+the PR base SHA or push-before SHA, so committed changes are included. Static
+checks reject rewritten migrations, destructive SQL and removed/type-changed
+Prisma fields. They do not replace manual review of defaults, constraints,
+enum changes, dynamic SQL, locks or data backfills.
+
+### Browser coverage and limits
+
+- Google login start and local OAuth redirect; real consent/token issuance is not tested.
+- School switch, seven-day challenge, execution save/reload, failed save and refusal.
+- Reviews/survey lists and Google connection status with synthetic school data.
+- Desktop/mobile interaction and saved challenge screenshots.
+- AIO unmeasured/configuration/error states and success + reload + school isolation
+  use browser API fixtures. They never call real providers or a production database.
+- AIO PGlite tests execute the additive migration and persist results through the
+  real measurement service with a test-only Prisma-to-SQL adapter and mocked HTTP.
+  This proves SQL constraints/persistence, not Prisma transport or distributed locks.
+
+### Live AIO gate
+
+AIO-001/002 are now normal passing acceptance tests, not expected failures.
+The implementation measures one keyword with OpenAI Responses web_search, not the
+public ChatGPT UI. A second model request classifies recommendation only when the
+school name is detected. Citation and quote validation reject unsupported evidence.
+No retry; maximum two API requests (1600 + 500 output tokens) per attempt, one
+search tool call, 35-second deadline per request. Search/model usage is billable.
+School-level reservations enforce a one-minute cooldown and five attempts per
+rolling 24 hours. Missing-key records do not count toward that paid-attempt limit.
+Only the first pilot keyword per school can be measured until the live gate passes.
+
+Required live secrets are OPENAI_API_KEY and DATABASE_URL; DIRECT_URL is unused.
+Do not write dummy values to .env.local or copy another project's credentials.
+Read keys through the existing Next environment loader, never print their values.
+Vercel's 403 means insufficient access, not absent production configuration.
+Before live writes confirm a nonproduction DB and authorized test school/keyword.
+Review/apply only the additive AioMeasurement migration to that test DB; never use
+db:deploy, reset or production build-preparation scripts for this verification.
+Then measure one registered keyword, read the stored result via authenticated GET,
+reload the actual AIO screen and confirm the same record/time/content. Record
+evidence without credentials. A mock/CI pass is not this live acceptance gate.
+Do not automatically retry a paid failure repeatedly. Gemini, Google AI Overview,
+multi-keyword aggregation, history, competitors and Cron remain gated; no schedule
+has been enabled. Legacy AioScoreHistory remains untouched and is never read by
+the new AIO screens/API.
+
+### CI and merge protection
+
+`.github/workflows/quality.yml` runs `codex:verify` on pushes and pull requests
+without production secrets or deployment permissions. Reports/traces are retained
+for seven days. Configure a GitHub main ruleset requiring the **Codex Verify**
+check and PRs, with force pushes/deletions disabled. This needs repository-admin
+configuration; workflow YAML alone cannot block merging. Existing Vercel automatic
+deployments are separate and are not disabled by this workflow.
 
 ## Measured scope
 
