@@ -84,9 +84,10 @@ https://github.com/invincible20252dice/school-os-meo/actions/runs/37924124160 .
 Pre-merge candidate CI also succeeded on both push and pull_request. Typecheck,
 lint (six existing warnings), migration checks and plain build passed.
 
-Actual production browser evidence is desktop. Chrome's viewport override did
-not change its observed 1386px viewport, so no live mobile claim is made; mobile
-and 320px interaction acceptance remains the isolated Chromium E2E evidence.
+Initial production browser evidence was desktop: the first viewport override
+did not change the observed 1386px viewport. A subsequent read-only check below
+verified actual 390px/320px desktop Chrome viewport emulation; real mobile-device
+and live mobile write acceptance remain untested.
 Fresh canonical-domain OAuth remains pending user handling of Google's warning.
 The Google-performance retrieval error was already visible before release and
 remained separate from successful manual inquiry persistence.
@@ -102,3 +103,71 @@ main-ruleset.json, pre-migration.json, post-migration.json, merge.json,
 production-deployment.json, live-acceptance.json, cleanup-verification.json,
 final-existing-data.json and browser screenshots. The SQL/documentation follow-up
 does not authorize a further deployment.
+
+## Read-only follow-up and PR #6 self-review — 2026-10-09 12:04 UTC
+
+PR #6 remains a draft, unmerged and undeployed. Self-review of its diff against
+main found no blocking issue: fixture IDs/owner guards stay bounded; setup cannot
+reuse existing fixture IDs; the actual NOT NULL/UNIQUE constraint is modeled;
+cleanup preserves customer rows and users; branch preview deployment is disabled.
+This review does not authorize another production fixture run.
+
+Chrome's existing administrator session loaded the already archived fixture A on
+school-os-meo.vercel.app. No fixture was recreated and no record button was
+clicked. Measured innerWidth/clientWidth/scrollWidth were 390/390/390 and
+320/320/320. All three inquiry buttons were 48px high and their center hit tests
+reached the correct button (115px wide at 390px, 92px at 320px). The 320px help
+dialog stayed within the viewport (x=26, width=282, right=308), opened and closed
+without submitting a question. Width was reset to 1386px afterward. This proves
+responsive read-only layout in desktop Chrome, not touch/device behavior or
+mobile persistence. All 15 existing-data digests still matched afterward.
+
+The official Vercel CLI read reconfirmed app.jukumeo.com and
+school-os-meo.vercel.app on READY dpl_J7gHkQ8DAvoJiAYkdwY5tcLNnKt1 at exact main
+SHA 2bc8685fb6bbcc7647884432c704938099cd950c. GitHub ruleset 24785246 was re-read:
+enforcement=active, exact refs/heads/main, no bypass actors, current-user bypass
+never, PR and strict Codex Verify (GitHub Actions integration 15368), deletion
+and non-fast-forward blocked. No repository or deployment setting was changed.
+
+The pre-existing Google-performance error's root cause is still unresolved.
+Read-only schema inspection found all required metric/connection columns. Both
+stored location references match the accepted numeric/locations-numeric shape;
+no token values or provider secrets were read. Vercel's connector log read was
+403; the already approved same-team official CLI fallback succeeded, but exposed
+three HTTP-200 performance request records with no nested runtime log lines.
+HTTP 200 does not prove metric success: this endpoint returns state=error inside
+its successful JSON envelope. Existing code discards the detailed error and
+logs only generic Fetch/store failed or Settings/storage unavailable messages.
+The available evidence cannot distinguish refresh/configuration/provider/parser
+or persistence failures; do not prescribe reauthorization based on this alone.
+
+GET /api/dashboard/google-results/performance can refresh Google credentials and
+upsert GbpMetric. Consequently no customer-school refresh/reproduction request
+was made during this read-only investigation. The archived fixture has no Google
+connection and returns disconnected before that path. No OAuth warning was
+continued, scopes changed, secrets retrieved/modified, or paid API added.
+
+Impact: manual GoogleLead reads/writes and milestone counts are a separate route
+and remain independently verified. Current NEXT ACTION input in challenge-data.ts
+does not consume loadPerformance/GbpMetric; it uses connection settings, reviews,
+posts, competitors and its separate search-keyword loader. Thus this performance
+error does not directly change that action ranking, but website/phone click
+feedback remains unavailable or stale, limiting evaluation of action results.
+An additional read of the already stored search-keyword diagnostic (checked at
+2026-10-09 06:07:49.459 UTC) found API_ERROR, stage OAUTH, HTTP 400 and OAUTH_ERROR.
+A boolean-only classification of its existing error message matched
+expired/revoked/invalid_grant and did not match invalid_client/unauthorized_client;
+the raw message, token and scopes were not returned. This is evidence of a prior
+refresh failure in the separate search-keyword path, not proof of the current
+performance endpoint's exact cause. It does reduce search-demand evidence for
+NEXT ACTION; the connection-settings flag alone is not proof that OAuth works.
+Parent decision: have the authorized user assess the Google warning/connection
+and any reauthorization through normal account controls; do not retry, widen
+scopes, or change credentials on the basis of this agent's investigation alone.
+Next safe task: add bounded, non-secret error-stage/status diagnostics with local
+tests, then seek release approval before collecting new production diagnostics;
+do not log raw exceptions, headers, token bodies or provider response payloads.
+
+Evidence: main-ruleset-recheck.json, main-effective-rules-recheck.json,
+production-readonly-390.jpg, production-readonly-390-controls.jpg,
+production-readonly-320-controls.jpg and production-readonly-320-help.jpg.

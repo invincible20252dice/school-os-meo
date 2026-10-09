@@ -88,3 +88,14 @@ Remaining: canonical-domain fresh login requires the user's handling of Google's
 unverified-app warning. Keep this plan active for that boundary. The application
 already showed a Google-performance retrieval error before release; investigate
 that separately without confusing it with manual inquiry persistence.
+
+Read-only follow-up: production desktop Chrome emulation now verified at actual
+390px and 320px widths using archived fixture A, without writes or recreation.
+No horizontal overflow, covered inquiry controls or out-of-bounds help dialog;
+real-device/mobile-write acceptance remains separate. Reconfirmed exact alias
+deployment/SHA and effective main rules. PR #6 self-review has no blocking finding
+and stays draft/unmerged. Google-performance schema/location format checks passed,
+but retained request logs omit runtime details; root cause remains unknown. Its
+GET may upsert metrics, so customer refresh was not used for read-only diagnosis.
+See the follow-up section in google-lead-production-acceptance.md for impact and
+the next safe diagnostic-instrumentation task, requiring no secret disclosure.
