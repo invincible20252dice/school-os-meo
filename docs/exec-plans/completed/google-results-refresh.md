@@ -36,7 +36,7 @@ remain guarded by abort/generation. No API, schema, auth, provider or cost chang
 - [x] Desktop/mobile E2E: manual inquiry -> meeting -> saved/read failure -> retry,
   reload, school isolation; synthetic API only. Inspect screenshots.
 - [x] Local codex:verify; verification-branch deployment disabled.
-- [ ] Exact-head Linux CI; draft PR.
+- [x] Exact-head Linux CI; draft PR #5.
 
 ## Verification evidence
 
@@ -69,6 +69,20 @@ Next safe task: strengthen the existing route/store/SQL integration acceptance
 using isolated PGlite, without changing attribution or meeting semantics.
 Automatic attribution, distinguishing scheduled from held interviews, and
 enrollment tracking require a separate concrete specification/PM decision.
+
+## Completed bounded fix / release remains separate
+
+Draft PR: https://github.com/invincible20252dice/school-os-meo/pull/5
+
+Linux Codex Verify completed success on exact implementation commit
+`7c608a1832c19e3b092b86f42104e2b871681435` (1,922 tests, build and 30 E2E):
+https://github.com/invincible20252dice/school-os-meo/actions/runs/37914088470
+
+This plan closes the saved-write/read-failure fix only. PR remains draft and
+unmerged; no production acceptance or complete automated acquisition funnel is
+claimed. Later documentation-only heads must pass their own CI, rather than
+being attributed to this implementation run. Final handoff carries that exact
+head/run mapping. Rollback is the application change only; no DB action needed.
 
 No migrations, customer records, API credentials or paid calls. Production
 release, live persistence and attribution/scheduled-vs-held semantics remain out
