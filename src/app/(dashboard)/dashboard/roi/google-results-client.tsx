@@ -71,12 +71,18 @@ export default function GoogleResultsClient() {
       const result = await api(endpoint, method, body, signal);
       persisted = true;
       if (signal.aborted || epoch.current !== generation) return;
+      // The saved mutation makes the previous counts and record versions obsolete.
+      // Keep writes unavailable until the authoritative read succeeds.
+      setState({ key, data: null, error: "" });
       if (method === "POST") { pending.current = null; setCreated(result.lead); }
       else { setCreated(null); setEditing(null); setDeleting(null); }
       const latest = await api(endpoint, "GET", undefined, signal);
       if (!signal.aborted && epoch.current === generation) { setState({ key, data: latest, error: "" }); setNotice(message); }
     } catch (error) {
-      if (!signal.aborted && epoch.current === generation) setNotice(persisted ? "保存済みですが一覧を再取得できませんでした。再取得してください。" : error instanceof Error ? error.message : "保存できませんでした。再試行してください。");
+      if (!signal.aborted && epoch.current === generation) {
+        if (persisted) setState({ key, data: null, error: "保存済みですが一覧を再取得できませんでした。再取得してください。" });
+        else setNotice(error instanceof Error ? error.message : "保存できませんでした。再試行してください。");
+      }
     } finally {
       if (epoch.current === generation) { saving.current = false; setBusy(false); }
     }

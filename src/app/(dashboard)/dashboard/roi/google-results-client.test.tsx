@@ -135,11 +135,38 @@ it("prevents double-clicks and reuses request key after ambiguous network failur
   fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("学年を追加しますか？（任意）");
   expect(mutation()[0].body.idempotencyKey).toBe(mutation()[1].body.idempotencyKey);
 });
-it("reports saved-but-refresh-failed without pretending data was reloaded", async () => {
+it.each(["POST", "PATCH", "DELETE"])("invalidates stale results after saved %s and failed GET, then retries only the read", async method => {
   render(<GoogleResultsClient />); await loaded();
-  mocks.fetch.mockImplementation(async (_url, init) => response(init.method === "POST" ? { success: true, lead: row } : { success: false, error: "取得失敗" }, init.method === "POST" ? 200 : 503));
-  fireEvent.click(screen.getByText("LINE +1"));
+  mocks.fetch.mockImplementation(async (_url, init) => response(init.method === method ? { success: true, lead: row } : { success: false, error: "取得失敗" }, init.method === method ? 200 : 503));
+  if (method === "POST") fireEvent.click(screen.getByText("LINE +1"));
+  else if (method === "PATCH") fireEvent.click(screen.getByText("面談になった"));
+  else { fireEvent.click(screen.getByText("⋯")); fireEvent.click(screen.getByText("削除")); fireEvent.click(screen.getByText("削除する")); }
   expect(await screen.findByText("保存済みですが一覧を再取得できませんでした。再取得してください。")).toBeTruthy();
+  expect(screen.getByRole("alert")).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "実際の成果" })).toBeNull();
+  expect(screen.queryByText("LINE +1")).toBeNull();
+  expect(screen.queryByText("面談になった")).toBeNull();
+  current = { ...results([]), inquiriesCount: 1, meetingsCount: 1, convertedCount: 1, meetingRate: 100 };
+  mocks.fetch.mockImplementation(async url => response(url.includes("performance") ? perf : current));
+  fireEvent.click(screen.getByText("再取得"));
+  expect(await screen.findByText("100%")).toBeTruthy();
+  expect(mutation()).toHaveLength(1);
+});
+it("hides obsolete results while the post-save read is pending and ignores its failure after a school switch", async () => {
+  const view = render(<GoogleResultsClient />); await loaded();
+  const normal = mocks.fetch.getMockImplementation()!;
+  let failRead!: (error: Error) => void;
+  mocks.fetch.mockImplementation((url, init) => init.method === "PATCH" ? response({ success: true }) : new Promise((_resolve, reject) => { failRead = reject; }));
+  fireEvent.click(screen.getByText("面談になった"));
+  await waitFor(() => expect(screen.queryByRole("region", { name: "実際の成果" })).toBeNull());
+  expect(screen.getByText("成果を読み込んでいます…")).toBeTruthy();
+  expect(screen.queryByText("LINE +1")).toBeNull();
+  mocks.fetch.mockImplementation(normal);
+  mocks.params = new URLSearchParams("schoolId=b"); current = { ...results([]), school: { id: "b", name: "校舎B" } };
+  view.rerender(<GoogleResultsClient />); await screen.findByText("校舎B");
+  await act(async () => failRead(new Error("old read failed")));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByText("校舎B")).toBeTruthy();
 });
 it("ignores obsolete school responses and mutation completion after switch", async () => {
   let complete!: (value: Response) => void;

@@ -16,7 +16,7 @@ not a certification of deployed credentials, migrations or provider availability
 | Rankings | `api/dashboard/rankings`, `api/dashboard/keywords`, `lib/dashboard-rankings.ts`; TargetKeyword, RankHistory and legacy KeywordRank. `ranking-simulation.ts` is a separate simulated-data path, not evidence of live measurement. |
 | Competitors | `dashboard/keywords/competitors`; competitorData from ranking histories. This is separate from AIO competitor scoring. |
 | AIO | `dashboard/aio/aio-client.tsx` (also aio-score alias), authenticated `api/dashboard/aio`, `lib/aio-provider.ts`, `aio-measurement.ts`, new AioMeasurement. OpenAI API search only; manual single-keyword pilot awaiting live acceptance. Legacy AioScoreHistory retained, excluded from new AIO API. |
-| Google outcomes | `dashboard/roi/google-results-client.tsx`, `api/dashboard/google-results`, `lib/google-leads.ts`, `google-lead-store.ts`, GoogleLead; inquiry, meeting and enrollment tracking. |
+| Google outcomes | `dashboard/roi/google-results-client.tsx`, `api/dashboard/google-results`, `lib/google-leads.ts`, `google-lead-store.ts`, GoogleLead; manually confirmed Google-source inquiries and current meeting/lost status. Meeting counts use the status-update date; scheduled/held meetings and enrollment are not separate states in this flow. |
 | Diagnostics | `api/dashboard/reports`, `lib/dashboard-reports.ts`, `dashboard/report`; database aggregates, not guaranteed causal attribution. |
 | Tests | Vitest + Testing Library, provider/route mocks and PGlite SQL persistence. Browser tests add UI/navigation coverage with synthetic API boundaries. |
 
