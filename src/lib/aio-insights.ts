@@ -14,12 +14,13 @@ export function aggregateAio(records: Array<MeasurementView | null>) {
 // One snapshot per Japan calendar day. A later failed attempt replaces, not hides
 // behind, an earlier successful attempt. Never fill missing days with fake zeros.
 export function aioHistory(keywords: Array<{ id: string; history?: MeasurementView[] }>) {
+  const at = (record: MeasurementView) => record.measuredAt || record.createdAt;
   const events = keywords.flatMap(k => (k.history || []).map(record => ({ keywordId: k.id, record })))
-    .sort((a, b) => a.record.createdAt.localeCompare(b.record.createdAt) || a.record.id.localeCompare(b.record.id));
+    .sort((a, b) => at(a.record).localeCompare(at(b.record)) || a.record.id.localeCompare(b.record.id));
   const latest = new Map<string, MeasurementView>();
   const days = new Map<string, ReturnType<typeof aggregateAio> & { date: string }>();
   for (const { keywordId, record } of events) {
-    const date = new Date(new Date(record.createdAt).getTime() + 9 * 3600000).toISOString().slice(0, 10);
+    const date = new Date(new Date(at(record)).getTime() + 9 * 3600000).toISOString().slice(0, 10);
     latest.set(keywordId, record);
     days.set(date, { date, ...aggregateAio([...latest.values()]) });
   }

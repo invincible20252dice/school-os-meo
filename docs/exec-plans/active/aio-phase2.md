@@ -83,3 +83,6 @@ a separate, approval-gated Vercel runtime operation after CI success.
   Two-day browser history and image pixels passed. No production API calls,
   schema writes, data mutation, main merge or deploy. Production rollout remains
   approval-gated; this plan stays active until real four-keyword acceptance.
+- Final boundary review added a failing Japan-midnight regression: successful
+  history must use measuredAt rather than reservation createdAt. Fixed event
+  ordering/day grouping; this small follow-up requires the same full CI gate.

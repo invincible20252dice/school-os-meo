@@ -20,6 +20,10 @@ it("builds zero/one/many real history points and uses latest attempts, not stale
   expect(history[1].failed).toBe(1);
   expect(aioHistory([{ id: "k", history: [row("FAILED")] }])[0].rate).toBeNull();
 });
+it("dates a successful measurement by completion time across Japan midnight", () => {
+  const attempt = { ...row(), createdAt: "2026-10-09T14:59:30Z", measuredAt: "2026-10-09T15:00:30Z" };
+  expect(aioHistory([{ id: "k", history: [attempt] }])[0].date).toBe("2026-10-10");
+});
 it("extracts only explicitly recommended cram-school candidates with verbatim evidence", () => {
   const response = "おすすめの予備校を紹介します。\n1. **南城館予備校**\n少人数で大学受験を支援します。\n2. **熊本大学**\n大学です。\n3. **熊本駅**\n4. **Google**\n5. **自校塾**\n学習塾です。\n6. **情報塾ランキング**\n比較サイトです。\n7. **偽予備校**\nおすすめしません。";
   expect(extractCompetitors(response, "自校塾")).toEqual([{ name: "南城館予備校", evidence: "1. **南城館予備校**\n少人数で大学受験を支援します。" }]);
