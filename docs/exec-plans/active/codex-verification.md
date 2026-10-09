@@ -24,7 +24,7 @@ Do not push, migrate or deploy as part of this task.
 - [x] Add browser tests using actual local Next.js UI and synthetic API fixtures.
 - [x] Update CI and document required branch protection; do not alter GitHub settings.
 - [x] Run `npm run codex:verify`, investigate failures and rerun affected checks.
-- [ ] Complete desktop/mobile browser execution in an authorized terminal or CI.
+- [x] Complete desktop/mobile browser execution in Linux CI (run 37889631653).
 - [x] Record results, remaining product gaps and production follow-up.
 
 ## Validation and risks
@@ -42,6 +42,10 @@ end-to-end coverage. No new API spend or production records are permitted.
 
 ## Execution log
 
+- 2026-10-09: authorized verification-branch push; full Linux codex:verify succeeded
+  in run 37889631653 (1,896 Vitest cases and 24 browser cases). Earlier macOS launch
+  failures below are historical. Main merge/production schema/deploy remain unapproved.
+  Main required-check enforcement remains a separate repository administration task.
 - Initial inspection: main is clean; origin and package match. No code edited yet.
 - Added Playwright as a dev-only dependency, preserved production dependencies and
   95% coverage thresholds. ESLint runs through the existing Next core-web-vitals preset.

@@ -84,6 +84,13 @@ test("AIO manual result survives reload and stays isolated from another school",
   await expect(page.getByRole("button", { name: "1件を計測" })).toBeDisabled();
   expect(fixture.calls.filter(c => c.path === "/api/dashboard/aio" && c.method === "POST")).toHaveLength(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  if (testInfo.project.name === "mobile") {
+    const menu = await page.getByRole("button", { name: "メニュー", exact: true }).boundingBox();
+    const school = await page.getByRole("combobox", { name: "選択校舎" }).boundingBox();
+    expect(menu).not.toBeNull();
+    expect(school).not.toBeNull();
+    expect(school!.x).toBeGreaterThanOrEqual(menu!.x + menu!.width + 8);
+  }
   await page.screenshot({ path: testInfo.outputPath("aio-result.png"), fullPage: true });
   await page.getByRole("combobox", { name: "選択校舎" }).selectOption("school-b");
   await expect(page.getByText("未計測", { exact: true })).toBeVisible();

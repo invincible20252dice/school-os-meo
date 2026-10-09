@@ -105,6 +105,16 @@ rollback artifact; legacy overview/report AIO consumers still need future cleanu
 
 ## Verification
 
+2026-10-09 Linux CI: [run 37889631653](https://github.com/invincible20252dice/school-os-meo/actions/runs/37889631653)
+passed codex:verify on 9fc179929f0a. Tooling 8, typecheck, lint (0 errors/6 prior
+warnings), 1,896 unit/integration cases, build and 24 desktop/mobile E2E cases passed.
+Coverage: lines/statements 99.24%, branches 97.36%, functions 99.76%. Artifact
+11597837340 contains screenshots and reports. Fixes: separate Linux engine
+preparation, exact local image/API fixtures, accessible selectors, and mobile header
+accessibility/overflow. Final screenshot review adds menu spacing and an overlap
+assertion; CI must pass again for the final commit. No external paid API or production
+DB write occurred. Production acceptance is still a separate, approval-gated step.
+
 The SQL is executed only in PGlite tests until approval. Route tests cover admin
 access, wrong school/keyword and fixed reservation IDs; UI tests cover read-only
 users, one-shot state and reload/remount persistence. CI/Linux results and actual
@@ -141,5 +151,6 @@ resolved (1 launch failure, 23 not run). SQL/schema and production data are unch
 - e2e/fixtures.ts: isolated fixtures reflect the new pilot permission contract.
 - docs/ARCHITECTURE.md, this runbook and the active AIO ExecPlan: rollout boundaries.
 
-Earlier uncommitted AIO/foundation changes remain intact and must also be reviewed
-before any commit or deployment; this list does not imply they were already deployed.
+The AIO/foundation changes are committed only on codex/aio-linux-verification.
+This list does not imply they were deployed. Review the full main-to-branch diff
+before approving the production SQL, main merge and deployment.

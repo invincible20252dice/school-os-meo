@@ -13,6 +13,15 @@ until explicit approval of this rollout. Never copy ai-tutor credentials.
 
 ## Vercel-only pilot revision
 
+2026-10-09 Linux acceptance: run 37889631653 at 9fc179929f0a passed the complete
+codex:verify command: tooling 8, typecheck, lint (0 errors/6 existing warnings),
+157 Vitest files/1,896 cases, 99.24% line coverage, build and all 24 desktop/mobile
+E2E cases. Screenshots confirm AIO zero/reload and challenge school isolation.
+Visual review found a small remaining mobile menu/select border overlap; final
+spacing adds a bounding-box regression assertion. Re-run CI for that final commit.
+Only verification-branch push is authorized. Production SQL, main merge and deploy
+still require approval; no real provider/production persistence acceptance is claimed.
+
 Linux CI run 37888542388 reached tooling checks (7 passed) but Prisma generate
 needed a fresh Linux engine download, blocked by the verification network guard.
 The workflow now installs only @prisma/engines binaries before isolation, alongside
@@ -111,7 +120,7 @@ Gemini implementation is deferred until the single-provider gate passes.
 - [x] Add model/migration, bounded provider and authenticated manual API.
 - [x] Replace AIO UI and retire sample Cron path.
 - [x] Exercise SQL persistence, API authorization and UI remount with synthetic data.
-- [ ] Execute browser reload acceptance in Playwright (fixtures).
+- [x] Execute browser reload acceptance in Playwright (fixtures; Linux run 37889631653).
 - [x] Run codex:verify; investigate failures without weakening gates (E2E environment blocked).
 - [ ] Verify schema application and Vercel deployment have explicit approval.
 - [ ] Real keyword/provider -> result -> DB -> reload -> UI. Record evidence without secrets.
