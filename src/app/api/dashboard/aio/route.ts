@@ -27,9 +27,9 @@ async function handle(request: Request) {
     let body;
     try { body = await request.json(); } catch { throw new AioRequestError("INVALID_REQUEST", 400); }
     if (!body || typeof body.keywordId !== "string" || typeof body.requestId !== "string" || Object.keys(body).some(key => !["keywordId", "requestId"].includes(key))) throw new AioRequestError("INVALID_REQUEST", 400);
-    if (body.keywordId !== aioPilot.keywordId) throw new AioRequestError("PILOT_LIMIT", 409);
-    // All tabs, users and retries share a single database reservation.
-    return json({ success: true, measurement: await runAioMeasurement(prisma, schoolId, aioPilot.keywordId, aioPilot.requestId) });
+    // DB validates active keyword ownership. Transaction deduplication protects
+    // different tabs while distinct later measurements receive their own history.
+    return json({ success: true, measurement: await runAioMeasurement(prisma, schoolId, body.keywordId, body.requestId) });
   } catch (error) {
     if (error instanceof AioRequestError) return json({ success: false, code: error.code, error: aioMessages[error.code] }, error.status);
     return json({ success: false, code: "STORAGE_FAILED", error: "計測データを取得・保存できませんでした。DB接続と追加テーブルの適用状況を確認してください。" }, 503);

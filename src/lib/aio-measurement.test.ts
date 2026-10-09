@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { loadAioMeasurements, runAioMeasurement } from "./aio-measurement";
+import { buildAioQuery, loadAioMeasurements, runAioMeasurement } from "./aio-measurement";
 import { AioProviderError } from "./aio-provider";
 const requestId = "00000000-0000-4000-8000-000000000001";
 const mock = {
@@ -71,11 +71,11 @@ it.each([["", requestId], ["k", "bad"], ["k".repeat(201), requestId]])("rejects 
   await expect(run(undefined, k, id)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   expect(mock.$transaction).not.toHaveBeenCalled();
 });
-it("does not expand to another keyword before the live pilot passes", async () => {
+it("allows another owned keyword after the accepted live pilot", async () => {
   mock.aioMeasurement.findFirst.mockResolvedValue({ keywordId: "first" });
-  await expect(run()).rejects.toMatchObject({ code: "PILOT_LIMIT" });
+  expect(await run()).toMatchObject({ status: "SUCCESS" });
 });
-it.each([{ status: "FAILED", age: 1000 }, { status: "RUNNING", age: 120000 }])("limits concurrent and rapid requests", async row => {
+it.each([{ status: "RUNNING", age: 1000 }, { status: "RUNNING", age: 120000 }])("limits concurrent requests", async row => {
   mock.aioMeasurement.findMany.mockResolvedValue([{ ...row, createdAt: new Date(Date.now() - row.age) }]);
   await expect(run()).rejects.toMatchObject({ code: "BUSY" });
 });
@@ -93,8 +93,33 @@ it("does not claim success if the final DB write fails", async () => {
 it("reads only new measurements scoped to the school and shows absent separately", async () => {
   mock.targetKeyword.findMany.mockResolvedValue([{ id: "k", aioMeasurements: [{ status: "FAILED" }] }, { id: "k2", aioMeasurements: [] }]);
   mock.aioMeasurement.findFirst.mockResolvedValue({ keywordId: "k" });
-  expect(await loadAioMeasurements(db, "s")).toMatchObject({ configured: true, pilotKeywordId: "k", keywords: [{ latest: { status: "FAILED" } }, { latest: null }] });
+  expect(await loadAioMeasurements(db, "s")).toMatchObject({ configured: true, pilotKeywordId: null, keywords: [{ latest: { status: "FAILED" } }, { latest: null }] });
   expect(mock.targetKeyword.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { schoolId: "s", isActive: true } }));
   vi.stubEnv("OPENAI_API_KEY", ""); mock.aioMeasurement.findFirst.mockResolvedValue(null);
   expect(await loadAioMeasurements(db, "s")).toMatchObject({ configured: false, pilotKeywordId: null });
+});
+it.each(["SUCCESS", "FAILED", "RUNNING"])("deduplicates %s across client request IDs without overwriting it", async status => {
+  const prior = { id: "prior", keywordId: "k", status, createdAt: new Date() };
+  mock.aioMeasurement.findMany.mockResolvedValue([prior]);
+  const provider = vi.fn();
+  expect(await run(provider)).toEqual(prior);
+  expect(provider).not.toHaveBeenCalled(); expect(mock.aioMeasurement.create).not.toHaveBeenCalled();
+});
+it("does not pause between different completed keywords in a batch", async () => {
+  mock.aioMeasurement.findMany.mockResolvedValue([{ id: "other", keywordId: "other", status: "SUCCESS", createdAt: new Date() }]);
+  expect(await run()).toMatchObject({ status: "SUCCESS" });
+});
+it("builds a natural query with saved location, retaining keyword intent and hiding school identity", () => {
+  const input = { keyword: "自習室 塾", municipality: "", nearestStation: "", school: { name: "秘密校舎", prefecture: "熊本県", city: "熊本市", addressLine: "固有住所" } };
+  expect(buildAioQuery(input)).toContain("熊本県・熊本市周辺");
+  expect(buildAioQuery(input)).toContain("「自習室 塾」");
+  expect(buildAioQuery(input)).not.toMatch(/秘密校舎|固有住所|高校生/);
+  expect(buildAioQuery({ ...input, school: {} })).not.toContain("熊本");
+});
+it("loads at most 50 attempts while preserving old citation arrays and signaling truncation", async () => {
+  const citations = [{ url: "https://example.org", title: "旧実測" }];
+  mock.targetKeyword.findMany.mockResolvedValue([{ id: "k", aioMeasurements: Array.from({ length: 51 }, (_, i) => ({ id: String(i), citations })) }]);
+  const result = await loadAioMeasurements(db, "s");
+  expect(result.keywords[0].history).toHaveLength(50);
+  expect(result.keywords[0]).toMatchObject({ historyTruncated: true, latest: { citations, usage: null } });
 });

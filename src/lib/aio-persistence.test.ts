@@ -55,7 +55,7 @@ beforeEach(async () => {
       },
       findMany: async ({ where }: Args) => {
         const keywords = await rows('SELECT * FROM "TargetKeyword" WHERE "schoolId"=$1 AND "isActive"=true', [where.schoolId]);
-        for (const keyword of keywords) keyword.aioMeasurements = await rows('SELECT * FROM "AioMeasurement" WHERE "keywordId"=$1 AND provider=$2 AND source=$3 ORDER BY "createdAt" DESC, id DESC LIMIT 1', [keyword.id, "openai-web-search", "openai-search-v1"]);
+        for (const keyword of keywords) keyword.aioMeasurements = await rows('SELECT * FROM "AioMeasurement" WHERE "keywordId"=$1 AND provider=$2 AND source=$3 ORDER BY "createdAt" DESC, id DESC LIMIT 51', [keyword.id, "openai-web-search", "openai-search-v1"]);
         return keywords;
       },
     },
@@ -95,6 +95,31 @@ it("persists missing settings without sending requests", async () => {
   const result = await runAioMeasurement(adapter, "a", "ka", randomUUID());
   expect(result).toMatchObject({ status: "CONFIG_REQUIRED", score: null, errorCode: "NOT_CONFIGURED" });
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("sequentially measures four owned keywords, keeps a failure separate and reloads real history", async () => {
+  await pg.exec(`INSERT INTO "TargetKeyword" (id,"schoolId",keyword,municipality,"nearestStation") VALUES ('ka2','a','大学受験 塾','市','駅'), ('ka3','a','高校生 塾','市','駅'), ('ka4','a','自習室 塾','市','駅');`);
+  const good = { model: "gpt-4.1-mini", response: "検証A塾をおすすめします。", evidence: "検証A塾をおすすめします。", citations: [{ url: "https://example.org", title: "出典" }], recommended: true, brandDetected: true, score: 100 };
+  const provider = vi.fn().mockResolvedValueOnce(good).mockResolvedValueOnce({ ...good, recommended: false, brandDetected: false, score: 0, evidence: "", response: "別の塾" }).mockResolvedValueOnce({ ...good, recommended: false, score: 0, evidence: "" }).mockRejectedValueOnce(new Error("safe mock failure"));
+  for (const keyword of ["ka", "ka2", "ka3", "ka4"]) await runAioMeasurement(adapter, "a", keyword, randomUUID(), provider);
+  expect(provider).toHaveBeenCalledTimes(4);
+  const reload = await loadAioMeasurements(adapter, "a");
+  expect(reload.keywords.filter(k => k.latest?.status === "SUCCESS")).toHaveLength(3);
+  expect(reload.keywords.find(k => k.id === "ka4")!.latest).toMatchObject({ status: "FAILED", score: null });
+  expect(reload.keywords.every(k => k.history.length === 1)).toBe(true);
+  await runAioMeasurement(adapter, "a", "ka", randomUUID(), provider);
+  expect(provider).toHaveBeenCalledTimes(4);
+  expect(await rows('SELECT count(*)::int AS count FROM "AioMeasurement"')).toEqual([{ count: 4 }]);
+  expect(await rows('SELECT * FROM "AioScoreHistory"')).toEqual([{ id: "legacy", schoolId: "a", totalScore: 99 }]);
+});
+
+it("a later remeasurement appends history and never overwrites the accepted pilot", async () => {
+  await runAioMeasurement(adapter, "a", "ka", randomUUID());
+  const before = await rows('SELECT * FROM "AioMeasurement"');
+  const now = Date.now(); const clock = vi.spyOn(Date, "now").mockReturnValue(now + 610000);
+  try { await runAioMeasurement(adapter, "a", "ka", randomUUID()); } finally { clock.mockRestore(); }
+  expect(await rows('SELECT * FROM "AioMeasurement" WHERE id=$1', [before[0].id])).toEqual(before);
+  expect((await loadAioMeasurements(adapter, "a")).keywords[0].history).toHaveLength(2);
 });
 it("database constraints independently reject cross-school and false-zero records", async () => {
   expect(await rows("SELECT relrowsecurity FROM pg_class WHERE relname='AioMeasurement'")).toEqual([{ relrowsecurity: true }]);
