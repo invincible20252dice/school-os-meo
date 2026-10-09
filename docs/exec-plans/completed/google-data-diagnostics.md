@@ -29,7 +29,9 @@ Existing authentication/school scopes and bounded requests stay unchanged.
 - [x] Desktop/mobile E2E shows information shortage and manual fallback, then
   school switch/reload restores healthy demand without writing records.
 - [x] Full local codex:verify.
-- [ ] Exact-head push/PR CI and draft PR; results will be recorded in the PR. No deploy/merge.
+- [x] Feature branch pushed and draft PR #7 created. No deploy/merge.
+- Exact-head CI is the review gate; final run IDs/results are maintained in PR #7
+  rather than recording a self-referential commit SHA in this document.
 
 Live performance error cause remains unconfirmed. Search-demand diagnostics do
 not assert that its prior OAuth failure proves the performance endpoint cause.
@@ -49,3 +51,7 @@ Desktop/mobile failure screenshots visually inspected. Initial E2E failures abov
 were fixture-navigation issues and are fixed; no checks skipped. Live providers,
 production DB and deployment are not run. Next: review draft PR and exact-head CI;
 production release requires separate explicit approval.
+
+Implementation and local acceptance complete. Draft PR: https://github.com/invincible20252dice/school-os-meo/pull/7
+Remaining review gate: confirm both push and PR CI for the latest head before
+approving a release. Production root-cause investigation is a separate task.
