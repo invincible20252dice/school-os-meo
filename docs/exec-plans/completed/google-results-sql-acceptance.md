@@ -24,7 +24,7 @@ production migrations/deployments; merge is outside this task's authorization.
 - [x] Actual handlers and SQL persistence, including failures and cross-school IDs.
 - [x] Targeted tests; review adapter boundaries and resulting SQL records.
 - [x] Full codex:verify without weaker thresholds.
-- [ ] Push existing feature branch, update draft PR #5, exact-head CI.
+- [x] Push existing feature branch, update draft PR #5, exact-head CI.
 - [x] Document product gaps separately from unverified production behavior.
 
 ## Findings
@@ -47,3 +47,31 @@ Full local codex:verify passed: 9 tooling tests, 161 Vitest files / 1,929 tests,
 typecheck, lint (six existing warnings), build and 30 desktop/mobile Chromium E2E.
 Coverage: 99.24% statements/lines, 97.40% branches, 99.77% functions.
 No thresholds or exclusions changed. Git diff whitespace check passed.
+
+## Completed acceptance / release gate
+
+Implementation commit: `9bff25b21b8ead468dcfaa3a28bd7ce88267f9ed`.
+Draft PR #5: https://github.com/invincible20252dice/school-os-meo/pull/5
+Exact implementation-head Linux PR CI completed successfully:
+https://github.com/invincible20252dice/school-os-meo/actions/runs/37916506294
+Documentation-only follow-up heads require their own CI; the final task handoff
+records their exact SHA/run rather than attributing this run to another commit.
+
+Vercel read-only deployment history still showed production main at `a17040c`.
+This feature branch remains deployment-disabled. No merge, deployment, Supabase
+read/write, new project, credential change or paid provider invocation occurred.
+No application/SQL migration rollback is needed for this test-only follow-up.
+
+Next safe task: investigate an ephemeral local PostgreSQL setup for real Prisma
+engine acceptance, without production credentials or a new Supabase project.
+Do not describe PGlite fresh reads as real Prisma or restart durability evidence.
+Production acceptance and any release decision remain separate.
+
+Approval boundaries in this checkout: AGENTS lines 16-20 stop production data
+changes and require explicit concrete migration/deployment authorization;
+DEVELOPMENT_RULES lines 53-59 require exact commit/environment/schema/rollback
+review and main PR/status controls. These rules do not impose a blanket approval
+requirement on read-only production inspection; preserve school authorization
+and secrets, and distinguish SELECT/metadata reads from writes. None was needed
+against production Supabase in this task. Merge is not authorized by the PM's
+current development request, regardless of passing checks.
