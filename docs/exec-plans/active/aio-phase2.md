@@ -86,3 +86,21 @@ a separate, approval-gated Vercel runtime operation after CI success.
 - Final boundary review added a failing Japan-midnight regression: successful
   history must use measuredAt rather than reservation createdAt. Fixed event
   ordering/day grouping; this small follow-up requires the same full CI gate.
+
+## Approved production acceptance, 2026-10-09
+
+- User explicitly approved main merge, production deploy and four active keyword
+  measurements once each. No schema change, Gemini, Google AI or Cron authorized.
+- PR #2 merged as e519928 after Linux run 37901833345 passed (1,918 tests,
+  28 Playwright cases). Production deployment dpl_GJrc83iZTZDu9yRgoRiQsroyvLY5 READY.
+- Authenticated admin executed the four-keyword batch exactly once. Four new rows
+  succeeded between 08:00:48 and 08:01:24 UTC. Each used one OpenAI search request;
+  no own-school mention/recommendation, so rate 0/4 = 0%, failures zero.
+- Reload retained all four timestamps/statuses and current successful denominator.
+  Existing 32 tables' counts/fingerprints and previous AIO row unchanged; schema
+  fingerprint unchanged. AioMeasurement grew only from one to five records.
+- Live answer exposed a display-only evidence boundary bug: an unlinked bold
+  school heading was attached to the preceding competitor quotation. Added a
+  failing synthetic regression, then split at those headings while preserving
+  place metadata. No saved answers/results are edited and no paid rerun is needed.
+  Reverify and redeploy this narrow fix before final acceptance.

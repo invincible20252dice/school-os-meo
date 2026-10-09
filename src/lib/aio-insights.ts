@@ -33,7 +33,9 @@ export function extractCompetitors(response: string, ownName: string): AioCompet
   // Intentionally high precision, not comprehensive entity recognition. Only named
   // list/heading entries in an explicitly recommended list can become candidates.
   if (!/(おすすめ|お勧め|推奨)/.test(response.slice(0, 300))) return [];
-  const blocks = response.split(/\n(?=(?:#{1,4}\s|\d+[.)．、]\s*|[-*]\s+|\*\*\[))/);
+  // Unlinked bold headings also end the prior school's evidence. Place metadata
+  // uses separators and stays with its school; unlinked candidates remain omitted.
+  const blocks = response.split(/\n(?=(?:#{1,4}\s|\d+[.)．、]\s*|[-*]\s+|\*\*\[|\*\*(?!\[)[^*\n·|]+\*\*[ \t]*(?:\n|$)))/);
   if (/(おすすめ(?:の塾)?はありません|推奨できません|推奨しません)/.test(blocks[0])) return [];
   const candidates: AioCompetitor[] = [];
   for (const block of blocks) {
