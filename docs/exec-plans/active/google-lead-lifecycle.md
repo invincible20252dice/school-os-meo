@@ -42,7 +42,9 @@ RLS is enabled with no public policies. No customer IDs/records are copied here.
 - [x] Actual API/store/PGlite persistence, duplicate/race/failure/tenant cases.
 - [x] UI progression, correction warning, legacy confirmation and accessible mobile E2E.
 - [x] Exact migration tested with existing legacy row unchanged and old SQL writes.
-- [ ] Full verify / CI, PR-wide release approval packet with exact candidate.
+- [x] Full local verification and PR-wide release approval packet.
+- Exact-head CI evidence is maintained in PR #5 and the final handoff, so a
+  documentation-only evidence update is not mistaken for a tested code SHA.
 - [ ] Real Supabase persistence across independent sessions and browser reload.
 
 Prepare scripts/procedures and local evidence before requesting one concrete
@@ -60,5 +62,7 @@ the existing opt-in resolver; no role/membership redesign or profile writes.
 GitHub read-only inspection found no rulesets and main is not protected. Release
 must resolve that documented gate; no repository settings were changed.
 
-Next: push the reviewed feature commit, pin both CI runs in PR #5, then obtain the
-single concrete approval bundle. Keep this plan active until real DB acceptance.
+Implementation commit af4b5a06015a4236a0f925dd040470e4aab1890b is pushed in PR #5.
+Next: pin both final-head CI runs in PR #5, then obtain the single concrete approval
+bundle. Keep this plan active until real DB acceptance; no production action has
+been authorized by this local/CI work.

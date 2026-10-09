@@ -54,6 +54,10 @@ version check, existing status/date checks and RLS with no policies. One existin
 legacy meeting record was observed by aggregate count only. Read-only role tests
 returned zero visible leads for anon and authenticated. This is not application
 persistence acceptance. No production DDL/DML has been run.
+The Vercel database connection target has not been proved by decrypting environment
+variables. After approved fixture creation, confirm both synthetic schools appear
+in the existing application's read-only school selector before release. If they
+do not, stop and investigate the connection mapping without exposing secrets.
 
 ## Migration and compatibility
 
@@ -91,6 +95,8 @@ backfill or restore customer rows from guesses.
    active administrators can select them; ordinary managers gain no access.
    They are temporarily ACTIVE for the real dashboard selector, so admins will
    see the two clearly labelled test schools during acceptance.
+   Confirm both appear through the existing application before merging/deploying;
+   this verifies the target mapping through data visible only in the approved DB.
 4. Approve merging PR #5 at that exact HEAD into main and the resulting Vercel
    production release. Verify the resulting tree/commit and deployment metadata.
    This exposes the tested new UI to customers; it is not a private preview.
