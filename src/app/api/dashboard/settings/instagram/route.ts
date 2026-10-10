@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
@@ -37,7 +38,9 @@ function toUpdatedAt(value?: Date | null) {
 function toErrorResponse(error: unknown, fallbackMessage: string) {
   const message = error instanceof Error ? error.message : "";
   const status =
-    message === "SCHOOL_REQUIRED"
+    message === "UNAUTHENTICATED"
+      ? 401
+      : message === "SCHOOL_REQUIRED"
       ? 400
       : message === "FORBIDDEN_PENDING" || message === "FORBIDDEN_SCHOOL"
         ? 403
@@ -46,21 +49,21 @@ function toErrorResponse(error: unknown, fallbackMessage: string) {
           : 500;
 
   if (status === 500) {
-    console.error(fallbackMessage, error);
+    console.error(fallbackMessage);
   }
 
   return NextResponse.json(
     {
       success: false,
       message:
-        status === 400
+        status === 401 ? "ログインしてください。" : status === 400
           ? "Instagram設定を保存する校舎を選択してください。"
           : status === 403
             ? "この校舎のInstagram設定は変更できません。"
             : status === 404
               ? "対象校舎が見つかりませんでした。"
               : fallbackMessage,
-      error: message || fallbackMessage,
+      error: status === 500 ? fallbackMessage : message,
     },
     { status },
   );
@@ -71,9 +74,10 @@ async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) 
   const requestedSchoolId =
     normalizeSchoolId(bodySchoolId) ||
     normalizeSchoolId(url.searchParams.get("schoolId"));
-  const accessResult = await resolveRequestAccess(request, url);
+  const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+  if (!accessResult.isAuthenticated) throw new Error("UNAUTHENTICATED");
+  if (!isApprovedAccess(accessResult.access)) {
     throw new Error("FORBIDDEN_PENDING");
   }
 
@@ -87,7 +91,7 @@ async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) 
     throw new Error("SCHOOL_REQUIRED");
   }
 
-  if (requestedSchoolId && schoolId !== requestedSchoolId) {
+  if (!canAccessSchool(accessResult.access, schoolId) || (requestedSchoolId && schoolId !== requestedSchoolId)) {
     throw new Error("FORBIDDEN_SCHOOL");
   }
 
@@ -134,7 +138,7 @@ function serializeInstagramSetting({
     schoolSetting?.instagramMetaAppId ||
     DEFAULT_INSTAGRAM_META_APP_ID;
   const metaAppSecret =
-    instagramSetting?.metaAppSecret || schoolSetting?.instagramMetaAppSecret || "";
+    instagramSetting?.metaAppSecret || schoolSetting?.instagramMetaAppSecret ? "********" : "";
   const businessAccountId = instagramSetting?.instagramBusinessAccountId || "";
   const hasAccessToken = Boolean(instagramSetting?.instagramAccessToken);
   const instagramConnected =
@@ -238,9 +242,8 @@ export async function POST(request: Request) {
       normalizeString(body.metaAppId) ||
       normalizeString(body.instagramMetaAppId) ||
       DEFAULT_INSTAGRAM_META_APP_ID;
-    const metaAppSecret =
-      normalizeString(body.metaAppSecret) ||
-      normalizeString(body.instagramMetaAppSecret);
+    const submittedSecret = normalizeString(body.metaAppSecret) || normalizeString(body.instagramMetaAppSecret);
+    const metaAppSecret = submittedSecret && submittedSecret !== "********" ? submittedSecret : undefined;
     const instagramBusinessAccountId =
       normalizeString(body.instagramBusinessAccountId) ||
       normalizeString(body.businessAccountId) ||
@@ -256,7 +259,7 @@ export async function POST(request: Request) {
       create: {
         schoolId: school.id,
         metaAppId,
-        metaAppSecret,
+        metaAppSecret: metaAppSecret || "",
         instagramAccessToken: current?.instagramAccessToken || "",
         instagramBusinessAccountId,
         autoSyncEnabled,

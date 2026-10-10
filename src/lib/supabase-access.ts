@@ -149,7 +149,7 @@ async function applyProfileInvitation(
 
   const invitation = invitationResult.data as SupabaseInvitationRecord | null;
 
-  if (!invitation || invitation.status === "revoked") {
+  if (!invitation || invitation.status !== "pending") {
     return null;
   }
 
@@ -241,8 +241,9 @@ export async function resolveRequestAccess(
     profile = (await applyProfileInvitation(supabaseClient, data.user)) || profile;
   }
 
+  const access = resolveUserAccessFromSupabase(data.user, profile);
   return {
-    access: resolveUserAccessFromSupabase(data.user, profile),
+    access: { ...access, status: profile?.status === "active" ? access.status : "pending" },
     isAuthenticated: true,
   };
 }

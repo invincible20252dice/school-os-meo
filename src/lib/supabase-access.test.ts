@@ -519,3 +519,15 @@ describe("supabase-access", () => {
     ).rejects.toThrow("profiles fetch failed");
   });
 });
+
+ it.each(["pending", "suspended"])("accepted invitation cannot reactivate a %s profile", async status => {
+  const client=buildInvitationClient();
+  const query=(data: unknown)=>({ select:vi.fn(()=>({eq:vi.fn(()=>({maybeSingle:vi.fn(async()=>({data,error:null}))}))})) });
+  client.from.mockImplementation((table:string)=>(table==="profiles" ? {...query({id:"user-1",role:"manager",school_id:"school-1",school_ids:["school-1"],status}),upsert:client.profileUpsert} : {...query({email:"manager@example.com",role:"admin",status:"accepted"}),update:client.invitationUpdate}) as never);
+  const req=new Request("http://localhost/api",{headers:{authorization:"Bearer fixture"}});
+  const result=await resolveRequestAccess(req,new URL(req.url),client as never);
+  expect(result.access.status).toBe("pending");
+  expect(result.access.role).toBe("manager");
+  expect(client.profileUpsert).not.toHaveBeenCalled();
+  expect(client.invitationUpdate).not.toHaveBeenCalled();
+ });

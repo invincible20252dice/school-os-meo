@@ -13,7 +13,7 @@ vi.mock("@/lib/supabase-access", () => ({
       status: "active",
       source: "fallback",
     },
-    isAuthenticated: false,
+    isAuthenticated: true,
   })),
   buildScopedSchoolFilter: vi.fn((_access, schoolId) => ({
     requestedSchoolId: schoolId || "all",
