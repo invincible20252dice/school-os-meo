@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/supabase-access", () => ({
+  resolveRequestAccess: vi.fn(async () => ({
+    isAuthenticated: true,
+    access: { role: "manager", status: "active", schoolIds: ["school-a"] },
+  })),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     schoolSetting: { findFirst: vi.fn() },
@@ -40,6 +47,7 @@ describe("POST /api/test/trigger-review", () => {
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
         body: JSON.stringify({
+          schoolId: "school-a",
           lineChannelAccessToken: "line-token",
           lineDestinationId: "line-group",
         }),
@@ -71,7 +79,7 @@ describe("POST /api/test/trigger-review", () => {
     const response = await POST(
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ schoolId: "school-a" }),
       }),
     );
     const body = await response.json();
@@ -105,6 +113,7 @@ describe("POST /api/test/trigger-review", () => {
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
         body: JSON.stringify({
+          schoolId: "school-a",
           lineChannelAccessToken: "invalid-token",
           lineDestinationId: "line-group",
         }),
@@ -137,6 +146,7 @@ describe("POST /api/test/trigger-review", () => {
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
         body: JSON.stringify({
+          schoolId: "school-a",
           lineChannelAccessToken: "line-token",
           lineDestinationId: "line-group",
         }),
@@ -176,6 +186,7 @@ describe("POST /api/test/trigger-review", () => {
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
         body: JSON.stringify({
+          schoolId: "school-a",
           schoolName: "青葉ゼミナール 駅前校",
           rating: 4,
           reviewText: "面談が丁寧でした。",
@@ -217,6 +228,7 @@ describe("POST /api/test/trigger-review", () => {
       new Request("http://localhost/api/test/trigger-review", {
         method: "POST",
         body: JSON.stringify({
+          schoolId: "school-a",
           lineChannelAccessToken: "LINE_CHANNEL_TOKEN_********",
           lineDestinationId: "C****************",
         }),

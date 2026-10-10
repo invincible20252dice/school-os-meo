@@ -824,6 +824,7 @@ export default function SettingsPage({
                 />
               </label>
               <TestReviewNotificationButton
+                schoolId={getActiveSchoolId()}
                 compact
                 lineChannelAccessToken={setting.lineChannelAccessToken}
                 lineDestinationId={setting.lineDestinationId}

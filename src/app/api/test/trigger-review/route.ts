@@ -1,3 +1,7 @@
+import { canAccessSchool } from "@/lib/auth-access";
+import { isApprovedAccess } from "@/lib/access-control";
+import { resolveRequestAccess } from "@/lib/supabase-access";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildFallbackGbpReply } from "@/lib/gbp-webhook";
@@ -149,7 +153,33 @@ async function runLocalFallback(body: TriggerReviewInput) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as TriggerReviewInput;
+  let body: TriggerReviewInput;
+
+  // Keep authentication failures outside the legacy notification fallback.
+  try {
+    const access = await resolveRequestAccess(request, new URL(request.url), undefined, {
+      requireActiveProfile: true,
+    });
+    if (!access.isAuthenticated) {
+      return NextResponse.json({ ok: false, message: "ログインしてください。" }, { status: 401 });
+    }
+    if (!isApprovedAccess(access.access)) {
+      return NextResponse.json({ ok: false, message: "アカウント承認後に通知をテストできます。" }, { status: 403 });
+    }
+    const input = await request.json().catch(() => null);
+    const schoolId = typeof input?.schoolId === "string" ? input.schoolId.trim() : "";
+    if (!schoolId || schoolId === "all") {
+      return NextResponse.json({ ok: false, message: "通知をテストする校舎を選択してください。" }, { status: 400 });
+    }
+    if (!canAccessSchool(access.access, schoolId)) {
+      return NextResponse.json({ ok: false, message: "この校舎の通知はテストできません。" }, { status: 403 });
+    }
+    body = { ...input, schoolId };
+  } catch (error) {
+    const status = error instanceof RequestAuthenticationError ? 401 : 500;
+    if (status === 500) console.error("Notification test access check failed.");
+    return NextResponse.json({ ok: false, message: status === 401 ? "ログインしてください。" : "通知の実行権限を確認できませんでした。" }, { status });
+  }
 
   try {
     const result = await triggerReviewTest({
