@@ -1,3 +1,4 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
 import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
@@ -134,7 +135,8 @@ export async function POST(request: Request) {
         updatedAt: setting.updatedAt.toISOString().slice(0, 16).replace("T", " "),
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
     console.error("GBP location persistence failed");
     return NextResponse.json(
       { message: "GBP店舗の紐付けを保存できませんでした。" },

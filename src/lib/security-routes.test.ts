@@ -40,3 +40,13 @@ it.each(["manager","admin"])("%s alert updates are atomically school-scoped; ano
  expect((await alertsPatch(req("PATCH"))).status).toBe(404);
  expect(prisma.churnAlert.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:"alert-b",schoolId:"school-a"}}));
 });
+
+it.each(routes)("%s returns 401 for an expired session before business queries", async (_, handler, method) => {
+ const { RequestAuthenticationError } = await import("./request-authentication-error");
+ vi.mocked(resolveRequestAccess).mockRejectedValue(new RequestAuthenticationError());
+ const response = await handler(req(method));
+ expect(response.status).toBe(401);
+ expect(JSON.stringify(await response.json())).not.toMatch(/JWT|PRIVATE|token/);
+ for (const model of [prisma.school, prisma.instagramSetting, prisma.schoolSetting, prisma.googleAccount, prisma.churnAlert])
+  for (const fn of Object.values(model)) expect(fn).not.toHaveBeenCalled();
+});

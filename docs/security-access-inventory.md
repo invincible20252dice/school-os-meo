@@ -45,7 +45,7 @@ Proposal is separate from TargetDistrict: revoke table/column UPDATE from anon/a
 - Change target: public.TargetDistrict only, 3 existing rows. No row changes.
 - Access path: dashboard/keywords/competitors/page.tsx bearer request -> /api/dashboard/keywords/districts -> resolveRequestAccess / approval / canAccessSchool -> school-scoped Prisma. No external publish action.
 - Candidate: scripts/sql/security/target-district-revoke.sql removes anon/authenticated direct privileges, preserving postgres/service_role and leaving RLS/policies unchanged.
-- Impact: browser direct requests should fail, server operations should remain available only if runtime DB role retains privileges. DATABASE_URL runtime identity is NOT proven. pg_stat_activity lists authenticator/postgres/supabase_admin/supabase_auth_admin, which cannot establish the app connection identity. Do not fetch credentials to infer it. External/old implementation dependencies remain unknown. These are production blockers.
+- Impact: browser direct requests should fail, server operations should remain available only if runtime DB role retains privileges. The observed production district request is confirmed as postgres by correlated error metadata (details below). Successful CRUD is blocked by legacy updatedAt schema drift; external/old implementation dependencies remain unknown. Do not fetch credentials. These remain production blockers.
 - Rollback: scripts/sql/security/target-district-restore.sql restores the audited two role grants for this table only; recheck latest ACL before execution. No schema rollback/data deletion.
 
 ## Verification and fixture gate
@@ -61,3 +61,38 @@ Never use Google performance GET as read-only (may UPSERT GbpMetric), profile re
 Parent must present the five items before any production permission change. One small change -> real-screen verification -> complete regression -> next approved scope. No blanket 27-table operation. Keep remaining tables unchanged.
 
 Reference checked: [Supabase column privileges](https://supabase.com/docs/guides/database/postgres/column-level-security) explains that broad table UPDATE must be revoked before column UPDATE can restrict authorization fields. Existing SELECT is preserved.
+
+## Pilot preparation update (2026-10-10; no production changes)
+PR #8 follow-up handles expired/rejected sessions as safe 401 responses, preserving
+403 for pending/cross-school access and 500 for auth-service failures. District GET
+uses an explicit UI-field select: production lacks Prisma's updatedAt column,
+confirmed by metadata and the scoped failing-request log. Write operations remain
+blocked pending a separately approved additive schema reconciliation; do not apply
+the one-table GRANT pilot before normal read/write prerequisites pass.
+
+Minimal fixture proposal supersedes the broader first-pilot fixture list above:
+reuse archived synthetic schools codex-google-lifecycle-20261009-a/b only after
+explicit approval; add one district each and use existing admin plus one dedicated
+manager assigned only A. The two nominated Google identities already hold active
+business roles (manager on a real school; admin), so neither may be repurposed.
+No account, invitation, session or fixture has been created/reactivated.
+
+Cleanup must not DELETE: keep the two synthetic districts, restore schools to
+ARCHIVED, and suspend/unassign the dedicated manager. This removes normal selector
+visibility; the district API has no ACTIVE-school check, so explicit admin access
+remains possible. Archive is not a database isolation boundary. No current global
+TargetDistrict aggregate consumer exists; external clients remain unconfirmed.
+
+Subsequent correlated log evidence resolves the observed runtime role: controlled
+Chrome GET at 03:55:14 UTC -> PostgreSQL 03:55:17.940 UTC, TargetDistrict PARSE,
+SQLSTATE 42703, user postgres, application Supavisor. This proves that request's
+connection identity; successful CRUD after schema reconciliation is still untested.
+The newly designated test identity is an existing pending manager, no assignments.
+No new Auth user is needed. Activation/A-only assignment require fixture approval;
+cleanup restores pending/unassigned baseline, without account or data deletion.
+
+Legacy drift extends beyond updatedAt: aiMessage/createdAt are nullable and the
+school FK is absent; existing (schoolId,name) unique index is present. Read-only
+counts: 3 rows, zero duplicates, orphans or NULL aiMessage/createdAt. Preserve
+legacy competitor columns. Any additive reconciliation needs its own tested SQL
+and explicit approval; CREATE TABLE IF NOT EXISTS is insufficient.

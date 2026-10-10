@@ -1,3 +1,4 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
 import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
@@ -38,7 +39,7 @@ function toUpdatedAt(value?: Date | null) {
 function toErrorResponse(error: unknown, fallbackMessage: string) {
   const message = error instanceof Error ? error.message : "";
   const status =
-    message === "UNAUTHENTICATED"
+    error instanceof RequestAuthenticationError || message === "UNAUTHENTICATED"
       ? 401
       : message === "SCHOOL_REQUIRED"
       ? 400

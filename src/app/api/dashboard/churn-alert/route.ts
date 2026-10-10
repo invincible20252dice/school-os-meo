@@ -1,3 +1,4 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
 import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
@@ -98,6 +99,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログインしてください。" }, { status: 401 });
     console.error("[GET /api/dashboard/churn-alert Error]:", error);
 
     if (isMissingChurnAlertTableError(error)) {
@@ -156,6 +158,7 @@ export async function PATCH(request: Request) {
       item: alert,
     });
   } catch (error) {
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログインしてください。" }, { status: 401 });
     if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") return NextResponse.json({ success: false, error: "対象が見つかりません。" }, { status: 404 });
     console.error("Churn alert update failed");
     const message =
