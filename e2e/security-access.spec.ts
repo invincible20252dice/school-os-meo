@@ -1,4 +1,35 @@
 import { test, expect } from "./fixtures";
+
+test("LINE settings use authenticated school read and save across reload without sending notifications", async ({ page }, testInfo) => {
+  let destination = "synthetic-original-destination";
+  const calls: string[] = [];
+  const setting = () => ({ schoolId: "school-a", lineChannelAccessToken: "synthetic-local-token",
+    lineDestinationId: destination, lineNotifyEnabled: true, notifyOnNewReview: true, notifyOnLowRating: false });
+  await page.route("**/api/dashboard/settings/line?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(route.request().url()).searchParams.get("schoolId")).toBe("school-a");
+    calls.push("GET");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ school: { id: "school-a" }, setting: setting() }) });
+  });
+  await page.route("**/api/settings/school", async route => {
+    expect(route.request().method()).toBe("PATCH");
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(route.request().postDataJSON()).toMatchObject({ schoolId: "school-a", lineChannelAccessToken: "synthetic-local-token",
+      lineChannelAccessTokenTouched: false, lineDestinationIdTouched: true, lineDestinationId: "synthetic-updated-destination" });
+    destination = "synthetic-updated-destination";
+    calls.push("PATCH");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ school: { id: "school-a" }, setting: setting() }) });
+  });
+  await page.goto("/dashboard/settings/line?schoolId=school-a");
+  await expect(page.getByLabel("チャネルアクセストークン", { exact: true })).toHaveValue("synthetic-local-token");
+  await page.getByLabel("送信先グループID / ユーザーID", { exact: true }).fill("synthetic-updated-destination");
+  await page.getByRole("button", { name: "設定を保存", exact: true }).click();
+  await expect(page.getByText("校舎設定を保存しました。", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("送信先グループID / ユーザーID", { exact: true })).toHaveValue(destination);
+  expect(calls).toEqual(["GET", "PATCH", "GET"]);
+  await page.screenshot({ path: testInfo.outputPath("school-line-settings-reload.png"), fullPage: true });
+});
 test("alert UI sends bearer and selected school for read/update without provider calls", async({page},testInfo)=>{
  let status="OPEN";
  const requests:Array<{method:string;school:string|null}>=[];

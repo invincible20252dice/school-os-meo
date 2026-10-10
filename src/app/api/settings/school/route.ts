@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { normalizeGoogleReviewUrl } from "@/lib/google-review-url";
 import { buildEmptySchoolSetting, type NullableSchoolSettingState } from "@/lib/settings";
@@ -120,7 +122,7 @@ async function findSchoolSetting(schoolId: string): Promise<SchoolSettingRow | n
       throw error;
     }
 
-    console.error("SchoolSetting column lookup failed. Retrying without new optional columns.", error);
+    console.error("SchoolSetting column lookup failed. Retrying without new optional columns.");
     const legacySetting = await prisma.schoolSetting.findUnique({
       where: { schoolId },
       select: legacySchoolSettingSelect,
@@ -206,9 +208,11 @@ async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) 
   const requestedSchoolId =
     normalizeSchoolId(bodySchoolId) ||
     normalizeSchoolId(url.searchParams.get("schoolId"));
-  const accessResult = await resolveRequestAccess(request, url);
+  const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+  if (!accessResult.isAuthenticated) throw new RequestAuthenticationError();
+
+  if (!isApprovedAccess(accessResult.access)) {
     throw new Error("FORBIDDEN_PENDING");
   }
 
@@ -222,7 +226,8 @@ async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) 
     throw new Error("SCHOOL_REQUIRED");
   }
 
-  if (requestedSchoolId && schoolId !== requestedSchoolId) {
+  if (!canAccessSchool(accessResult.access, schoolId) ||
+      (requestedSchoolId && schoolId !== requestedSchoolId)) {
     throw new Error("FORBIDDEN_SCHOOL");
   }
 
@@ -244,7 +249,9 @@ async function resolveWritableSchoolId(request: Request, bodySchoolId?: string) 
 function toErrorResponse(error: unknown, fallbackMessage: string) {
   const message = error instanceof Error ? error.message : "";
   const status =
-    message === "SCHOOL_REQUIRED"
+    error instanceof RequestAuthenticationError
+      ? 401
+      : message === "SCHOOL_REQUIRED"
       ? 400
       : message === "FORBIDDEN_PENDING" || message === "FORBIDDEN_SCHOOL"
         ? 403
@@ -255,13 +262,15 @@ function toErrorResponse(error: unknown, fallbackMessage: string) {
           : 500;
 
   if (status === 500) {
-    console.error(fallbackMessage, error);
+    console.error(fallbackMessage);
   }
 
   return NextResponse.json(
     {
       message:
-        status === 400
+        status === 401
+          ? "ログインしてください。"
+          : status === 400
           ? "設定を保存する校舎を選択してください。"
           : status === 403
             ? "この校舎の設定は変更できません。"
@@ -356,6 +365,7 @@ export async function PATCH(request: Request) {
     const lineNotifyEnabled = body.lineNotifyEnabled ?? body.enabled ?? true;
 
     const setting = await prisma.schoolSetting.upsert({
+      select: schoolSettingSelect,
       where: { schoolId: school.id },
       create: {
         schoolId: school.id,
