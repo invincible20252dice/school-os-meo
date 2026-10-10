@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
@@ -16,6 +18,15 @@ type SchoolSettingLineFields = {
 };
 
 type RawLineRecord = Record<string, unknown>;
+
+const lineSettingSelect = {
+  lineNotifyEnabled: true,
+  lineChannelAccessToken: true,
+  lineDestinationId: true,
+  notifyOnNewReview: true,
+  notifyOnLowRating: true,
+  updatedAt: true,
+};
 
 type LineSettingSources = {
   schoolSetting: SchoolSettingLineFields | null;
@@ -212,7 +223,7 @@ async function findRawLineRecord(tableName: string, schoolId: string) {
 
     return rows[0] || null;
   } catch (error) {
-    console.error(`[LINE settings raw lookup skipped: ${tableName}]`, error);
+    console.error(`[LINE settings raw lookup skipped: ${tableName}]`);
 
     return null;
   }
@@ -256,7 +267,7 @@ async function findLatestRawLineRecord(tableName: string) {
 
     return rows[0] || null;
   } catch (error) {
-    console.error(`[LINE settings fallback lookup skipped: ${tableName}]`, error);
+    console.error(`[LINE settings fallback lookup skipped: ${tableName}]`);
 
     return null;
   }
@@ -343,6 +354,7 @@ async function syncLineSettingToSchool(
   setting: SerializedLineSetting,
 ) {
   await prisma.schoolSetting.upsert({
+    select: { id: true },
     where: { schoolId },
     create: {
       schoolId,
@@ -367,9 +379,11 @@ async function syncLineSettingToSchool(
 async function resolveReadableSchool(request: Request) {
   const url = new URL(request.url);
   const requestedSchoolId = normalizeSchoolId(url.searchParams.get("schoolId"));
-  const accessResult = await resolveRequestAccess(request, url);
+  const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+  if (!accessResult.isAuthenticated) throw new RequestAuthenticationError();
+
+  if (!isApprovedAccess(accessResult.access)) {
     throw new Error("FORBIDDEN_PENDING");
   }
 
@@ -383,7 +397,8 @@ async function resolveReadableSchool(request: Request) {
     throw new Error("SCHOOL_REQUIRED");
   }
 
-  if (requestedSchoolId && schoolId !== requestedSchoolId) {
+  if (!canAccessSchool(accessResult.access, schoolId) ||
+      (requestedSchoolId && schoolId !== requestedSchoolId)) {
     throw new Error("FORBIDDEN_SCHOOL");
   }
 
@@ -441,7 +456,9 @@ function buildLineSettingResponse({
 function toErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const status =
-    message === "SCHOOL_REQUIRED"
+    error instanceof RequestAuthenticationError
+      ? 401
+      : message === "SCHOOL_REQUIRED"
       ? 400
       : message === "FORBIDDEN_PENDING" || message === "FORBIDDEN_SCHOOL"
         ? 403
@@ -450,14 +467,16 @@ function toErrorResponse(error: unknown) {
           : 500;
 
   if (status === 500) {
-    console.error("LINE通知設定を取得できませんでした。", error);
+    console.error("LINE通知設定を取得できませんでした。");
   }
 
   return NextResponse.json(
     {
       success: false,
       message:
-        status === 400
+        status === 401
+          ? "ログインしてください。"
+          : status === 400
           ? "LINE通知設定を取得する校舎を選択してください。"
           : status === 403
             ? "この校舎のLINE通知設定は表示できません。"
@@ -547,6 +566,7 @@ async function saveLineSetting(request: Request) {
     const lineNotifyEnabled = body.lineNotifyEnabled ?? body.enabled ??
       Boolean(lineChannelAccessToken && lineDestinationId);
     const saved = await prisma.schoolSetting.upsert({
+      select: lineSettingSelect,
       where: { schoolId: school.id },
       create: {
         schoolId: school.id,

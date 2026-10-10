@@ -5,7 +5,8 @@
       "codex/aio-linux-verification": false,
       "codex/aio-phase2": false,
       "codex/google-lead-measurement": false,
-      "codex/security-access-boundaries": false
+      "codex/security-access-boundaries": false,
+      "codex/school-line-settings-access": false
     }
   }
 }
