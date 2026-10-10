@@ -14,7 +14,7 @@ function req(method = "GET", query = "schoolId=s1", body?: unknown) { return new
 it("lists only authorized school records", async () => {
   vi.mocked(prisma.targetDistrict.findMany).mockResolvedValue([]);
   expect((await GET(req())).status).toBe(200);
-  expect(prisma.targetDistrict.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { schoolId: "s1" } }));
+  expect(prisma.targetDistrict.findMany).toHaveBeenCalledWith({ where: { schoolId: "s1" }, select: { id: true, name: true, focusPoint: true, aiMessage: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
 });
 it.each(["POST", "PATCH", "DELETE"])("scopes %s mutations", async method => {
   vi.mocked(prisma.targetDistrict.create).mockResolvedValue({ id: "d1" } as never);
@@ -46,4 +46,11 @@ it.each([new Error("secret"), new Prisma.PrismaClientKnownRequestError("duplicat
   const response = await POST(req("POST", "schoolId=s1", { name: "x" }));
   expect(response.status).toBe(error instanceof Prisma.PrismaClientKnownRequestError ? 409 : 500);
   expect(await response.text()).not.toContain("secret");
+});
+
+it.each([GET, POST, PATCH, DELETE])("rejects expired sessions without district reads or writes", async handler => {
+ const { RequestAuthenticationError } = await import("@/lib/request-authentication-error");
+ vi.mocked(resolveRequestAccess).mockRejectedValue(new RequestAuthenticationError());
+ expect((await handler(req())).status).toBe(401);
+ for (const method of Object.values(prisma.targetDistrict)) expect(method).not.toHaveBeenCalled();
 });

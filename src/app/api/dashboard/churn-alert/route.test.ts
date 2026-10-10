@@ -167,7 +167,7 @@ describe("/api/dashboard/churn-alert", () => {
     });
   });
 
-  it("uses the production default school when no effective school is selected", async () => {
+  it("refuses access when no effective school is selected", async () => {
     const access = await import("@/lib/supabase-access");
     vi.mocked(access.buildScopedSchoolFilter).mockReturnValueOnce({
       requestedSchoolId: "",
@@ -182,11 +182,8 @@ describe("/api/dashboard/churn-alert", () => {
       new Request("https://app.example.com/api/dashboard/churn-alert"),
     );
 
-    expect(response.status).toBe(200);
-    expect(prisma.churnAlert.findMany).toHaveBeenCalledWith({
-      where: { schoolId: "cms5tnzlr0001jt04qh0lluva" },
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    });
+    expect(response.status).toBe(400);
+    expect(prisma.churnAlert.findMany).not.toHaveBeenCalled();
   });
 
   it("treats missing ChurnAlert column errors as display-ready sample alerts", async () => {
@@ -264,7 +261,7 @@ describe("/api/dashboard/churn-alert", () => {
     const { PATCH } = await import("./route");
 
     const response = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ alertId: "alert-1", status: "IN_PROGRESS" }),
       }),
@@ -292,7 +289,7 @@ describe("/api/dashboard/churn-alert", () => {
     const { PATCH } = await import("./route");
 
     const response = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ alertId: "alert-1", status: "IN_PROGRESS" }),
       }),
@@ -310,7 +307,7 @@ describe("/api/dashboard/churn-alert", () => {
     );
     expect(body.item).toEqual(body.alert);
     expect(prisma.churnAlert.update).toHaveBeenCalledWith({
-      where: { id: "alert-1" },
+      where: { id: "alert-1", schoolId: "school-1" },
       data: { status: "IN_PROGRESS", resolvedAt: null },
     });
   });
@@ -320,7 +317,7 @@ describe("/api/dashboard/churn-alert", () => {
     const { PATCH } = await import("./route");
 
     const response = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ alertId: "alert-1", status: "RESOLVED" }),
       }),
@@ -335,13 +332,13 @@ describe("/api/dashboard/churn-alert", () => {
     const { PATCH } = await import("./route");
 
     const missingIdResponse = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ status: "OPEN" }),
       }),
     );
     const invalidStatusResponse = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ alertId: "alert-1", status: "DONE" }),
       }),
@@ -357,7 +354,7 @@ describe("/api/dashboard/churn-alert", () => {
     const { PATCH } = await import("./route");
 
     const response = await PATCH(
-      new Request("https://app.example.com/api/dashboard/churn-alert", {
+      new Request("https://app.example.com/api/dashboard/churn-alert?schoolId=school-1", {
         method: "PATCH",
         body: JSON.stringify({ alertId: "alert-1", status: "OPEN" }),
       }),

@@ -4,7 +4,8 @@
     "deploymentEnabled": {
       "codex/aio-linux-verification": false,
       "codex/aio-phase2": false,
-      "codex/google-lead-measurement": false
+      "codex/google-lead-measurement": false,
+      "codex/security-access-boundaries": false
     }
   }
 }

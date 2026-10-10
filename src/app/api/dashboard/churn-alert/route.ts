@@ -1,4 +1,6 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import {
   assertChurnAlertStatus,
@@ -42,14 +44,14 @@ function isMissingChurnAlertTableError(error: unknown) {
 
 async function resolveSchoolId(request: Request) {
   const url = new URL(request.url);
-  const accessResult = await resolveRequestAccess(request, url);
+  const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+  if (!accessResult.isAuthenticated || !isApprovedAccess(accessResult.access)) {
     return {
       accessResult,
       error: NextResponse.json(
         { success: false, error: "アカウント承認後に退塾防止アラートを確認できます。" },
-        { status: 403 },
+        { status: accessResult.isAuthenticated ? 403 : 401 },
       ),
       schoolId: "",
     };
@@ -60,11 +62,12 @@ async function resolveSchoolId(request: Request) {
     url.searchParams.get("schoolId"),
   );
 
-  return {
-    accessResult,
-    error: null,
-    schoolId: scopedSchool.effectiveSchoolId || scopedSchool.requestedSchoolId,
-  };
+  const schoolId = scopedSchool.effectiveSchoolId || "";
+  const requested = url.searchParams.get("schoolId");
+  if (!schoolId || !canAccessSchool(accessResult.access, schoolId) || (requested && requested !== schoolId)) {
+    return { accessResult, schoolId: "", error: NextResponse.json({ success: false, error: "校舎の操作権限を確認してください。" }, { status: schoolId ? 403 : 400 }) };
+  }
+  return { accessResult, error: null, schoolId };
 }
 
 export async function GET(request: Request) {
@@ -96,6 +99,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログインしてください。" }, { status: 401 });
     console.error("[GET /api/dashboard/churn-alert Error]:", error);
 
     if (isMissingChurnAlertTableError(error)) {
@@ -124,15 +128,8 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const url = new URL(request.url);
-    const accessResult = await resolveRequestAccess(request, url);
-
-    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
-      return NextResponse.json(
-        { success: false, error: "アカウント承認後に退塾防止アラートを更新できます。" },
-        { status: 403 },
-      );
-    }
+    const { error, schoolId } = await resolveSchoolId(request);
+    if (error) return error;
 
     const body = await request.json();
     const alertId = typeof body.alertId === "string" ? body.alertId.trim() : "";
@@ -150,7 +147,7 @@ export async function PATCH(request: Request) {
       resolvedAt: status === "RESOLVED" ? new Date() : null,
     };
     const updated = await prisma.churnAlert.update({
-      where: { id: alertId },
+      where: { id: alertId, schoolId },
       data: updateData,
     });
     const alert = normalizeChurnAlerts([updated as ChurnAlertSource])[0];
@@ -161,7 +158,9 @@ export async function PATCH(request: Request) {
       item: alert,
     });
   } catch (error) {
-    console.error("[PATCH /api/dashboard/churn-alert Error]:", error);
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログインしてください。" }, { status: 401 });
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") return NextResponse.json({ success: false, error: "対象が見つかりません。" }, { status: 404 });
+    console.error("Churn alert update failed");
     const message =
       error instanceof Error ? error.message : "退塾防止アラートを更新できませんでした。";
     const status = message.includes("ステータス") || message.includes("alertId") ? 400 : 500;

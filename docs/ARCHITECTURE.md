@@ -40,3 +40,12 @@ not a certification of deployed credentials, migrations or provider availability
   POST pins one school/keyword/server request ID; see aio-production-pilot.md.
 
 Do not activate the current sample-based cron as a substitute for real measurement.
+
+## Security hardening under review
+
+See [access inventory and staged permission gates](security-access-inventory.md).
+Instagram settings, GBP selection and churn alerts now require an authenticated
+active profile before business queries; alert updates bind ID and school. Secret
+responses are masked/allowlisted. Accepted invitations cannot reactivate stopped
+profiles. These feature-branch changes are not deployed. Production direct grants
+and profiles column permissions remain unchanged pending narrow approval gates.
