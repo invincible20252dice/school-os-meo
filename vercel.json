@@ -10,7 +10,9 @@
       "codex/google-settings-access": false,
       "codex/test-notification-auth": false,
       "codex/auth-stable-base": false,
-      "codex/auth-callback-origin": false
+      "codex/auth-callback-origin": false,
+      "codex/logout-session": false,
+      "codex/auth-logout-candidate": false
     }
   }
 }

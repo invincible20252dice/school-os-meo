@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LogoutButton } from "@/components/dashboard/AuthApprovalGate";
 import AuthAccessBadge from "@/components/dashboard/AuthAccessBadge";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "@/app/(dashboard)/layout.module.css";
@@ -148,10 +149,10 @@ export default function DashboardHeader() {
             <HeaderIcon type="settings" />
             <span>設定</span>
           </Link>
-          <Link href="/login" className={styles.logoutLink} aria-label="ログアウト">
+          <LogoutButton className={styles.logoutLink}>
             <HeaderIcon type="logout" />
             <span>ログアウト</span>
-          </Link>
+          </LogoutButton>
         </nav>
         <div className={styles.user}>
           <div>
