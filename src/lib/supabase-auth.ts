@@ -120,7 +120,7 @@ export async function startGoogleOAuth(
     "https://school-os-meo.vercel.app",
     "http://localhost:3030",
     "http://localhost:3031",
-  ].includes(origin)) {
+  ].includes(origin) && !await isVerifiedDeploymentOrigin(origin)) {
     throw new Error("このURLからはログインを開始できません。");
   }
   const redirectTo = getAuthCallbackUrl(origin);
@@ -141,6 +141,22 @@ export async function startGoogleOAuth(
   }
 
   return { redirectTo };
+}
+
+async function isVerifiedDeploymentOrigin(origin: string): Promise<boolean> {
+  if (typeof window === "undefined" || window.location.origin !== origin) return false;
+  try {
+    const response = await fetch("/api/auth/deployment-origin", {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      redirect: "error", signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return false;
+    const result: unknown = await response.json();
+    return typeof result === "object" && result !== null
+      && "origin" in result && result.origin === origin;
+  } catch {
+    return false;
+  }
 }
 
 export async function exchangeMagicLinkCode(

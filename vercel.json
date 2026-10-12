@@ -12,7 +12,8 @@
       "codex/auth-stable-base": false,
       "codex/auth-callback-origin": false,
       "codex/logout-session": false,
-      "codex/auth-logout-candidate": false
+      "codex/auth-logout-candidate": false,
+      "codex/exact-deployment-oauth": false
     }
   }
 }

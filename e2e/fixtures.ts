@@ -49,7 +49,7 @@ async function install(page: Page): Promise<FixtureState> {
       return route.abort();
     }
     if (url.origin !== origin) { state.unexpected.push(url.origin + url.pathname); return route.abort(); }
-    if (!url.pathname.startsWith("/api/")) return route.continue();
+    if (!url.pathname.startsWith("/api/") || url.pathname === "/api/auth/deployment-origin") return route.continue();
     const schoolId = url.searchParams.get("schoolId") || "school-a";
     state.calls.push({ path: url.pathname, method: request.method(), schoolId });
     if (url.pathname === "/api/auth/me") return json({ authenticated: true, approved: true, status: "active", role: "admin" });
