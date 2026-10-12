@@ -1,5 +1,6 @@
 "use client";
 
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useState } from "react";
 import styles from "./InstagramRealSyncButton.module.css";
 
@@ -26,6 +27,10 @@ export default function InstagramRealSyncButton({
     setMessage("");
 
     try {
+      const { data } = await createBrowserSupabaseClient().auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("ログインしてください。");
+
       const params = new URLSearchParams();
 
       if (schoolId) {
@@ -36,6 +41,7 @@ export default function InstagramRealSyncButton({
         `/api/instagram/sync${params.size ? `?${params.toString()}` : ""}`,
         {
           method: "POST",
+          headers: { authorization: `Bearer ${token}` },
         },
       );
       const body = (await response.json()) as {

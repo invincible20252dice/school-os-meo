@@ -49,3 +49,22 @@ test("manual GBP selection sends bearer and school without external sync",async(
  await expect(page.getByText("手動入力したGBP店舗IDを保存しました。",{exact:true})).toBeVisible();
  expect(saved).toBe(true);
 });
+
+for (const schoolId of ["school-b", "all"]) {
+  test(`manual Instagram sync sends bearer and scope ${schoolId} without provider calls`, async ({ page }, testInfo) => {
+    const calls: string[] = [];
+    await page.route("**/api/instagram/sync?**", async route => {
+      const request = route.request();
+      expect(request.method()).toBe("POST");
+      expect(request.headers().authorization).toBe("Bearer e2e-only-session");
+      expect(new URL(request.url()).searchParams.get("schoolId")).toBe(schoolId);
+      calls.push(request.method());
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, message: "合成同期完了（実投稿なし）", summary: { settings: schoolId === "all" ? 2 : 1, posted: 0 } }) });
+    });
+    await page.goto(`/dashboard/instagram-sync?schoolId=${schoolId}`);
+    await page.getByRole("button", { name: "実際のInstagramから投稿を取得してGBP連携を実行", exact: true }).click();
+    await expect(page.getByText(/合成同期完了（実投稿なし）/)).toBeVisible();
+    expect(calls).toEqual(["POST"]);
+    await page.screenshot({ path: testInfo.outputPath(`instagram-auth-${schoolId}.png`), fullPage: true });
+  });
+}
