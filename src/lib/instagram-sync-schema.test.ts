@@ -9,7 +9,7 @@ beforeAll(async () => {
     CREATE TABLE "School" (id text PRIMARY KEY, name text NOT NULL, "gbpLocationId" text);
     CREATE TABLE "InstagramSetting" (id text PRIMARY KEY, "schoolId" text UNIQUE,
       "instagramAccessToken" text, "instagramBusinessAccountId" text, "autoSyncEnabled" boolean,
-      "lastSyncedAt" timestamp);
+      "lastSyncedAt" timestamp, "updatedAt" timestamp NOT NULL);
     CREATE TABLE "SyncedPost" (id text PRIMARY KEY, "schoolId" text, "instagramMediaId" text,
       "gbpPostId" text, "instagramUrl" text, "gbpPostUrl" text, caption text, "formattedText" text,
       "syncedAt" timestamp DEFAULT CURRENT_TIMESTAMP, "createdAt" timestamp DEFAULT CURRENT_TIMESTAMP,
@@ -18,7 +18,7 @@ beforeAll(async () => {
     CREATE ROLE sync_role;
     GRANT SELECT ON "School", "InstagramSetting", "SyncedPost" TO sync_role;
     GRANT INSERT ON "SyncedPost" TO sync_role;
-    GRANT UPDATE ("lastSyncedAt") ON "InstagramSetting" TO sync_role;
+    GRANT UPDATE ("lastSyncedAt", "updatedAt") ON "InstagramSetting" TO sync_role;
   `);
 }, 10000);
 afterAll(async () => { await db.close(); });
@@ -30,9 +30,14 @@ async function ready() {
 it("accepts the complete schema under the least required column privileges", async () => {
   await db.exec("SET LOCAL ROLE sync_role"); expect(await ready()).toBe(true);
 });
+it("rejects a missing SyncedPost.createdAt default used by create", async () => {
+  await db.exec('ALTER TABLE "SyncedPost" ALTER COLUMN "createdAt" DROP DEFAULT');
+  expect(await ready()).toBe(false);
+});
 it.each([
   ["InstagramSetting", "id"], ["InstagramSetting", "schoolId"], ["InstagramSetting", "autoSyncEnabled"],
   ["InstagramSetting", "instagramAccessToken"], ["InstagramSetting", "instagramBusinessAccountId"], ["InstagramSetting", "lastSyncedAt"],
+  ["InstagramSetting", "updatedAt"],
   ["School", "id"], ["School", "name"], ["School", "gbpLocationId"],
   ["SyncedPost", "id"], ["SyncedPost", "schoolId"], ["SyncedPost", "instagramMediaId"],
   ["SyncedPost", "gbpPostId"], ["SyncedPost", "instagramUrl"], ["SyncedPost", "gbpPostUrl"],
@@ -52,9 +57,14 @@ it("rejects a missing table", async () => { await db.exec('DROP TABLE "SyncedPos
 it("rejects incompatible column types", async () => {
   await db.exec('ALTER TABLE "InstagramSetting" ALTER COLUMN "autoSyncEnabled" TYPE text'); expect(await ready()).toBe(false);
 });
+it("rejects an incompatible implicit InstagramSetting.updatedAt write type", async () => {
+  await db.exec('ALTER TABLE "InstagramSetting" ALTER COLUMN "updatedAt" TYPE text');
+  expect(await ready()).toBe(false);
+});
 it.each([
   'REVOKE INSERT ON "SyncedPost" FROM sync_role',
   'REVOKE UPDATE ("lastSyncedAt") ON "InstagramSetting" FROM sync_role',
+  'REVOKE UPDATE ("updatedAt") ON "InstagramSetting" FROM sync_role',
   'REVOKE SELECT ON "School" FROM sync_role',
 ])("rejects absent runtime-role privileges: %s", async sql => {
   await db.exec(sql + '; SET LOCAL ROLE sync_role'); expect(await ready()).toBe(false);

@@ -10,7 +10,9 @@ const columns = [
   ...["id", "schoolId", "instagramAccessToken", "instagramBusinessAccountId"].map(column =>
     ({ table: "InstagramSetting", column, types: ["text"], read: true, insert: false, update: false })),
   { table: "InstagramSetting", column: "autoSyncEnabled", types: ["bool"], read: true, insert: false, update: false },
-  { table: "InstagramSetting", column: "lastSyncedAt", types: ["timestamp", "timestamptz"], read: false, insert: false, update: true },
+  // Prisma implicitly writes @updatedAt alongside the explicit lastSyncedAt update.
+  ...["lastSyncedAt", "updatedAt"].map(column =>
+    ({ table: "InstagramSetting", column, types: ["timestamp", "timestamptz"], read: false, insert: false, update: true })),
   ...["id", "name", "gbpLocationId"].map(column =>
     ({ table: "School", column, types: ["text"], read: true, insert: false, update: false })),
   ...["id", "schoolId", "instagramMediaId", "gbpPostId", "instagramUrl", "gbpPostUrl", "caption", "formattedText"].map(column =>
@@ -30,6 +32,8 @@ export const instagramSyncSchemaQuery = Prisma.sql`
   ), checked AS (
     SELECT r.*, c.oid, a.attnum, t.typname,
       a.attnum IS NOT NULL AND t.typname = ANY(r.types)
+      -- create omits createdAt, whose Prisma schema declares a database now() default.
+      AND (r."table" <> 'SyncedPost' OR r."column" <> 'createdAt' OR a.atthasdef)
       AND NOT row_security_active(c.oid)
       AND (NOT r.read OR has_column_privilege(current_user, c.oid, a.attnum, 'SELECT'))
       AND (NOT r.insert OR has_column_privilege(current_user, c.oid, a.attnum, 'INSERT'))
