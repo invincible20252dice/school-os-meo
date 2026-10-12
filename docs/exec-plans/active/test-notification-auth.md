@@ -59,3 +59,12 @@ bearer, selected school and existing unsaved LINE values. Record failures/result
 - Implementation/local verification complete. Next: feature push/draft PR and
   exact-head CI (record in PR/evidence); production review and approval remain
   separate. No product-policy decision is required for this bounded guard.
+# Approved cumulative release — 2026-10-12
+User authorized sequential #9 → #10 → #11 → #12 production release. #9/#10 now
+main c1830f06b42f761c21c6c2a7d0ba1e1e707d80d1, READY deployment
+dpl_BQ5c8S5779pmEpQprkbfcVqM1vs3 / app.jukumeo.com; safe smoke passed.
+Integrate that exact main, retaining all Google/LINE/notification E2E and every
+disabled feature Preview entry. No new notification application changes. Run
+full cumulative verification and exact-head/merge CI before release. Production
+smoke must not click send or use customer records; provider effects remain mocked.
+Previous stable deployment above is rollback target. No DB/secret/data changes.

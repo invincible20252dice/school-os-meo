@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
@@ -16,6 +18,15 @@ type SchoolSettingLineFields = {
 };
 
 type RawLineRecord = Record<string, unknown>;
+
+const lineSettingSelect = {
+  lineNotifyEnabled: true,
+  lineChannelAccessToken: true,
+  lineDestinationId: true,
+  notifyOnNewReview: true,
+  notifyOnLowRating: true,
+  updatedAt: true,
+};
 
 type LineSettingSources = {
   schoolSetting: SchoolSettingLineFields | null;
@@ -212,51 +223,7 @@ async function findRawLineRecord(tableName: string, schoolId: string) {
 
     return rows[0] || null;
   } catch (error) {
-    console.error(`[LINE settings raw lookup skipped: ${tableName}]`, error);
-
-    return null;
-  }
-}
-
-async function findLatestRawLineRecord(tableName: string) {
-  try {
-    const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
-      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
-      tableName,
-    );
-    const columnNames = columns.map((column) => column.column_name);
-    const tokenColumns = lineTokenKeys.filter((key) => columnNames.includes(key));
-
-    if (!tokenColumns.length) {
-      return null;
-    }
-
-    const destinationColumns = lineDestinationKeys.filter((key) =>
-      columnNames.includes(key),
-    );
-    const tokenCondition = tokenColumns
-      .map((column) => `NULLIF(${quoteIdentifier(column)}, '') IS NOT NULL`)
-      .join(" OR ");
-    const destinationCondition = destinationColumns.length
-      ? ` AND (${destinationColumns
-          .map((column) => `NULLIF(${quoteIdentifier(column)}, '') IS NOT NULL`)
-          .join(" OR ")})`
-      : "";
-    const orderColumn = columnNames.includes("updatedAt")
-      ? "updatedAt"
-      : columnNames.includes("updated_at")
-        ? "updated_at"
-        : "";
-    const orderClause = orderColumn
-      ? ` ORDER BY ${quoteIdentifier(orderColumn)} DESC NULLS LAST`
-      : "";
-    const rows = await prisma.$queryRawUnsafe<RawLineRecord[]>(
-      `SELECT * FROM ${quoteIdentifier(tableName)} WHERE (${tokenCondition})${destinationCondition}${orderClause} LIMIT 1`,
-    );
-
-    return rows[0] || null;
-  } catch (error) {
-    console.error(`[LINE settings fallback lookup skipped: ${tableName}]`, error);
+    console.error(`[LINE settings raw lookup skipped: ${tableName}]`);
 
     return null;
   }
@@ -289,87 +256,14 @@ async function findLineSettingSources(schoolId: string): Promise<LineSettingSour
   };
 }
 
-async function findFallbackLineSettingSources(): Promise<LineSettingSources> {
-  const [
-    schoolSetting,
-    rawSchoolSetting,
-    lineSetting,
-    lineSettings,
-    lineSettingSnake,
-    setting,
-    settings,
-  ] = await Promise.all([
-    prisma.schoolSetting.findFirst({
-      where: {
-        lineChannelAccessToken: {
-          not: null,
-        },
-        lineDestinationId: {
-          not: null,
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        lineNotifyEnabled: true,
-        lineChannelAccessToken: true,
-        lineDestinationId: true,
-        notifyOnNewReview: true,
-        notifyOnLowRating: true,
-        updatedAt: true,
-      },
-    }),
-    findLatestRawLineRecord("SchoolSetting"),
-    findLatestRawLineRecord("LineSetting"),
-    findLatestRawLineRecord("line_settings"),
-    findLatestRawLineRecord("line_setting"),
-    findLatestRawLineRecord("Setting"),
-    findLatestRawLineRecord("settings"),
-  ]);
-
-  return {
-    schoolSetting,
-    rawSchoolSetting,
-    rawLineSetting:
-      lineSetting || lineSettings || lineSettingSnake || setting || settings,
-  };
-}
-
-function hasCompleteLineCredential(setting: SerializedLineSetting) {
-  return Boolean(setting.channelAccessToken && setting.lineUserId);
-}
-
-async function syncLineSettingToSchool(
-  schoolId: string,
-  setting: SerializedLineSetting,
-) {
-  await prisma.schoolSetting.upsert({
-    where: { schoolId },
-    create: {
-      schoolId,
-      lineNotifyEnabled: setting.lineNotifyEnabled,
-      lineChannelAccessToken: setting.channelAccessToken,
-      lineDestinationId: setting.lineUserId,
-      notifyOnNewReview: setting.notifyOnNewReview,
-      notifyOnLowRating: setting.notifyOnLowRating,
-    },
-    update: {
-      lineNotifyEnabled: setting.lineNotifyEnabled,
-      lineChannelAccessToken: setting.channelAccessToken,
-      lineDestinationId: setting.lineUserId,
-      notifyOnNewReview: setting.notifyOnNewReview,
-      notifyOnLowRating: setting.notifyOnLowRating,
-    },
-  });
-
-  return true;
-}
-
 async function resolveReadableSchool(request: Request) {
   const url = new URL(request.url);
   const requestedSchoolId = normalizeSchoolId(url.searchParams.get("schoolId"));
-  const accessResult = await resolveRequestAccess(request, url);
+  const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-  if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+  if (!accessResult.isAuthenticated) throw new RequestAuthenticationError();
+
+  if (!isApprovedAccess(accessResult.access)) {
     throw new Error("FORBIDDEN_PENDING");
   }
 
@@ -383,7 +277,8 @@ async function resolveReadableSchool(request: Request) {
     throw new Error("SCHOOL_REQUIRED");
   }
 
-  if (requestedSchoolId && schoolId !== requestedSchoolId) {
+  if (!canAccessSchool(accessResult.access, schoolId) ||
+      (requestedSchoolId && schoolId !== requestedSchoolId)) {
     throw new Error("FORBIDDEN_SCHOOL");
   }
 
@@ -441,7 +336,9 @@ function buildLineSettingResponse({
 function toErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const status =
-    message === "SCHOOL_REQUIRED"
+    error instanceof RequestAuthenticationError
+      ? 401
+      : message === "SCHOOL_REQUIRED"
       ? 400
       : message === "FORBIDDEN_PENDING" || message === "FORBIDDEN_SCHOOL"
         ? 403
@@ -450,14 +347,16 @@ function toErrorResponse(error: unknown) {
           : 500;
 
   if (status === 500) {
-    console.error("LINE通知設定を取得できませんでした。", error);
+    console.error("LINE通知設定を取得できませんでした。");
   }
 
   return NextResponse.json(
     {
       success: false,
       message:
-        status === 400
+        status === 401
+          ? "ログインしてください。"
+          : status === 400
           ? "LINE通知設定を取得する校舎を選択してください。"
           : status === 403
             ? "この校舎のLINE通知設定は表示できません。"
@@ -473,33 +372,14 @@ export async function GET(request: Request) {
   try {
     const { school, access } = await resolveReadableSchool(request);
     const sources = await findLineSettingSources(school.id);
-    let lineSetting = serializeLineSetting({
+    const lineSetting = serializeLineSetting({
       schoolId: school.id,
       sources,
     });
-    let syncedFromFallback = false;
-
-    if (!hasCompleteLineCredential(lineSetting)) {
-      const fallbackSources = await findFallbackLineSettingSources();
-      const fallbackLineSetting = serializeLineSetting({
-        schoolId: school.id,
-        sources: fallbackSources,
-      });
-
-      if (hasCompleteLineCredential(fallbackLineSetting)) {
-        syncedFromFallback = await syncLineSettingToSchool(
-          school.id,
-          fallbackLineSetting,
-        );
-        lineSetting = fallbackLineSetting;
-      }
-    }
-
     return buildLineSettingResponse({
       school,
       access,
       lineSetting,
-      syncedFromFallback,
     });
   } catch (error) {
     return toErrorResponse(error);
@@ -547,6 +427,7 @@ async function saveLineSetting(request: Request) {
     const lineNotifyEnabled = body.lineNotifyEnabled ?? body.enabled ??
       Boolean(lineChannelAccessToken && lineDestinationId);
     const saved = await prisma.schoolSetting.upsert({
+      select: lineSettingSelect,
       where: { schoolId: school.id },
       create: {
         schoolId: school.id,

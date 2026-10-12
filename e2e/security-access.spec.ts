@@ -1,4 +1,35 @@
 import { test, expect } from "./fixtures";
+
+test("LINE settings use authenticated school read and save across reload without sending notifications", async ({ page }, testInfo) => {
+  let destination = "synthetic-original-destination";
+  const calls: string[] = [];
+  const setting = () => ({ schoolId: "school-a", lineChannelAccessToken: "synthetic-local-token",
+    lineDestinationId: destination, lineNotifyEnabled: true, notifyOnNewReview: true, notifyOnLowRating: false });
+  await page.route("**/api/dashboard/settings/line?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(route.request().url()).searchParams.get("schoolId")).toBe("school-a");
+    calls.push("GET");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ school: { id: "school-a" }, setting: setting() }) });
+  });
+  await page.route("**/api/settings/school", async route => {
+    expect(route.request().method()).toBe("PATCH");
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(route.request().postDataJSON()).toMatchObject({ schoolId: "school-a", lineChannelAccessToken: "synthetic-local-token",
+      lineChannelAccessTokenTouched: false, lineDestinationIdTouched: true, lineDestinationId: "synthetic-updated-destination" });
+    destination = "synthetic-updated-destination";
+    calls.push("PATCH");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ school: { id: "school-a" }, setting: setting() }) });
+  });
+  await page.goto("/dashboard/settings/line?schoolId=school-a");
+  await expect(page.getByLabel("チャネルアクセストークン", { exact: true })).toHaveValue("synthetic-local-token");
+  await page.getByLabel("送信先グループID / ユーザーID", { exact: true }).fill("synthetic-updated-destination");
+  await page.getByRole("button", { name: "設定を保存", exact: true }).click();
+  await expect(page.getByText("校舎設定を保存しました。", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("送信先グループID / ユーザーID", { exact: true })).toHaveValue(destination);
+  expect(calls).toEqual(["GET", "PATCH", "GET"]);
+  await page.screenshot({ path: testInfo.outputPath("school-line-settings-reload.png"), fullPage: true });
+});
 test("alert UI sends bearer and selected school for read/update without provider calls", async({page},testInfo)=>{
  let status="OPEN";
  const requests:Array<{method:string;school:string|null}>=[];
@@ -48,6 +79,49 @@ test("manual GBP selection sends bearer and school without external sync",async(
  await page.getByRole("button",{name:"手動入力した店舗IDを保存",exact:true}).click();
  await expect(page.getByText("手動入力したGBP店舗IDを保存しました。",{exact:true})).toBeVisible();
  expect(saved).toBe(true);
+});
+
+test("Google settings send bearer for selection save and preserve the masked result on reload", async ({ page }, testInfo) => {
+  let location = "";
+  const methods: string[] = [];
+  await page.route("**/api/settings/google?**", async route => {
+    const request = route.request();
+    expect(request.headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(request.url()).searchParams.get("schoolId")).toBe("school-a");
+    methods.push(request.method());
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      school: { id: "school-a", name: "検証用A校" },
+      setting: { schoolId: "school-a", googleConnected: true, googleAccountId: "fixture@example.invalid",
+        googleRefreshToken: "********", selectedGbpLocationId: location },
+    }) });
+  });
+  await page.route("**/api/google/gbp-locations?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ locations: [{
+      name: "locations/fixture-123", title: "検証用A店舗", accountName: "accounts/fixture",
+      accountDisplayName: "検証用アカウント", address: "検証用住所",
+    }] }) });
+  });
+  await page.route("**/api/settings/google", async route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(route.request().postDataJSON()).toEqual({ schoolId: "school-a", accountName: "accounts/fixture", locationName: "locations/fixture-123" });
+    methods.push("POST");
+    location = "locations/fixture-123";
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true,
+      setting: { schoolId: "school-a", googleConnected: true, googleAccountId: "fixture@example.invalid",
+        googleRefreshToken: "********", selectedGbpLocationId: location },
+    }) });
+  });
+  await page.goto("/dashboard/settings/google?schoolId=school-a");
+  await expect(page.getByText("fixture@example.invalid", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "GBP店舗一覧を取得", exact: true }).click();
+  await page.getByRole("button", { name: "選択したGBP店舗を保存", exact: true }).click();
+  await expect(page.getByText("GBP店舗の紐付けを保存しました。", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(location, { exact: true })).toBeVisible();
+  expect(methods).toEqual(["GET", "POST", "GET"]);
+  await page.screenshot({ path: testInfo.outputPath("google-settings-save-reload.png"), fullPage: true });
 });
 
 test("notification test sends bearer and selected school with unsaved input, using only mocks", async ({ page }, testInfo) => {
