@@ -1,5 +1,33 @@
 # Instagram manual sync authorization
 
+## Approved production safety scope — 2026-10-12
+User approved staged #9–#12 release, including fail-closed cron and bounded SSR
+preview safety fixes. Main now 25f39b138684dd67c652d7fba345fb6c9cc5c29f (#9–#11).
+Production READY/alias and safe unauthenticated smoke confirmed for #11; rollback
+target dpl_48Erde1hQPKvorWUmgciC7CY9ZH1. Live positive role checks remain pending
+existing test-admin login; mocks are not counted as live authorization evidence.
+
+Cron missing/blank secret must reject before service calls; configured bearer
+normal behavior remains. No secret inspection/change. SSR currently queries DB
+before authentication, and mock formatter can call configured OpenAI. Move its
+school reads to an active-profile, explicit-school authorized read-only endpoint;
+render only shell before browser bearer authentication. Reuse existing auth/role
+helpers, keep preview layout/manual-sync behavior, and use pure local formatter.
+No broad auth redesign, schema/data changes, provider effects or new billing.
+Add denial/ownership/zero-provider tests and browser fetch/error/selection coverage.
+Preserve all accumulated E2E and Preview-disabled branches. Full cumulative verify
+and exact checkout CI required before main merge; production smoke never syncs.
+
+Validation: cron/mock safety red 3 failed/6 passed; SSR unauthorized-read regression
+red 1 failed. After fixes, safety/preview API/SSR 33 tests and client 4 tests passed.
+Full cumulative codex:verify passed: 173 files / 2085 tests, coverage 99.25%
+lines/statements, 97.55% branches, 99.77% functions, typecheck, lint (existing six
+warnings), plain build and 52 desktop/mobile E2E (40.6s). Inspected desktop 200
+preview and mobile 403 screenshots. No real provider or DB access. Explicit all
+scope still works for authorized admin manual sync; preview requires one school.
+Parent requires independent review of this updated head before merge, in addition
+to CI. This is a review gate, not a new production authorization request.
+
 ## Objective / scope
 Close unauthenticated POST /api/instagram/sync before any business query or
 Instagram/AI/GBP call. Reuse active stored-profile authentication, approval and

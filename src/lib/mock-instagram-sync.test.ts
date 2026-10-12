@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildMockInstagramSyncPreview } from "./mock-instagram-sync";
 
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe("mock-instagram-sync", () => {
+  it("never invokes AI or a provider even with an API key configured", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-not-a-key");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ output_text: "external response" })));
+    const preview = await buildMockInstagramSyncPreview();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(preview.formattedText).not.toBe("external response");
+  });
   it("shows the Instagram to AI rewrite to GBP post flow without side effects", async () => {
     const preview = await buildMockInstagramSyncPreview();
 

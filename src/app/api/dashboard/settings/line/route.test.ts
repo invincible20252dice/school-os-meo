@@ -58,6 +58,7 @@ vi.mock("@/lib/prisma", () => ({
 describe("/api/dashboard/settings/line", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    rawQuery.mockReset();
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([]);
     vi.mocked(prisma.schoolSetting.findFirst).mockResolvedValue(null);
@@ -299,44 +300,28 @@ describe("/api/dashboard/settings/line", () => {
     });
   });
 
-  it("syncs the latest existing SchoolSetting credentials to the requested school", async () => {
-    const { prisma } = await import("@/lib/prisma");
-    vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
-    vi.mocked(prisma.schoolSetting.findFirst).mockResolvedValueOnce(schoolSettingFixture({
-      lineNotifyEnabled: true,
-      lineChannelAccessToken: "latest-school-token",
-      lineDestinationId: "latest-school-user",
-      notifyOnNewReview: true,
-      notifyOnLowRating: false,
-      updatedAt: new Date("2026-08-22T06:46:00.000Z"),
-    }));
-
-    const response = await GET(
-      new Request(
-        "https://app.example.com/api/dashboard/settings/line?schoolId=school-1",
-      ),
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      syncedFromFallback: true,
-      channelAccessToken: "latest-school-token",
-      lineUserId: "latest-school-user",
+  it.each([null, { lineChannelAccessToken: "own-token", lineDestinationId: "" },
+    { lineChannelAccessToken: "", lineDestinationId: "own-user" }])(
+    "never copies another school's credentials or writes on repeated GET: %j", async current => {
+      const { prisma } = await import("@/lib/prisma");
+      vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(current && schoolSettingFixture(current))
+        .mockResolvedValueOnce(current && schoolSettingFixture(current));
+      vi.mocked(prisma.schoolSetting.findFirst).mockResolvedValueOnce(schoolSettingFixture({
+        lineChannelAccessToken: "other-school-token", lineDestinationId: "other-school-user",
+      }));
+      for (let i = 0; i < 2; i++) {
+        const response = await GET(new Request("https://app.example.com/api/dashboard/settings/line?schoolId=school-1"));
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ syncedFromFallback: false,
+          channelAccessToken: current?.lineChannelAccessToken || "", lineUserId: current?.lineDestinationId || "" });
+      }
+      expect(prisma.schoolSetting.findFirst).not.toHaveBeenCalled();
+      expect(prisma.schoolSetting.upsert).not.toHaveBeenCalled();
+      expect(prisma.schoolSetting.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { schoolId: "school-1" } }));
+      expect(rawQuery.mock.calls).toHaveLength(8);
+      expect(rawQuery.mock.calls.every(([sql, table]) => sql.includes("information_schema") &&
+        ["SchoolSetting", "LineSetting", "line_settings", "line_setting"].includes(table!))).toBe(true);
     });
-    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith({
-      where: { schoolId: "school-1" },
-      create: expect.objectContaining({
-        schoolId: "school-1",
-        lineChannelAccessToken: "latest-school-token",
-        lineDestinationId: "latest-school-user",
-      }),
-      update: expect.objectContaining({
-        lineChannelAccessToken: "latest-school-token",
-        lineDestinationId: "latest-school-user",
-      }),
-    });
-  });
 
   it("hydrates saved values from legacy raw SchoolSetting columns", async () => {
     const { prisma } = await import("@/lib/prisma");
@@ -466,7 +451,7 @@ describe("/api/dashboard/settings/line", () => {
     });
   });
 
-  it("syncs fallback values from global settings tables", async () => {
+  it("never reads or copies global settings tables", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
     vi.mocked(prisma.$queryRawUnsafe)
@@ -500,20 +485,10 @@ describe("/api/dashboard/settings/line", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      syncedFromFallback: true,
-      channelAccessToken: "global-token",
-      lineUserId: "global-user",
-    });
-    expect(prisma.schoolSetting.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { schoolId: "school-1" },
-        update: expect.objectContaining({
-          lineChannelAccessToken: "global-token",
-          lineDestinationId: "global-user",
-        }),
-      }),
-    );
+    expect(body).toMatchObject({ syncedFromFallback: false, channelAccessToken: "", lineUserId: "" });
+    expect(prisma.schoolSetting.upsert).not.toHaveBeenCalled();
+    expect(prisma.schoolSetting.findFirst).not.toHaveBeenCalled();
+    expect(rawQuery).toHaveBeenCalledTimes(4);
   });
 
   it("ignores fallback token records that do not include a destination column", async () => {
@@ -549,7 +524,7 @@ describe("/api/dashboard/settings/line", () => {
     expect(prisma.schoolSetting.upsert).not.toHaveBeenCalled();
   });
 
-  it("syncs fallback values from tables that use updated_at ordering", async () => {
+  it("never queries global settings regardless of updated_at ordering", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
     rawQuery.mockImplementation(
@@ -587,11 +562,12 @@ describe("/api/dashboard/settings/line", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
-      syncedFromFallback: true,
-      channelAccessToken: "settings-token",
-      lineUserId: "settings-user",
-      updatedAt: "2026-08-22 06:46",
+      syncedFromFallback: false,
+      channelAccessToken: "",
+      lineUserId: "",
     });
+    expect(prisma.schoolSetting.upsert).not.toHaveBeenCalled();
+    expect(rawQuery.mock.calls.some(([, table]) => table === "settings")).toBe(false);
   });
 
   it("skips raw lookup errors and keeps canonical values", async () => {
@@ -615,7 +591,7 @@ describe("/api/dashboard/settings/line", () => {
     });
   });
 
-  it("skips fallback lookup errors when no reusable setting exists", async () => {
+  it("returns defaults without attempting global fallback when own settings are absent", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.spyOn(console, "error").mockImplementationOnce(() => {});
     vi.mocked(prisma.schoolSetting.findUnique).mockResolvedValueOnce(null);
@@ -786,4 +762,36 @@ describe("/api/dashboard/settings/line", () => {
       message: "LINE通知設定を取得できませんでした。",
     });
   });
+});
+
+
+describe("stored-profile settings authorization", () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, "error").mockImplementation(() => undefined); });
+  for (const [method, handler] of [["GET", GET], ["POST", POST], ["PATCH", PATCH]] as const) {
+    for (const scenario of ["unauthenticated", "pending", "cross-school", "invalid"] as const) {
+      it(`${method} rejects ${scenario} before business queries or secret responses`, async () => {
+        const { resolveRequestAccess } = await import("@/lib/supabase-access");
+        const { RequestAuthenticationError } = await import("@/lib/request-authentication-error");
+        const { prisma } = await import("@/lib/prisma");
+        if (scenario === "invalid") vi.mocked(resolveRequestAccess).mockRejectedValueOnce(new RequestAuthenticationError());
+        else vi.mocked(resolveRequestAccess).mockResolvedValueOnce({
+          isAuthenticated: scenario !== "unauthenticated",
+          access: { userId: "fixture", role: scenario === "unauthenticated" ? "admin" : "manager",
+            schoolId: "school-1", schoolIds: ["school-1"], name: "Fixture", email: "fixture@example.invalid",
+            status: scenario === "pending" ? "pending" : "active",
+            source: scenario === "unauthenticated" ? "fallback" : "profiles" },
+        });
+        const schoolId = scenario === "cross-school" ? "school-2" : "school-1";
+        const response = await handler(new Request(`https://app.example.com/api/settings?schoolId=${schoolId}&role=admin`, {
+          method, headers: { "x-user-role": "admin" },
+          ...(method === "GET" ? {} : { body: JSON.stringify({ schoolId, lineNotifyEnabled: true }) }),
+        }));
+        expect(response.status).toBe(scenario === "invalid" || scenario === "unauthenticated" ? 401 : 403);
+        const body = await response.text();
+        for (const secret of ["line-token", "meta-secret", "instagram-token"]) expect(body).not.toContain(secret);
+        for (const operation of [prisma.school.findUnique, prisma.schoolSetting.findUnique, prisma.schoolSetting.findFirst, prisma.schoolSetting.upsert, prisma.$queryRawUnsafe]) expect(operation).not.toHaveBeenCalled();
+        expect(resolveRequestAccess).toHaveBeenLastCalledWith(expect.any(Request), expect.any(URL), undefined, { requireActiveProfile: true });
+      });
+    }
+  }
 });

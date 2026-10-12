@@ -1,6 +1,7 @@
 import { googleAccountFixture, schoolSettingFixture } from "@/test/db-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "./route";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 
 vi.mock("@/lib/supabase-access", () => ({
   resolveRequestAccess: vi.fn(async () => ({
@@ -12,9 +13,9 @@ vi.mock("@/lib/supabase-access", () => ({
       name: "Admin",
       email: "admin@example.com",
       status: "active",
-      source: "fallback",
+      source: "profiles",
     },
-    isAuthenticated: false,
+    isAuthenticated: true,
   })),
   buildScopedSchoolFilter: vi.fn((_access, schoolId) => ({
     requestedSchoolId: schoolId || "all",
@@ -449,5 +450,97 @@ describe("GET /api/settings/google", () => {
 
     expect(dashboardRoute.GET).toBe(GET);
     expect(dashboardRoute.POST).toBe(POST);
+  });
+});
+
+
+describe("Google settings authorization boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  const requestFor = (method: string, schoolId = "school-1") => new Request(
+    `https://app.example.com/api/settings/google?schoolId=${schoolId}&role=admin`,
+    { method, headers: { "x-user-role": "admin" }, ...(method === "POST" ? {
+      body: JSON.stringify({ schoolId, selectedGbpLocationId: "locations/100" }),
+    } : {}) },
+  );
+
+  async function assertNoBusinessQueries() {
+    const { prisma } = await import("@/lib/prisma");
+    for (const operation of [prisma.school.findUnique, prisma.school.update,
+      prisma.schoolSetting.findUnique, prisma.schoolSetting.upsert,
+      prisma.googleAccount.findUnique, prisma.googleAccount.upsert, prisma.$transaction]) {
+      expect(operation).not.toHaveBeenCalled();
+    }
+  }
+
+  for (const [method, handler] of [["GET", GET], ["POST", POST]] as const) {
+    it(`${method} rejects unauthenticated fallback before business queries`, async () => {
+      const { resolveRequestAccess } = await import("@/lib/supabase-access");
+      const fallback = await resolveRequestAccess(requestFor(method), new URL(requestFor(method).url));
+      vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ ...fallback, isAuthenticated: false,
+        access: { ...fallback.access, source: "fallback" } });
+      expect((await handler(requestFor(method))).status).toBe(401);
+      await assertNoBusinessQueries();
+    });
+
+    it(`${method} maps invalid/expired sessions to 401`, async () => {
+      const { resolveRequestAccess } = await import("@/lib/supabase-access");
+      vi.mocked(resolveRequestAccess).mockRejectedValueOnce(new RequestAuthenticationError());
+      expect((await handler(requestFor(method))).status).toBe(401);
+      await assertNoBusinessQueries();
+    });
+
+    it(`${method} keeps auth outages at 500 without logging provider details`, async () => {
+      const { resolveRequestAccess } = await import("@/lib/supabase-access");
+      vi.mocked(resolveRequestAccess).mockRejectedValueOnce(new Error("private-provider-detail"));
+      const response = await handler(requestFor(method));
+      expect(response.status).toBe(500);
+      expect(await response.text()).not.toContain("private-provider-detail");
+      expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("private-provider-detail");
+      await assertNoBusinessQueries();
+    });
+
+    for (const status of ["pending", "active"] as const) {
+      it(`${method} denies ${status === "pending" ? "pending" : "cross-school"} before business queries`, async () => {
+        const { resolveRequestAccess, buildScopedSchoolFilter } = await import("@/lib/supabase-access");
+        vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ isAuthenticated: true, access: {
+          userId: "manager-1", role: "manager", schoolId: "school-1", schoolIds: ["school-1"],
+          name: "Manager", email: "manager@example.invalid", status, source: "profiles",
+        } });
+        // Even a permissive/misresolved scoped filter must not authorize another school.
+        const response = await handler(requestFor(method, status === "pending" ? "school-1" : "school-2"));
+        expect(response.status).toBe(403);
+        expect(resolveRequestAccess).toHaveBeenLastCalledWith(expect.any(Request), expect.any(URL), undefined, { requireActiveProfile: true });
+        if (status === "pending") expect(buildScopedSchoolFilter).not.toHaveBeenCalled();
+        await assertNoBusinessQueries();
+      });
+    }
+
+    it(`${method} accepts an active assigned manager and masks stored secrets`, async () => {
+      const { resolveRequestAccess } = await import("@/lib/supabase-access");
+      vi.mocked(resolveRequestAccess).mockResolvedValueOnce({ isAuthenticated: true, access: {
+        userId: "manager-1", role: "manager", schoolId: "school-1", schoolIds: ["school-1"],
+        name: "Manager", email: "manager@example.invalid", status: "active", source: "profiles",
+      } });
+      const response = await handler(requestFor(method));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.setting.googleRefreshToken).toBe("********");
+      expect(JSON.stringify(body)).not.toContain("refresh-token");
+    });
+  }
+
+  it("uses allowlisted Google account reads and minimal unused write result", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    await GET(requestFor("GET"));
+    expect(prisma.googleAccount.findUnique).toHaveBeenCalledWith({ where: { schoolId: "school-1" }, select: {
+      id: true, schoolId: true, email: true, refreshToken: true, locationId: true,
+      reviewUrl: true, status: true, updatedAt: true,
+    } });
+    await POST(requestFor("POST"));
+    expect(prisma.googleAccount.upsert).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
   });
 });

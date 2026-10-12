@@ -1,9 +1,11 @@
 "use client";
 
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useState } from "react";
 import styles from "./TestReviewNotificationButton.module.css";
 
 type TestReviewNotificationButtonProps = {
+  schoolId: string;
   lineChannelAccessToken?: string;
   lineDestinationId?: string;
   compact?: boolean;
@@ -32,6 +34,7 @@ function BoltIcon() {
 }
 
 export default function TestReviewNotificationButton({
+  schoolId,
   lineChannelAccessToken,
   lineDestinationId,
   compact = false,
@@ -46,10 +49,18 @@ export default function TestReviewNotificationButton({
     setMessage("");
 
     try {
+      if (!schoolId.trim() || schoolId === "all") {
+        throw new Error("通知をテストする校舎を選択してください。");
+      }
+      const { data } = await createBrowserSupabaseClient().auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("ログインしてください。");
+
       const response = await fetch("/api/test/trigger-review", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
+          schoolId,
           lineChannelAccessToken,
           lineDestinationId,
         }),
