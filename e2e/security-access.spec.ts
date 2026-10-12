@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures";
+import { buildMockInstagramSyncPreview, DEFAULT_INSTAGRAM_LOCATION } from "../src/lib/mock-instagram-sync";
 
 test("LINE settings use authenticated school read and save across reload without sending notifications", async ({ page }, testInfo) => {
   let destination = "synthetic-original-destination";
@@ -147,3 +148,44 @@ test("notification test sends bearer and selected school with unsaved input, usi
   expect(calls).toEqual(["POST"]);
   await page.screenshot({ path: testInfo.outputPath("notification-auth.png"), fullPage: true });
 });
+
+for (const schoolId of ["school-b", "all"]) {
+  test(`manual Instagram sync sends bearer and scope ${schoolId} without provider calls`, async ({ page }, testInfo) => {
+    const calls: string[] = [];
+    await page.route("**/api/instagram/preview?**", route => route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "プレビューを表示する校舎を選択してください。" }) }));
+    await page.route("**/api/instagram/sync?**", async route => {
+      const request = route.request();
+      expect(request.method()).toBe("POST");
+      expect(request.headers().authorization).toBe("Bearer e2e-only-session");
+      expect(new URL(request.url()).searchParams.get("schoolId")).toBe(schoolId);
+      calls.push(request.method());
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, message: "合成同期完了（実投稿なし）", summary: { settings: schoolId === "all" ? 2 : 1, posted: 0 } }) });
+    });
+    await page.goto(`/dashboard/instagram-sync?schoolId=${schoolId}`);
+    await page.getByRole("button", { name: "実際のInstagramから投稿を取得してGBP連携を実行", exact: true }).click();
+    await expect(page.getByText(/合成同期完了（実投稿なし）/)).toBeVisible();
+    expect(calls).toEqual(["POST"]);
+    await page.screenshot({ path: testInfo.outputPath(`instagram-auth-${schoolId}.png`), fullPage: true });
+  });
+}
+
+for (const status of [200, 403]) {
+  test(`Instagram preview uses authenticated selected school and handles ${status} without providers`, async ({ page }, testInfo) => {
+    const preview = await buildMockInstagramSyncPreview({ school: { id: "school-b", name: "検証用B校プレビュー", gbpLocationId: "locations/synthetic" } });
+    await page.route("**/api/instagram/preview?**", async route => {
+      expect(route.request().method()).toBe("GET");
+      expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+      expect(new URL(route.request().url()).searchParams.get("schoolId")).toBe("school-b");
+      await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(status === 200 ? {
+        dashboardData: { location: DEFAULT_INSTAGRAM_LOCATION, instagramSetting: null }, preview,
+      } : { message: "この校舎のプレビューは表示できません。" }) });
+    });
+    await page.goto("/dashboard/instagram-sync?schoolId=school-b");
+    if (status === 200) await expect(page.getByText("検証用B校プレビュー", { exact: true })).toBeVisible();
+    else {
+      await expect(page.getByText("この校舎のプレビューは表示できません。", { exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "GBP投稿Payload", exact: true })).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`instagram-preview-${status}.png`), fullPage: true });
+  });
+}

@@ -13,7 +13,7 @@ function reduceRepeatedEmoji(text: string) {
   return text.replace(/([\u{1F300}-\u{1FAFF}])\1+/gu, "$1");
 }
 
-function buildFallbackFormattedCaption(input: FormatCaptionInput) {
+export function buildFallbackFormattedCaption(input: FormatCaptionInput) {
   const cleaned = reduceRepeatedEmoji(removeHashtags(input.caption));
   const body = cleaned || "教室での取り組みをご紹介します。";
 
