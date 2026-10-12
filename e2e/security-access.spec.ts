@@ -49,3 +49,46 @@ test("manual GBP selection sends bearer and school without external sync",async(
  await expect(page.getByText("手動入力したGBP店舗IDを保存しました。",{exact:true})).toBeVisible();
  expect(saved).toBe(true);
 });
+
+test("Google settings send bearer for selection save and preserve the masked result on reload", async ({ page }, testInfo) => {
+  let location = "";
+  const methods: string[] = [];
+  await page.route("**/api/settings/google?**", async route => {
+    const request = route.request();
+    expect(request.headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(request.url()).searchParams.get("schoolId")).toBe("school-a");
+    methods.push(request.method());
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      school: { id: "school-a", name: "検証用A校" },
+      setting: { schoolId: "school-a", googleConnected: true, googleAccountId: "fixture@example.invalid",
+        googleRefreshToken: "********", selectedGbpLocationId: location },
+    }) });
+  });
+  await page.route("**/api/google/gbp-locations?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ locations: [{
+      name: "locations/fixture-123", title: "検証用A店舗", accountName: "accounts/fixture",
+      accountDisplayName: "検証用アカウント", address: "検証用住所",
+    }] }) });
+  });
+  await page.route("**/api/settings/google", async route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(route.request().postDataJSON()).toEqual({ schoolId: "school-a", accountName: "accounts/fixture", locationName: "locations/fixture-123" });
+    methods.push("POST");
+    location = "locations/fixture-123";
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true,
+      setting: { schoolId: "school-a", googleConnected: true, googleAccountId: "fixture@example.invalid",
+        googleRefreshToken: "********", selectedGbpLocationId: location },
+    }) });
+  });
+  await page.goto("/dashboard/settings/google?schoolId=school-a");
+  await expect(page.getByText("fixture@example.invalid", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "GBP店舗一覧を取得", exact: true }).click();
+  await page.getByRole("button", { name: "選択したGBP店舗を保存", exact: true }).click();
+  await expect(page.getByText("GBP店舗の紐付けを保存しました。", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(location, { exact: true })).toBeVisible();
+  expect(methods).toEqual(["GET", "POST", "GET"]);
+  await page.screenshot({ path: testInfo.outputPath("google-settings-save-reload.png"), fullPage: true });
+});

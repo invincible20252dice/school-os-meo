@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { buildEmptySchoolSetting } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
@@ -122,6 +124,18 @@ const googleSettingSelect = {
   updatedAt: true,
 };
 
+// Only fields consumed by the masked settings serializer; never load access tokens.
+const googleAccountSelect = {
+  id: true,
+  schoolId: true,
+  email: true,
+  refreshToken: true,
+  locationId: true,
+  reviewUrl: true,
+  status: true,
+  updatedAt: true,
+};
+
 async function findGoogleSetting(schoolId: string) {
   return prisma.schoolSetting.findUnique({
     where: { schoolId },
@@ -132,10 +146,14 @@ async function findGoogleSetting(schoolId: string) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const requestedSchoolId = url.searchParams.get("schoolId") || undefined;
-    const accessResult = await resolveRequestAccess(request, url);
+    const requestedSchoolId = normalizeString(url.searchParams.get("schoolId")) || undefined;
+    const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+    if (!accessResult.isAuthenticated) {
+      return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    }
+
+    if (!isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         { message: "アカウント承認後にGoogle連携設定を利用できます。" },
         { status: 403 },
@@ -148,10 +166,18 @@ export async function GET(request: Request) {
     );
     const schoolId = scopedSchool.effectiveSchoolId || requestedSchoolId;
 
-    if (!schoolId) {
+    if (!schoolId || schoolId === "all") {
       return NextResponse.json(
         { message: "Google連携設定を表示する校舎を選択してください。" },
         { status: 400 },
+      );
+    }
+
+    if (!canAccessSchool(accessResult.access, schoolId) ||
+        (requestedSchoolId && requestedSchoolId !== schoolId)) {
+      return NextResponse.json(
+        { message: "この校舎のGoogle連携設定は表示できません。" },
+        { status: 403 },
       );
     }
 
@@ -166,7 +192,7 @@ export async function GET(request: Request) {
         },
       }),
       findGoogleSetting(schoolId),
-      prisma.googleAccount.findUnique({ where: { schoolId } }),
+      prisma.googleAccount.findUnique({ where: { schoolId }, select: googleAccountSelect }),
     ]);
 
     if (!school) {
@@ -190,7 +216,10 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error(error);
+    if (error instanceof RequestAuthenticationError) {
+      return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    }
+    console.error("Google settings lookup failed");
     return NextResponse.json(
       { message: "Google連携設定を取得できませんでした。" },
       { status: 500 },
@@ -201,9 +230,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
-    const accessResult = await resolveRequestAccess(request, url);
+    const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+    if (!accessResult.isAuthenticated) {
+      return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    }
+
+    if (!isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         { message: "アカウント承認後にGoogle連携設定を保存できます。" },
         { status: 403 },
@@ -223,7 +256,7 @@ export async function POST(request: Request) {
       body.googleReviewUrl ?? body.reviewUrl,
     );
 
-    if (!requestedSchoolId || !selectedGbpLocationId) {
+    if (!requestedSchoolId || requestedSchoolId === "all" || !selectedGbpLocationId) {
       return NextResponse.json(
         { message: "校舎とGBPロケーションIDを入力してください。" },
         { status: 400 },
@@ -242,7 +275,8 @@ export async function POST(request: Request) {
       requestedSchoolId,
     );
 
-    if (scopedSchool.effectiveSchoolId !== requestedSchoolId) {
+    if (!canAccessSchool(accessResult.access, requestedSchoolId) ||
+        scopedSchool.effectiveSchoolId !== requestedSchoolId) {
       return NextResponse.json(
         { message: "この校舎のGoogle連携設定は変更できません。" },
         { status: 403 },
@@ -285,6 +319,7 @@ export async function POST(request: Request) {
         select: googleSettingSelect,
       }),
       prisma.googleAccount.upsert({
+        select: { id: true },
         where: { schoolId: requestedSchoolId },
         create: {
           schoolId: requestedSchoolId,
@@ -312,7 +347,10 @@ export async function POST(request: Request) {
       account: toAccountResponse(serializedSetting),
     });
   } catch (error) {
-    console.error("[POST /api/settings/google]", error);
+    if (error instanceof RequestAuthenticationError) {
+      return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    }
+    console.error("Google settings persistence failed");
     return NextResponse.json(
       { message: "Google連携設定を保存できませんでした。" },
       { status: 500 },
