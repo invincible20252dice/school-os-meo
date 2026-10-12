@@ -1,5 +1,13 @@
 # Instagram sync and preview authorization
 
+## Superseding production outcome (2026-10-12)
+#12 merged as 67bcefc and reached READY, but authenticated preview returned 500
+because the production legacy InstagramSetting schema lacks lastSyncedAt. Rolled
+back to stable #11 / 25f39b1 / dpl_48Erde1hQPKvorWUmgciC7CY9ZH1; both aliases verified.
+Do not republish #12. Follow-up implementation, tests and live acceptance blockers
+are tracked in [preview compatibility](instagram-preview-compat.md). Later historical
+release-candidate statements below are not the current deployment state.
+
 ## Current approved scope — 2026-10-12
 User approved staged #9 → #10 → #11 → #12 production release. Current base is
 25f39b138684dd67c652d7fba345fb6c9cc5c29f (#9–#11 deployed); READY and

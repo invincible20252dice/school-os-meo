@@ -189,3 +189,26 @@ for (const status of [200, 403]) {
     await page.screenshot({ path: testInfo.outputPath(`instagram-preview-${status}.png`), fullPage: true });
   });
 }
+
+test("legacy-schema preview shows unavailable timestamp without claiming a real sync", async ({ page }, testInfo) => {
+  const preview = await buildMockInstagramSyncPreview({ school: { id: "school-b", name: "検証用B校プレビュー", gbpLocationId: "" } });
+  const syncCalls: string[] = [];
+  await page.route("**/api/instagram/sync**", async route => {
+    syncCalls.push(route.request().method());
+    await route.abort();
+  });
+  await page.route("**/api/instagram/preview?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(route.request().url()).searchParams.get("schoolId")).toBe("school-b");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+      dashboardData: { location: DEFAULT_INSTAGRAM_LOCATION, instagramSetting: null, syncTimestampUnavailable: true }, preview,
+    }) });
+  });
+  await page.goto("/dashboard/instagram-sync?schoolId=school-b");
+  await expect(page.getByText("最終同期日時を取得できません（サンプル表示）", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ローカル整形サンプル", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("最終同期日時を取得できません（サンプル表示）", { exact: true })).toBeVisible();
+  expect(syncCalls).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("instagram-preview-legacy-schema.png"), fullPage: true });
+});

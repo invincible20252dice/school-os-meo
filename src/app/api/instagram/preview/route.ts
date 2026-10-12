@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { resolveRequestAccess } from "@/lib/supabase-access";
@@ -12,12 +13,29 @@ function coordinate(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+async function readSyncTimestamp(schoolId: string) {
+  try {
+    const instagramSetting = await prisma.instagramSetting.findUnique({
+      where: { schoolId }, select: { lastSyncedAt: true },
+    });
+    return { instagramSetting, syncTimestampUnavailable: false };
+  } catch (error) {
+    // The deployed legacy schema has no optional sync timestamp. This does not
+    // establish manual-sync readiness; every other DB failure must still fail.
+    if (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2022" && error.meta?.column === "InstagramSetting.lastSyncedAt") {
+      return { instagramSetting: null, syncTimestampUnavailable: true };
+    }
+    throw error;
+  }
+}
+
 async function readPreview(school: { id: string; name: string; city: string | null; gbpLocationId: string | null }) {
   const schoolId = school.id;
-  const [keyword, instagramSetting] = await Promise.all([
+  const [keyword, syncTimestamp] = await Promise.all([
     prisma.targetKeyword.findFirst({ where: { schoolId, isActive: true }, orderBy: { createdAt: "asc" },
       select: { keyword: true, nearestStation: true, municipality: true, latitude: true, longitude: true, radiusMeters: true } }),
-    prisma.instagramSetting.findUnique({ where: { schoolId }, select: { lastSyncedAt: true } }),
+    readSyncTimestamp(schoolId),
   ]);
   const dashboardData = {
     school: { id: school.id, name: school.name, gbpLocationId: school.gbpLocationId || "" },
@@ -29,7 +47,7 @@ async function readPreview(school: { id: string; name: string; city: string | nu
       longitude: coordinate(keyword?.longitude, DEFAULT_INSTAGRAM_LOCATION.longitude),
       radiusMeters: keyword?.radiusMeters || DEFAULT_INSTAGRAM_LOCATION.radiusMeters,
     },
-    instagramSetting,
+    ...syncTimestamp,
   };
   return { dashboardData, preview: await buildMockInstagramSyncPreview({ school: dashboardData.school }) };
 }
