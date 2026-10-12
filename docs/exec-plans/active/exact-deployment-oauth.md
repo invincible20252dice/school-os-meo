@@ -26,9 +26,10 @@ bare /auth/callback missing-token UI in existing normal Chrome without challenge
 Staged dpl_d8UshKKxDw1ugJWn2ePjHDKKByCd is 7e50d90457bfd418c3157724905f3b018f148f21.
 This proves app reachability only, not real OAuth or callback registration.
 
-- [ ] TDD server/client denial and exact-origin positive cases
-- [ ] Full codex:verify, desktop + mobile viewport E2E
-- [ ] Feature draft PR, exact commit/tree and Actions
+- [x] TDD server/client denial and exact-origin positive cases
+- [x] Full codex:verify, desktop + mobile viewport E2E
+- [x] Feature draft PR17 created against the fixed candidate branch
+- [ ] Exact final Actions completion (in progress at this checkpoint)
 - [ ] Independent parent review (stop before deployment)
 - [ ] Separately gated no-alias build and exact temporary callback
 - [ ] Real OAuth acceptance and callback cleanup
@@ -41,3 +42,27 @@ in the same browser/origin and avoid intermediate redirects losing implicit frag
 Supabase callback addition/removal needs exact URL and parent's action-time gate.
 Physical mobile is distinct from Chromium mobile viewport emulation. Stable's known
 logout defect must be reported as existing, not a new candidate regression.
+
+Implementation commit: 6a5cd9d1c1bfcc0bf08e5af6b20b4f53db57d383; tree
+aedc589a8195e51fa9f16e095d340660a7e4721d. PR17:
+https://github.com/invincible20252dice/school-os-meo/pull/17
+Only this checkpoint documentation changes after that tested code. Final SHA/tree
+and exact CI checkout are recorded in PR17 and the handoff evidence once complete.
+
+Local validation: TDD positive case failed before implementation; route suite could
+not load the absent route. Then 77 targeted cases passed. Full codex:verify passed:
+172 files / 2,108 unit/integration cases, 62 E2E, typecheck, lint, tooling, migration
+safety, Prisma generation and plain build. No coverage relaxation; new policy route
+100% coverage, total lines 99.25%, branches 97.53%. Six pre-existing lint warnings.
+Initial aggregate failures were sandbox localhost listen EPERM, then missing browser
+cache path (62 launch failures); authorized local run with existing
+PLAYWRIGHT_BROWSERS_PATH=/tmp/school-os-playwright passed. No new install required.
+
+Desktop/mobile E2E forwards virtual HTTPS app requests into the real isolated Next
+policy route with synthetic server metadata. Exact host passes; a different Vercel
+host and network failure reject. Existing 56 E2E are retained. Mobile means Chromium
+iPhone13 emulation on a desktop runner, not physical iOS/Safari. No live OAuth,
+production session revocation, candidate deployment or canonical acceptance proved.
+Next: verify final Actions, independent review, then separately gated candidate-only
+deployment/runtime flag and exact temporary callback. Keep this plan active until
+real acceptance and callback cleanup; no production rollout implied.
