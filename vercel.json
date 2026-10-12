@@ -8,7 +8,9 @@
       "codex/security-access-boundaries": false,
       "codex/school-line-settings-access": false,
       "codex/google-settings-access": false,
-      "codex/test-notification-auth": false
+      "codex/test-notification-auth": false,
+      "codex/auth-stable-base": false,
+      "codex/auth-callback-origin": false
     }
   }
 }
