@@ -73,7 +73,7 @@ function PreviewBody({ data }: { data: InstagramPreviewResponse }) {
           <div className={styles.panelTitle}>
             <GbpIcon />
             <div>
-              <h2>AIリライト後のGBP投稿文</h2>
+              <h2>ローカル整形サンプル</h2>
               <p>{preview.school.name}</p>
             </div>
           </div>
