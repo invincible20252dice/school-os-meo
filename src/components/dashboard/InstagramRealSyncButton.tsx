@@ -18,7 +18,7 @@ export default function InstagramRealSyncButton({
   schoolId?: string;
 }) {
   const [message, setMessage] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "noop" | "error">(
     "idle",
   );
 
@@ -47,15 +47,17 @@ export default function InstagramRealSyncButton({
       const body = (await response.json()) as {
         ok?: boolean;
         message?: string;
-        summary?: unknown;
+        outcome?: "posted" | "noop";
+        summary?: { posted?: number };
       };
 
       if (!response.ok || !body.ok) {
         throw new Error(body.message || "Instagram実同期に失敗しました。");
       }
 
-      setStatus("success");
-      setMessage(`${body.message} ${JSON.stringify(body.summary)}`);
+      const noPosts = body.outcome === "noop" || body.summary?.posted === 0;
+      setStatus(noPosts ? "noop" : "success");
+      setMessage(noPosts ? "実投稿はありません（0件）。" : body.message || "投稿結果を確認してください。");
     } catch (error) {
       setStatus("error");
       setMessage(
@@ -75,7 +77,7 @@ export default function InstagramRealSyncButton({
           : "実際のInstagramから投稿を取得してGBP連携を実行"}
       </button>
       {message ? (
-        <p className={status === "success" ? styles.success : styles.error}>
+        <p role="status" className={status === "success" ? styles.success : status === "noop" ? undefined : styles.error}>
           {message}
         </p>
       ) : null}

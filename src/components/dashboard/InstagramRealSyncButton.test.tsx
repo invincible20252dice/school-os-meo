@@ -23,3 +23,15 @@ it("does not send on expired session", async () => {
   fireEvent.click(screen.getByRole("button"));
   await screen.findByText("ログインしてください。"); expect(fetch).not.toHaveBeenCalled();
 });
+it("shows unavailable without rendering internal diagnostics", async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({ ok: false, code: "SYNC_UNAVAILABLE", message: "同期利用不可。設定を確認してから再度お試しください。" }, { status: 503 }));
+  render(<InstagramRealSyncButton schoolId="school-a" />); fireEvent.click(screen.getByRole("button"));
+  await screen.findByText("同期利用不可。設定を確認してから再度お試しください。");
+  expect(screen.queryByText(/SYNC_UNAVAILABLE/)).toBeNull();
+});
+it("does not call a zero-post response real sync success even with a legacy success message", async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({ ok: true, message: "Instagram実同期を実行しました。", summary: { posted: 0 } }));
+  render(<InstagramRealSyncButton schoolId="school-a" />); fireEvent.click(screen.getByRole("button"));
+  await screen.findByText("実投稿はありません（0件）。");
+  expect(screen.queryByText(/実同期を実行しました/)).toBeNull();
+});
