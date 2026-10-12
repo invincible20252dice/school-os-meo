@@ -163,7 +163,7 @@ for (const schoolId of ["school-b", "all"]) {
     });
     await page.goto(`/dashboard/instagram-sync?schoolId=${schoolId}`);
     await page.getByRole("button", { name: "実際のInstagramから投稿を取得してGBP連携を実行", exact: true }).click();
-    await expect(page.getByText(/合成同期完了（実投稿なし）/)).toBeVisible();
+    await expect(page.getByText("実投稿はありません（0件）。", { exact: true })).toBeVisible();
     expect(calls).toEqual(["POST"]);
     await page.screenshot({ path: testInfo.outputPath(`instagram-auth-${schoolId}.png`), fullPage: true });
   });
@@ -189,3 +189,22 @@ for (const status of [200, 403]) {
     await page.screenshot({ path: testInfo.outputPath(`instagram-preview-${status}.png`), fullPage: true });
   });
 }
+
+test("manual sync shows unavailable without claiming success or exposing diagnostics", async ({ page }, testInfo) => {
+  let calls = 0;
+  await page.route("**/api/instagram/preview?**", route => route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "プレビューを表示する校舎を選択してください。" }) }));
+  await page.route("**/api/instagram/sync?**", async route => {
+    expect(route.request().headers().authorization).toBe("Bearer e2e-only-session");
+    expect(new URL(route.request().url()).searchParams.get("schoolId")).toBe("school-b");
+    calls++;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
+      ok: false, code: "SYNC_UNAVAILABLE", message: "同期利用不可。設定を確認してから再度お試しください。",
+    }) });
+  });
+  await page.goto("/dashboard/instagram-sync?schoolId=school-b");
+  await page.getByRole("button", { name: "実際のInstagramから投稿を取得してGBP連携を実行", exact: true }).click();
+  await expect(page.getByText("同期利用不可。設定を確認してから再度お試しください。", { exact: true })).toBeVisible();
+  await expect(page.getByText(/SYNC_UNAVAILABLE|Instagram実同期を実行しました/)).toHaveCount(0);
+  expect(calls).toBe(1);
+  await page.screenshot({ path: testInfo.outputPath("instagram-sync-unavailable.png"), fullPage: true });
+});

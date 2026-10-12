@@ -5,6 +5,7 @@ import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import { syncInstagramPosts } from "@/lib/instagram-sync";
 import { resolveRequestAccess } from "@/lib/supabase-access";
+import { InstagramSyncUnavailableError } from "@/lib/instagram-sync-readiness";
 
 export async function POST(request: Request) {
   try {
@@ -43,7 +44,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: "Instagram実同期を実行しました。",
+      outcome: summary.posted > 0 ? "posted" : "noop",
+      message: summary.posted > 0 ? `InstagramからGBPへ${summary.posted}件投稿しました。`
+        : "実投稿はありません（0件）。",
       summary,
       access: {
         role: accessResult.access.role,
@@ -52,6 +55,9 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof InstagramSyncUnavailableError) {
+      return NextResponse.json({ ok: false, code: "SYNC_UNAVAILABLE", message: error.message }, { status: 503 });
+    }
     const status = error instanceof RequestAuthenticationError ? 401 : 500;
     if (status === 500) console.error("Instagram manual sync failed.");
     return NextResponse.json(

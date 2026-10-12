@@ -1,5 +1,6 @@
 import { formatInstagramCaptionForGbp } from "./ai-formatter";
 import { fetchLatestInstagramMedia, type InstagramMedia } from "./instagram";
+import { assertInstagramSyncSchema, InstagramSyncUnavailableError, requireInstagramSyncEndpoint, requireSyncValue, type InstagramSyncSchemaClient } from "./instagram-sync-readiness";
 
 type FetchLike = typeof fetch;
 
@@ -16,7 +17,7 @@ type InstagramSettingRecord = {
   };
 };
 
-type PrismaInstagramSyncClient = {
+type PrismaInstagramSyncClient = InstagramSyncSchemaClient & {
   instagramSetting: {
     findMany(args: unknown): Promise<unknown[]>;
     update(args: unknown): Promise<unknown>;
@@ -32,22 +33,14 @@ async function postToGbpLocalPosts({
   media,
   formattedText,
   fetchImpl,
+  endpoint,
 }: {
   school: InstagramSettingRecord["school"];
   media: InstagramMedia;
   formattedText: string;
   fetchImpl: FetchLike;
+  endpoint: string;
 }) {
-  const endpoint = process.env.GBP_LOCAL_POSTS_API_URL;
-
-  if (!endpoint) {
-    throw new Error("GBP_LOCAL_POSTS_API_URL is not configured.");
-  }
-
-  if (!school.gbpLocationId) {
-    throw new Error("School does not have gbpLocationId.");
-  }
-
   const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: {
@@ -90,12 +83,18 @@ export async function syncInstagramPosts({
   fetchImpl?: FetchLike;
   schoolId?: string;
 }) {
+  await assertInstagramSyncSchema(prisma);
   const settings = await prisma.instagramSetting.findMany({
     where: {
       autoSyncEnabled: true,
       ...(schoolId ? { schoolId } : {}),
     },
-    include: {
+    select: {
+      id: true,
+      schoolId: true,
+      instagramAccessToken: true,
+      instagramBusinessAccountId: true,
+      autoSyncEnabled: true,
       school: {
         select: {
           id: true,
@@ -111,6 +110,21 @@ export async function syncInstagramPosts({
     posted: 0,
     skipped: 0,
   };
+
+  if (settings.length === 0) return summary;
+  const endpoint = requireInstagramSyncEndpoint();
+  // Check the entire batch before any provider call, not lazily inside its loop.
+  for (const value of settings) {
+    const setting = value as InstagramSettingRecord;
+    if (!setting || !setting.school || setting.autoSyncEnabled !== true ||
+        setting.school.id !== setting.schoolId || (schoolId && setting.schoolId !== schoolId)) {
+      throw new InstagramSyncUnavailableError();
+    }
+    for (const required of [setting.id, setting.schoolId, setting.instagramAccessToken,
+      setting.instagramBusinessAccountId, setting.school.name, setting.school.gbpLocationId]) {
+      requireSyncValue(required);
+    }
+  }
 
   for (const settingValue of settings) {
     const setting = settingValue as InstagramSettingRecord;
@@ -144,9 +158,11 @@ export async function syncInstagramPosts({
         media,
         formattedText,
         fetchImpl,
+        endpoint,
       });
 
       await prisma.syncedPost.create({
+        select: { id: true },
         data: {
           schoolId: setting.schoolId,
           instagramMediaId: media.instagramMediaId,
@@ -159,6 +175,7 @@ export async function syncInstagramPosts({
         },
       });
       await prisma.instagramSetting.update({
+        select: { id: true },
         where: { id: setting.id },
         data: { lastSyncedAt: new Date() },
       });

@@ -15,6 +15,7 @@ describe("instagram-sync", () => {
     process.env.GBP_API_ACCESS_TOKEN = "gbp-token";
 
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {
@@ -80,6 +81,7 @@ describe("instagram-sync", () => {
       }),
     );
     expect(prisma.instagramSetting.update).toHaveBeenCalledWith({
+      select: { id: true },
       where: { id: "setting_1" },
       data: { lastSyncedAt: expect.any(Date) },
     });
@@ -91,6 +93,7 @@ describe("instagram-sync", () => {
     process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
 
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {
@@ -156,6 +159,7 @@ describe("instagram-sync", () => {
   it("skips already synced media", async () => {
     process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {
@@ -202,6 +206,7 @@ describe("instagram-sync", () => {
 
   it("returns an empty summary when no Instagram settings are enabled", async () => {
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => []),
         update: vi.fn(),
@@ -219,6 +224,7 @@ describe("instagram-sync", () => {
 
   it("filters enabled Instagram settings by the selected school", async () => {
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => []),
         update: vi.fn(),
@@ -249,6 +255,7 @@ describe("instagram-sync", () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.GBP_LOCAL_POSTS_API_URL;
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {
@@ -287,7 +294,7 @@ describe("instagram-sync", () => {
     );
 
     await expect(syncInstagramPosts({ prisma, fetchImpl: fetchMock })).rejects.toThrow(
-      "GBP_LOCAL_POSTS_API_URL is not configured.",
+      "同期利用不可",
     );
   });
 
@@ -295,6 +302,7 @@ describe("instagram-sync", () => {
     delete process.env.OPENAI_API_KEY;
     process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {
@@ -333,7 +341,7 @@ describe("instagram-sync", () => {
     );
 
     await expect(syncInstagramPosts({ prisma, fetchImpl: fetchMock })).rejects.toThrow(
-      "School does not have gbpLocationId.",
+      "同期利用不可",
     );
   });
 
@@ -341,6 +349,7 @@ describe("instagram-sync", () => {
     delete process.env.OPENAI_API_KEY;
     process.env.GBP_LOCAL_POSTS_API_URL = "https://gbp.example.com/localPosts";
     const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ ready: true }]),
       instagramSetting: {
         findMany: vi.fn(async () => [
           {

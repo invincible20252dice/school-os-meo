@@ -9,7 +9,9 @@
       "codex/school-line-settings-access": false,
       "codex/google-settings-access": false,
       "codex/test-notification-auth": false,
-      "codex/instagram-manual-auth": false
+      "codex/instagram-manual-auth": false,
+      "codex/instagram-preview-compat": false,
+      "codex/instagram-sync-readiness": false
     }
   }
 }

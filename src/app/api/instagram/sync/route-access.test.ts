@@ -8,6 +8,7 @@ import { POST as cronPost } from "../../cron/sync-instagram/route";
 const auth = vi.hoisted(() => ({ getUser: vi.fn(), maybeSingle: vi.fn(), from: vi.fn() }));
 vi.mock("@/lib/supabase", () => ({ createServerSupabaseClient: () => ({ auth: { getUser: auth.getUser }, from: auth.from }) }));
 const db = vi.hoisted(() => ({
+  $queryRaw: vi.fn(),
   instagramSetting: { findMany: vi.fn(), update: vi.fn() },
   syncedPost: { findUnique: vi.fn(), create: vi.fn() },
 }));
@@ -31,6 +32,7 @@ function request(schoolId: string | null = "school-a", bearer = "valid") {
   });
 }
 function expectNoEffects() {
+  expect(db.$queryRaw).not.toHaveBeenCalled();
   expect(prisma.instagramSetting.findMany).not.toHaveBeenCalled();
   expect(prisma.instagramSetting.update).not.toHaveBeenCalled();
   expect(prisma.syncedPost.findUnique).not.toHaveBeenCalled();
@@ -50,6 +52,7 @@ function expectSchoolEffects(schoolIds: string[]) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  db.$queryRaw.mockResolvedValue([{ ready: true }]);
   vi.stubEnv("GBP_LOCAL_POSTS_API_URL", "https://gbp.example.invalid/localPosts");
   auth.getUser.mockResolvedValue({ data: { user: { id: "actor", user_metadata: { role: "admin", status: "active" } } }, error: null });
   auth.maybeSingle.mockResolvedValue({ data: profile(), error: null });
@@ -64,6 +67,37 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("manual sync with real access resolver and sync service", () => {
+  it.each(["manual", "cron"])("returns sanitized unavailable for %s schema failures before provider calls", async path => {
+    vi.stubEnv("CRON_SECRET", "synthetic-cron");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.$queryRaw.mockRejectedValue(new Error("private credential and schema details"));
+    const response = path === "manual" ? await POST(request()) : await cronPost(new Request("http://localhost/api/cron/sync-instagram", {
+      method: "POST", headers: { authorization: "Bearer synthetic-cron" },
+    }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "SYNC_UNAVAILABLE", message: "同期利用不可。設定を確認してから再度お試しください。" });
+    expect(log).not.toHaveBeenCalled();
+    expect(db.instagramSetting.findMany).not.toHaveBeenCalled();
+    expect(fetchLatestInstagramMedia).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+    expect(db.syncedPost.create).not.toHaveBeenCalled(); expect(db.instagramSetting.update).not.toHaveBeenCalled();
+  });
+  it.each(["manual", "cron"])("validates the entire %s batch before any effects", async path => {
+    vi.stubEnv("CRON_SECRET", "synthetic-cron");
+    auth.maybeSingle.mockResolvedValue({ data: profile("admin"), error: null });
+    db.instagramSetting.findMany.mockResolvedValue([settings[0], { ...settings[1], school: { ...settings[1].school, gbpLocationId: "" } }]);
+    const response = path === "manual" ? await POST(request("all")) : await cronPost(new Request("http://localhost/api/cron/sync-instagram", {
+      method: "POST", headers: { authorization: "Bearer synthetic-cron" },
+    }));
+    expect(response.status).toBe(503);
+    expect(fetchLatestInstagramMedia).not.toHaveBeenCalled(); expect(formatInstagramCaptionForGbp).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+    expect(db.syncedPost.create).not.toHaveBeenCalled(); expect(db.instagramSetting.update).not.toHaveBeenCalled();
+  });
+  it("labels an empty selection as a no-op rather than real sync success", async () => {
+    db.instagramSetting.findMany.mockResolvedValue([]);
+    const response = await POST(request()); expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ outcome: "noop", message: "実投稿はありません（0件）。", summary: { posted: 0 } });
+    expect(fetch).not.toHaveBeenCalled(); expect(fetchLatestInstagramMedia).not.toHaveBeenCalled();
+  });
   it("rejects no bearer despite forged admin scope", async () => {
     expect((await POST(request("all", ""))).status).toBe(401); expectNoEffects();
   });
