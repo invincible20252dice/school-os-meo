@@ -123,3 +123,27 @@ test("Google settings send bearer for selection save and preserve the masked res
   expect(methods).toEqual(["GET", "POST", "GET"]);
   await page.screenshot({ path: testInfo.outputPath("google-settings-save-reload.png"), fullPage: true });
 });
+
+test("notification test sends bearer and selected school with unsaved input, using only mocks", async ({ page }, testInfo) => {
+  const calls: string[] = [];
+  await page.route("**/api/dashboard/settings/line**", async route => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ setting: {
+      schoolId: "school-b", lineNotifyEnabled: true, lineChannelAccessToken: "stored-synthetic", lineDestinationId: "stored-destination",
+    } }) });
+  });
+  await page.route("**/api/test/trigger-review", async route => {
+    const request = route.request();
+    expect(request.headers().authorization).toBe("Bearer e2e-only-session");
+    expect(request.postDataJSON()).toEqual({ schoolId: "school-b", lineChannelAccessToken: "unsaved-synthetic-token", lineDestinationId: "unsaved-synthetic-destination" });
+    calls.push(request.method());
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, saved: true, notified: true, message: "合成テスト完了（実通知なし）" }) });
+  });
+  await page.goto("/dashboard/settings/line?schoolId=school-b");
+  await expect(page.getByLabel("チャネルアクセストークン", { exact: true })).toHaveValue("stored-synthetic");
+  await page.getByLabel("チャネルアクセストークン", { exact: true }).fill("unsaved-synthetic-token");
+  await page.getByLabel("送信先グループID / ユーザーID", { exact: true }).fill("unsaved-synthetic-destination");
+  await page.getByRole("button", { name: "テスト通知を送信", exact: true }).click();
+  await expect(page.getByText("合成テスト完了（実通知なし）", { exact: true })).toBeVisible();
+  expect(calls).toEqual(["POST"]);
+  await page.screenshot({ path: testInfo.outputPath("notification-auth.png"), fullPage: true });
+});
