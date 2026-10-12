@@ -34,3 +34,16 @@ it("ignores stale responses after a newer selected school finishes", async () =>
   const stale = Response.json(await data("Synthetic A")); await act(async () => finish(stale));
   expect(screen.queryByText("Synthetic A", { exact: true })).toBeNull(); expect(screen.getByText("Synthetic B", { exact: true })).toBeTruthy();
 });
+
+it.each([
+  [true, null, "最終同期日時を取得できません（サンプル表示）"],
+  [false, null, "最終同期日時の記録はありません（サンプル表示）"],
+  [false, { lastSyncedAt: "2026-01-01T00:00:00.000Z" }, "最終同期 2026-01-01"],
+])("distinguishes unavailable, unrecorded and known timestamps", async (syncTimestampUnavailable, instagramSetting, label) => {
+  const body = await data("Synthetic A");
+  vi.mocked(fetch).mockResolvedValue(Response.json({ ...body,
+    dashboardData: { ...body.dashboardData, syncTimestampUnavailable, instagramSetting },
+  }));
+  render(<Preview schoolId="school-a" />);
+  await screen.findByText(label as string);
+});
