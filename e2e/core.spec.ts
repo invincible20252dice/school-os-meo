@@ -1,14 +1,33 @@
 import { test, expect } from "./fixtures";
 
-test("Google login starts OAuth with local callback only", async ({ page }) => {
+test("Google login refuses an unapproved origin before OAuth", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/auth/v1/authorize**", async route => { calls++; await route.abort(); });
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "ログイン", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Google/ }).click();
-  await expect(page).toHaveURL(/127\.0\.0\.1:54321\/auth\/v1\/authorize/);
-  const url = new URL(page.url());
-  expect(url.searchParams.get("provider")).toBe("google");
-  expect(url.searchParams.get("redirect_to")).toBe("http://127.0.0.1:4317/auth/callback");
+  await expect(page.getByText("このURLからはログインを開始できません。", { exact: true })).toBeVisible();
+  expect(calls).toBe(0);
+  await expect(page).toHaveURL("http://127.0.0.1:4317/login");
 });
+
+for (const origin of ["https://app.jukumeo.com", "https://school-os-meo.vercel.app", "http://localhost:3030", "http://localhost:3031"]) {
+  test(`Google login keeps approved origin ${origin} without real OAuth`, async ({ page }) => {
+    // Virtual browser origins; every app asset is served from our isolated server.
+    // No request reaches either production domain or the real OAuth provider.
+    await page.route(`${origin}/**`, async route => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== "/login" && !url.pathname.startsWith("/_next/") && !url.pathname.startsWith("/service-logo")) return route.abort();
+      const response = await page.request.get(`http://127.0.0.1:4317${url.pathname}${url.search}`, { maxRedirects: 0 });
+      await route.fulfill({ response });
+    });
+    await page.goto(`${origin}/login`);
+    await page.getByRole("button", { name: /Google/ }).click();
+    await expect(page).toHaveURL(/127\.0\.0\.1:54321\/auth\/v1\/authorize/);
+    const url = new URL(page.url());
+    expect(url.searchParams.get("provider")).toBe("google");
+    expect(url.searchParams.get("redirect_to")).toBe(`${origin}/auth/callback`);
+  });
+}
 
 test("challenge execution record survives reload and stays isolated across schools", async ({ page, fixture }, testInfo) => {
   await page.goto("/dashboard/challenge?schoolId=school-a&day=1");
