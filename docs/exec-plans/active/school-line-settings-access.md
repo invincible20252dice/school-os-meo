@@ -1,4 +1,25 @@
 # School / LINE settings access boundary
+
+## Approved release safety update — 2026-10-12
+User explicitly approved staged release #9 → #10 → #11 → #12 and removal of
+LINE GET cross-school copying/writes before #10 release. This supersedes the
+earlier bounded-scope decision to preserve fallback. Base now main cb59dcbaaead8b6cf9e62905410d7afc037cf905
+(#9 deployed READY, app.jukumeo.com confirmed; safe unauthenticated smoke passed).
+No customer records will be rewritten. GET will read only the requested authorized
+school's canonical/legacy records, return empty/partial values as stored, and never
+search globally or upsert. Explicit saves remain unchanged. TDD will cover other-school
+credentials, missing/partial settings, legacy ownership, repeated reads and saves.
+Keep all accumulated E2E and disabled preview branch entries when resolving main.
+After full verification and exact cumulative CI, release only this PR, confirm
+production SHA/READY/alias and safe smoke before advancing. Previous stable deployment:
+dpl_Bbv9WP374GWnh7ARgxLLnyDRyoyq. Existing client-visible secrets remain a separate risk.
+
+Release validation: red reproduced copying/global reads; changed legacy expectations
+to assert no-copy/no-write, adding missing/token-only/destination-only repeated reads.
+Reset queued raw-query mocks per test to isolate unused forbidden calls. Focused
+59 tests passed. Full cumulative codex:verify passed (42 desktop/mobile E2E, 36.5s),
+including prior Google save/reload E2E, typecheck, lint and plain build. No schema,
+dependency or customer-data changes. Await exact updated-head CI before merge.
 Base: production 077f147. Branch codex/school-line-settings-access. PR9 stays fixed.
 Scope: authenticated active stored profile, explicit canAccessSchool and requested/effective
 school match before business reads/writes, 401 invalid sessions, sanitized failure logs,
