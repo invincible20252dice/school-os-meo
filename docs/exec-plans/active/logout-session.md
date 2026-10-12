@@ -21,7 +21,7 @@ Supabase behavior, not immediate universal access-token revocation.
 - [x] Red regression tests, then minimal fix
 - [x] Full codex:verify, desktop/mobile E2E and screenshots
 - [ ] Preview-disabled feature push, separate draft PR and exact CI
-- [ ] Stable + PR15 + logout exact integration, diff proof and verification
+- [x] Stable + PR15 + logout exact integration, diff proof and verification
 - [ ] Report implementation/CI before approved unassigned build
 
 No DB, migrations, env/secrets/scopes or live session writes in development tests.
@@ -54,3 +54,25 @@ existing flags, production branch, settings, env and scopes stay unchanged.
 Next: push separate logout branch, draft PR against auth-stable-base, check exact
 CI head; combine only PR15 with this fix and report exact candidate for review
 before an unassigned production build. Public alias assignment remains prohibited.
+
+Integration checkpoint 2026-10-12: separate draft PR16 head
+`a86d3919a8002b54cb7b73f2c1eadd7980c24e31`, base auth-stable-base.
+Push run 38230704230 and PR run 38230770485 are running at this checkpoint;
+PR synthetic merge SHA is e9f8d919a16bcdb7bbea585e9553022f621c6525.
+
+Combined code commit f71335d228b89f524609c209a5750d4bf4f08d98 is stable
+25f39b1 + preview-disable metadata 4ac1cb6 + logout a86d391 + an exact
+cherry-pick of PR15 7e50d90. All four PR15 blobs match; changed file union
+matches these commits only. No main/PR12/Instagram change is included.
+Combined codex:verify passed: 170 files / 2,068 tests, 56 E2E across desktop
+and mobile, typecheck/lint/coverage/plain build/tooling/migration safety.
+This documentation checkpoint is the only change after that tested code.
+The candidate branch is codex/auth-logout-candidate with automatic deployment
+disabled. Exact final CI and commit mapping are recorded in the handoff evidence.
+
+Vercel read-only UI recheck: deployment dpl_48Erde1hQPKvorWUmgciC7CY9ZH1
+remains Production Current with canonical domain and source 25f39b1.
+No new deployment or alias assignment has occurred for the logout candidate.
+Next gate is independent review of the fixed candidate and a demonstrably
+unassigned production build; stop if the UI could assign aliases. Canonical real
+OAuth/reload/logout acceptance remains not run for this unpublished candidate.
