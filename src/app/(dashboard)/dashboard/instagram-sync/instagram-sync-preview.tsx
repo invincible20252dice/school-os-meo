@@ -58,11 +58,13 @@ function PreviewBody({ data }: { data: InstagramPreviewResponse }) {
             <div>
               <h2>Mock Instagram投稿</h2>
               <p>
-                {dashboardData.instagramSetting?.lastSyncedAt
+                {dashboardData.syncTimestampUnavailable
+                  ? "最終同期日時を取得できません（サンプル表示）"
+                  : dashboardData.instagramSetting?.lastSyncedAt
                   ? `最終同期 ${new Date(dashboardData.instagramSetting.lastSyncedAt)
                       .toISOString()
                       .slice(0, 10)}`
-                  : new Date(preview.instagram.postedAt).toISOString().slice(0, 10)}
+                  : "最終同期日時の記録はありません（サンプル表示）"}
               </p>
             </div>
           </div>

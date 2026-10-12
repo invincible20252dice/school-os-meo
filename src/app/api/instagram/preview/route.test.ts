@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET } from "./route";
+import { Prisma } from "@prisma/client";
 const auth = vi.hoisted(() => ({ getUser: vi.fn(), maybeSingle: vi.fn(), from: vi.fn() }));
 vi.mock("@/lib/supabase", () => ({ createServerSupabaseClient: () => ({ auth: { getUser: auth.getUser }, from: auth.from }) }));
 const db = vi.hoisted(() => ({ school: { findUnique: vi.fn() }, targetKeyword: { findFirst: vi.fn() }, instagramSetting: { findUnique: vi.fn() } }));
@@ -62,4 +63,31 @@ it.each([null, "", "invalid", "32.8"])("serializes bounded preview coordinates f
 it("keeps absent GBP location empty rather than substituting a live default", async () => {
   db.school.findUnique.mockResolvedValue({ id: "school-b", name: "Synthetic", status: "ACTIVE", city: null, gbpLocationId: null });
   expect((await (await GET(request())).json()).preview.gbpPostPayload.locationId).toBe("");
+});
+
+it("renders the local sample with an explicit unavailable timestamp on the deployed legacy schema", async () => {
+  db.instagramSetting.findUnique.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("sensitive detail", {
+    code: "P2022", clientVersion: "test", meta: { column: "InstagramSetting.lastSyncedAt" },
+  }));
+  const response = await GET(request());
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body.dashboardData.instagramSetting).toBeNull();
+  expect(body.dashboardData.syncTimestampUnavailable).toBe(true);
+  expect(body.preview.school.id).toBe("school-b");
+  expect(JSON.stringify(body)).not.toContain("sensitive detail");
+  expect(db.instagramSetting.findUnique).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  { code: "P2022", meta: { column: "InstagramSetting.autoSyncEnabled" } },
+  { code: "P2022", meta: { column: "Other.lastSyncedAt" } },
+  { code: "P2022", meta: {} },
+  { code: "P2021", meta: { column: "InstagramSetting.lastSyncedAt" } },
+  { code: "P1010", meta: { column: "InstagramSetting.lastSyncedAt" } },
+])("does not hide other schema or permission failures: %j", async ({ code, meta }) => {
+  db.instagramSetting.findUnique.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("sensitive detail", { code, meta, clientVersion: "test" }));
+  const response = await GET(request());
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ message: "プレビューを取得できませんでした。" });
 });
