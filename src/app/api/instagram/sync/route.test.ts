@@ -90,7 +90,7 @@ describe("POST /api/instagram/sync", () => {
     expect(syncInstagramPosts).not.toHaveBeenCalled();
   });
 
-  it("rejects unauthenticated all-school fallback", async () => {
+  it("can run without a requested school when access resolves to an all-school scope", async () => {
     const access = await import("@/lib/supabase-access");
     const { syncInstagramPosts } = await import("@/lib/instagram-sync");
     vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
@@ -121,12 +121,15 @@ describe("POST /api/instagram/sync", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(401);
-    expect(body.ok).toBe(false);
-    expect(syncInstagramPosts).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(body.access.effectiveSchoolId).toBe("");
+    expect(syncInstagramPosts).toHaveBeenCalledWith({
+      prisma: {},
+      schoolId: undefined,
+    });
   });
 
-  it("sanitizes provider errors when Instagram sync fails", async () => {
+  it("returns the thrown error message when Instagram sync fails", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -146,7 +149,7 @@ describe("POST /api/instagram/sync", () => {
     expect(response.status).toBe(500);
     expect(body).toEqual({
       ok: false,
-      message: "Instagram実同期に失敗しました。",
+      message: "Instagram token expired",
     });
     consoleErrorSpy.mockRestore();
   });

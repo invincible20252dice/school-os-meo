@@ -1,4 +1,4 @@
-import { buildFallbackFormattedCaption } from "./ai-formatter";
+import { formatInstagramCaptionForGbp } from "./ai-formatter";
 import type { InstagramMedia } from "./instagram";
 
 export const DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL = {
@@ -33,7 +33,7 @@ export async function buildMockInstagramSyncPreview({
   school?: typeof DEFAULT_INSTAGRAM_DASHBOARD_SCHOOL;
   instagram?: InstagramMedia;
 } = {}) {
-  const formattedText = buildFallbackFormattedCaption({
+  const formattedText = await formatInstagramCaptionForGbp({
     schoolName: school.name,
     caption: instagram.caption,
   });

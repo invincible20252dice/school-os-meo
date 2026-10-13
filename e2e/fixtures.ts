@@ -8,16 +8,18 @@ import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { logoutFailure: boolean; logoutScopes: string[]; failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const state: FixtureState = { logoutFailure: false, logoutScopes: [], failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
   const leads = new Map<string, Array<LeadFact & { id: string; idempotencyKey: string; version: number; grade: null }>>(schools.map(s => [s.id, []]));
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
   await page.addInitScript(() => {
     if (location.origin !== "http://127.0.0.1:4317") return;
     const key = "sb-127-auth-token";
+    if (sessionStorage.getItem("e2e-session-seeded")) return;
+    sessionStorage.setItem("e2e-session-seeded", "true");
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({
       access_token: "e2e-only-session", refresh_token: "e2e-only-refresh", token_type: "bearer",
       expires_at: Math.floor(Date.now() / 1000) + 36000, expires_in: 36000,
@@ -37,6 +39,10 @@ async function install(page: Page): Promise<FixtureState> {
     if (url.origin === "http://127.0.0.1:54321") {
       if (request.method() === "OPTIONS") return json({});
       if (url.pathname === "/auth/v1/authorize") return route.fulfill({ contentType: "text/html", body: "<h1>Test OAuth destination</h1>" });
+      if (url.pathname === "/auth/v1/logout" && request.method() === "POST") {
+        state.logoutScopes.push(url.searchParams.get("scope") || "");
+        return state.logoutFailure ? json({ code: "unexpected_failure", message: "Fixture logout failure" }, 400) : json({});
+      }
       if (url.pathname === "/auth/v1/user") return json({ id: "test-user", email: "fixture@example.invalid", user_metadata: {} });
       if (url.pathname === "/rest/v1/profiles") return json({ id: "test-user", role: "admin", status: "active", school_ids: schools.map(s => s.id), full_name: "検証担当" });
       state.unexpected.push(url.pathname);
@@ -46,7 +52,7 @@ async function install(page: Page): Promise<FixtureState> {
     if (!url.pathname.startsWith("/api/")) return route.continue();
     const schoolId = url.searchParams.get("schoolId") || "school-a";
     state.calls.push({ path: url.pathname, method: request.method(), schoolId });
-    if (url.pathname === "/api/auth/me") return json({ approved: true, status: "active", role: "admin" });
+    if (url.pathname === "/api/auth/me") return json({ authenticated: true, approved: true, status: "active", role: "admin" });
     if (url.pathname === "/api/dashboard/context") return json({ user: { name: "検証担当", role: "admin" }, schools, currentSchoolId: schoolId, currentSchoolName: schools.find(s => s.id === schoolId)?.name, canSwitchSchool: true });
     const school = schools.find(s => s.id === schoolId);
     if (!school) return json({ success: false, error: "校舎へのアクセス権限がありません。" }, 403);
