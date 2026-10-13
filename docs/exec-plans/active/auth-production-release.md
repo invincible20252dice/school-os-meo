@@ -15,9 +15,9 @@ User approved a single release PR from current main, reverting PR #12 and applyi
 Revert #12 as part of this same release, never merge its revert alone. This intentionally restores stable Instagram behavior, including known manual authorization/cron fail-open gaps; do not call these endpoints. Instagram preview, missing DB columns, manual authorization, cron fail-open remain separate work. Reuse existing reviewed auth commits and tests. Only release-branch preview-disable metadata and matching tooling expectation may accompany auth/docs. No external writes in tests.
 
 ## Checklist
-- [ ] Revert #12 and prove stable source restored before applying auth.
-- [ ] Integrate #15/#16, exclude #13/#14/#17, review stable/main diffs.
-- [ ] Verify rollback deployment exists, READY, source SHA matches stable; domains unchanged.
+- [x] Revert #12 and prove stable source restored before applying auth.
+- [x] Integrate #15/#16, exclude #13/#14/#17, review stable/main diffs.
+- [x] Verify rollback deployment exists, READY, source SHA matches stable; domains unchanged.
 - [ ] Full codex:verify: typecheck/lint/unit/integration/coverage/build/desktop + mobile viewport E2E.
 - [ ] Draft release PR and exact HEAD/merge CI success.
 - [ ] Independent review; no merge until received.
@@ -26,3 +26,11 @@ Revert #12 as part of this same release, never merge its revert alone. This inte
 
 ## Acceptance and remaining work
 Fixture-backed E2E is distinct from real OAuth and real phone. No production secrets or customer payloads in evidence. Keep rollback target dpl_48Erde1hQPKvorWUmgciC7CY9ZH1 (verify source SHA 25f39b1; user spelling discrepancy resolved by actual metadata). After successful canonical acceptance, close authentication and track the four Instagram issues separately.
+
+## Source proof and rollback inspection (2026-10-13)
+Revert-only commit c9dc575 restores every tracked preexisting file to stable 25f39b1 (new plan excepted). PR15 and PR16 application/test files match their exact reviewed commits byte-for-byte. Stable diff is limited to auth/logout, related tests/docs, and one release-branch preview-disable entry plus matching tooling assertion. Main diff additionally removes #12. Schema, package/lockfile, workflows and all API routes match stable. Existing non-auth VERCEL_URL use in LINE remains stable behavior; no candidate auth policy is present.
+Vercel GET deployment: dpl_48Erde1hQPKvorWUmgciC7CY9ZH1 READY, gitSource.ref=main, gitSource.sha=25f39b138684dd67c652d7fba345fb6c9cc5c29f. GET project confirms productionBranch=main and autoAssignCustomDomains=false. No setting edits performed. Promotion after independent review must use the formal main deployment, never the candidate.
+
+## Verification in progress
+First aggregate: typecheck/lint/coverage/plain build passed (170 files, 2068 unit/integration cases; unchanged lint warnings). E2E failed before executing test steps because the new checkout did not specify existing Chromium cache /tmp/school-os-playwright. No application failure or test weakening. Repeat the entire aggregate with PLAYWRIGHT_BROWSERS_PATH=/tmp/school-os-playwright; final exact-commit results will be recorded in PR/evidence after completion.
+Application and E2E files also exactly match prior combined auth candidate a5790af; #17 is absent. React checklist: event subscriptions are cleaned up, stale approval responses invalidated, logout errors preserve a safe retry and withhold protected children; unchanged server API boundaries remain responsible for authorization.
