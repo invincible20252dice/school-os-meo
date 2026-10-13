@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { buildLoginProviders } from "@/lib/auth-access";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { startGoogleOAuth } from "@/lib/supabase-auth";
+import { parseGoogleOAuthVerification, startGoogleOAuth } from "@/lib/supabase-auth";
 import styles from "./page.module.css";
 
 function BrandIcon() {
@@ -49,6 +49,7 @@ export default function LoginPage() {
       await startGoogleOAuth(
         createBrowserSupabaseClient(),
         window.location.origin,
+        parseGoogleOAuthVerification(window.location.search),
       );
     } catch (error) {
       setMessage(

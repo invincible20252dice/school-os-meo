@@ -6,17 +6,18 @@ import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
 import { aggregateLeads, leadPeriod, type LeadFact } from "../src/lib/google-leads";
 import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead-lifecycle";
 
-const origin = "http://127.0.0.1:4317";
+const defaultOrigin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
 export type FixtureState = { logoutFailure: boolean; logoutScopes: string[]; failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
-async function install(page: Page): Promise<FixtureState> {
+export async function installFixture(page: Page, options: { origin?: string; seedSession?: boolean } = {}): Promise<FixtureState> {
+  const origin = options.origin ?? defaultOrigin;
   const state: FixtureState = { logoutFailure: false, logoutScopes: [], failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
   const leads = new Map<string, Array<LeadFact & { id: string; idempotencyKey: string; version: number; grade: null }>>(schools.map(s => [s.id, []]));
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
-  await page.addInitScript(() => {
-    if (location.origin !== "http://127.0.0.1:4317") return;
+  if (options.seedSession !== false) await page.addInitScript((appOrigin: string) => {
+    if (location.origin !== appOrigin) return;
     const key = "sb-127-auth-token";
     if (sessionStorage.getItem("e2e-session-seeded")) return;
     sessionStorage.setItem("e2e-session-seeded", "true");
@@ -25,7 +26,7 @@ async function install(page: Page): Promise<FixtureState> {
       expires_at: Math.floor(Date.now() / 1000) + 36000, expires_in: 36000,
       user: { id: "test-user", email: "fixture@example.invalid", app_metadata: {}, user_metadata: {}, aud: "authenticated", created_at: "2026-01-01T00:00:00Z" },
     }));
-  });
+  }, origin);
   await page.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url());
     // The login background is external in production; tests serve a local asset only.
@@ -138,7 +139,7 @@ async function install(page: Page): Promise<FixtureState> {
 
 export const test = base.extend<{ fixture: FixtureState }>({
   fixture: [async ({ page }, use) => {
-    const fixture = await install(page);
+    const fixture = await installFixture(page);
     await use(fixture);
     expect(fixture.unexpected, "No unmocked API or external request may escape the fixture").toEqual([]);
   }, { auto: true }],

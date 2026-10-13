@@ -6,6 +6,9 @@
 - Read [product principles](docs/PRODUCT_PRINCIPLES.md), relevant
   [architecture](docs/ARCHITECTURE.md) and [development rules](docs/DEVELOPMENT_RULES.md).
   Inspect affected code and tests before planning or changing it. Reuse existing behavior.
+- Every School OS task must also read and follow the
+  [autonomous PM policy](docs/AUTONOMOUS_PM_POLICY.md).
+  It does not weaken the safety or explicit-authorization requirements in this file.
 - Never delete existing data, reset databases, DROP TABLE/COLUMN, or apply destructive migrations.
 - Preserve schoolId isolation and existing authentication/authorization on every read and write.
 - For DB changes, large features or multiple modules, create an

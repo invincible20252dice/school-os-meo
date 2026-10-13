@@ -23,11 +23,46 @@ export type SupabaseOAuthClient = {
         queryParams: {
           access_type: string;
           prompt: string;
+          login_hint?: string;
         };
       };
     }): Promise<{ error: SupabaseAuthError | null }>;
   };
 };
+
+export type GoogleOAuthVerification =
+  | { enabled: false }
+  | { enabled: true; accountType: "admin" | "general" };
+
+// Per-login opt-in only. Never persist this choice or forward arbitrary query
+// parameters to the provider. A hint selects an account, not an application role.
+export function parseGoogleOAuthVerification(search: string): GoogleOAuthVerification {
+  const params = new URLSearchParams(search);
+  const modes = params.getAll("auth_verification");
+  if (modes.length === 0) return { enabled: false };
+  if (modes.length !== 1 || !["0", "1"].includes(modes[0])) {
+    throw new Error("検証モードの指定が正しくありません。");
+  }
+  if (modes[0] === "0") return { enabled: false };
+
+  const accounts = params.getAll("account_type");
+  if (accounts.length !== 1 || (accounts[0] !== "admin" && accounts[0] !== "general")) {
+    throw new Error("検証用アカウントの指定が正しくありません。");
+  }
+  return { enabled: true, accountType: accounts[0] };
+}
+
+function googleVerificationLoginHint(verification?: GoogleOAuthVerification) {
+  if (verification === undefined || verification.enabled === false) return undefined;
+  if (verification.enabled === true) {
+    switch (verification.accountType) {
+      case "admin": return "invincible.20.252.dice@gmail.com";
+      case "general": return "ischooljunior.company@gmail.com";
+    }
+  }
+  // Validate again at the SDK boundary, including callers outside the login page.
+  throw new Error("検証用アカウントの指定が正しくありません。");
+}
 
 export type SupabaseCodeExchangeClient = {
   auth: {
@@ -110,6 +145,7 @@ export async function requestMagicLinkEmail(
 export async function startGoogleOAuth(
   client: SupabaseOAuthClient,
   browserOrigin?: string,
+  verification?: GoogleOAuthVerification,
 ) {
   // App login returns to its approved browser origin, even when an older build's
   // shared public base URL points at the legacy domain. Provider integrations and
@@ -124,6 +160,7 @@ export async function startGoogleOAuth(
     throw new Error("このURLからはログインを開始できません。");
   }
   const redirectTo = getAuthCallbackUrl(origin);
+  const loginHint = googleVerificationLoginHint(verification);
   const { error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -132,6 +169,7 @@ export async function startGoogleOAuth(
       queryParams: {
         access_type: "offline",
         prompt: "consent",
+        ...(loginHint ? { login_hint: loginHint } : {}),
       },
     },
   });

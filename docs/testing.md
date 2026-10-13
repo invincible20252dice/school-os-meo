@@ -45,6 +45,33 @@ enum changes, dynamic SQL, locks or data backfills.
   real measurement service with a test-only Prisma-to-SQL adapter and mocked HTTP.
   This proves SQL constraints/persistence, not Prisma transport or distributed locks.
 
+### Google OAuth verification account hints
+
+Normal `/login` is unchanged and verification mode is OFF by default. For a single
+verification login, use `/login?auth_verification=1&account_type=admin` or
+`/login?auth_verification=1&account_type=general`. `auth_verification=0` explicitly
+disables hints. No environment variable change is required. This URL choice is
+not saved; callback and logout return to their existing clean URLs. Re-open the
+explicit verification URL when another hinted login is needed.
+
+The two account types map only to the fixed accounts in
+[the autonomous PM policy](AUTONOMOUS_PM_POLICY.md). Enabled mode rejects missing,
+unknown or duplicate account types; malformed/duplicate mode flags also fail before
+OAuth. Arbitrary email, scope, redirect and prompt query values are never forwarded.
+The installed Supabase SDK's official `signInWithOAuth.options.queryParams.login_hint`
+adds the hint while preserving existing scope, redirectTo, offline access and consent.
+It is an account-selection convenience, not a role grant or enforced account lock.
+Google may still require identity checks or consent; use the human handoff policy.
+
+Unit/SDK tests check normal requests, both allowed hints, rejection/injection cases,
+all approved origins and actual SDK serialization. Desktop/mobile viewport E2E use
+an isolated virtual canonical origin, synthetic OAuth callback and provider/API
+responses to verify callback success, reload persistence, logout and re-login.
+These tests never call Google or production Supabase and do not prove live account
+permissions, real token issuance or actual mobile-device behavior. Existing auth
+tests remain in the full verification suite. This feature branch's automatic Vercel
+deployment is disabled; main merge and production deployment need concrete approval.
+
 ### Live AIO gate
 
 AIO-001/002 are now normal passing acceptance tests, not expected failures.
