@@ -49,15 +49,17 @@ adding only login_hint when enabled. Human authentication remains necessary when
 - [x] Unit tests: normal/admin/general, invalid/injection, unchanged scope/redirect.
 - [x] Desktop/mobile E2E: callback, session reload, logout, re-login, normal regression.
 - [x] Run codex:verify (typecheck, lint, coverage, build, E2E and safety/tooling checks).
-- [ ] Commit, push feature branch, draft PR; inspect Actions for exact SHA.
-- [ ] Independent review and safe corrections; record final evidence.
+- [x] Commit, push feature branch, draft PR; inspect Actions for exact SHA.
+- [x] Independent review and safe corrections; record final evidence.
 
 ## Current status and next safe work
 
-Implementation and local aggregate verification complete; draft PR and CI are next.
-No production operation required for local or CI checks.
-After verification, obtain a separate concrete merge/deploy decision before release;
-no environment variable change is needed for this per-login opt-in design.
+Implementation, local/Linux verification, draft PR and independent review complete.
+[Draft PR #19](https://github.com/invincible20252dice/school-os-meo/pull/19) stays
+unmerged and undeployed. Next safe work is a separate concrete merge/deploy decision,
+then live OAuth acceptance for both designated accounts. No environment variable,
+secret, DB or migration change is needed for this per-login opt-in design.
+The already-approved PR18 live acceptance is separate and does not release this feature.
 
 ## Validation log
 
@@ -76,8 +78,9 @@ no environment variable change is needed for this per-login opt-in design.
   spec. A duplicate settings locator was scoped to the account navigation.
   All 24 cases then passed; no application auth behavior was changed to fix tests.
 - Independent source/policy/test review: no outstanding actionable findings;
-  reviewer independently confirmed the fixture failure and its fix. Exact-commit CI
-  evidence remains pending.
+  reviewer independently confirmed the fixture failure and its fix. Final source
+  commit and tree were checked against the reviewed diff; generated next-env.d.ts
+  changes were excluded and the worktree was clean.
 - Full local `codex:verify`: passed. Tooling 9/9, migration safety, Prisma generation,
   typecheck, lint, 171 unit/integration files (2,117 tests), 95% coverage gates,
   production build, 80 E2E (40 desktop + 40 mobile viewport) all passed.
@@ -85,3 +88,18 @@ no environment variable change is needed for this per-login opt-in design.
   Initial aggregate run had one existing PGlite migration test exceed its 5s limit;
   unchanged targeted rerun passed in 1.96s, then the whole aggregate passed.
   No timeout increase, skip, exclusion or test weakening was applied.
+- Source commit: `b6e95ce72177c875954c63b4bc50ca68ad4cbd94`.
+  Tree: `c41eab6a2656df332e510120b21d4f6624363395`.
+- [Push CI 38353512519](https://github.com/invincible20252dice/school-os-meo/actions/runs/38353512519):
+  passed, job 115151035030, checkout exactly the source commit above.
+- [PR CI 38353663461](https://github.com/invincible20252dice/school-os-meo/actions/runs/38353663461):
+  passed, job 115151513859, checkout `39a27883d03cc7e8d2380f0f44b0c732c1984d77`.
+  This GitHub test merge has the identical source tree above. Both Linux runs passed
+  all 2,117 unit/integration tests, coverage, build and 80 desktop/mobile E2E cases.
+  Checkout SHA and test totals were checked from the actual job logs.
+- This final plan update only records completed checks. Any later head/check results
+  are recorded in PR #19; it does not change application or verification code.
+- Vercel: this feature branch has no deployments; only its Git auto-deploy disable
+  entry changed. Supabase: no project/DB/auth configuration operations for this feature.
+  Live Google consent/token issuance, real Supabase transport and physical mobile
+  devices remain not run for this feature; synthetic checks do not certify them.
