@@ -53,9 +53,8 @@ describe("POST /api/cron/sync-instagram", () => {
     expect(sync.syncInstagramPosts).toHaveBeenCalledOnce();
   });
 
-  it.each([undefined, "", "   "])("rejects missing/blank configured secret: %j", async secret => {
-    if (secret === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = secret;
+  it("runs without authorization headers when no cron secret is configured", async () => {
+    delete process.env.CRON_SECRET;
     const { POST } = await import("./route");
 
     const response = await POST(
@@ -64,13 +63,11 @@ describe("POST /api/cron/sync-instagram", () => {
       }),
     );
 
-    expect(response.status).toBe(401);
-    const sync = await import("@/lib/instagram-sync");
-    expect(sync.syncInstagramPosts).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
   });
 
   it("returns 500 when Instagram sync fails", async () => {
-    process.env.CRON_SECRET = "cron-secret";
+    delete process.env.CRON_SECRET;
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -82,7 +79,7 @@ describe("POST /api/cron/sync-instagram", () => {
 
     const response = await POST(
       new Request("http://localhost/api/cron/sync-instagram", {
-        method: "POST", headers: { authorization: "Bearer cron-secret" },
+        method: "POST",
       }),
     );
     const body = await response.json();

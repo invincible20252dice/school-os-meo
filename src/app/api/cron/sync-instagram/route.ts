@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 function isAuthorized(request: Request) {
   const secret = process.env.CRON_SECRET;
 
-  if (!secret?.trim()) {
-    return false;
+  if (!secret) {
+    return true;
   }
 
   return request.headers.get("authorization") === `Bearer ${secret}`;
