@@ -2,7 +2,7 @@
 
 **Paused (2026-10-13):** PR #18 production acceptance was observation-insufficient,
 not a confirmed authentication failure. Production aliases were restored to
-stable `25f39b1`. [Main/stable alignment](main-stable-alignment.md) removes this
+stable `25f39b1`. [Main/stable alignment](../completed/main-stable-alignment.md) removes this
 unjudged implementation from the release path. The history below does not
 authorize another OAuth run, merge, deployment or alias change.
 

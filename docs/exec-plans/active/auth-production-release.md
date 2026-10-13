@@ -3,7 +3,7 @@
 **Paused after rollback (2026-10-13):** PR #18 merged as `b9867de`, but live
 acceptance was **observation-insufficient / unjudged**, not a confirmed auth
 failure. Both aliases now use stable `25f39b1`. The current authorized work is
-[main/stable alignment](main-stable-alignment.md): preserve the PR #12 exclusion,
+[main/stable alignment](../completed/main-stable-alignment.md): preserve the PR #12 exclusion,
 isolate the unjudged canonical/logout code, verify a draft PR, then stop before
 merge/deploy. Historical release permissions below are not permission to resume
 OAuth or republish these changes.

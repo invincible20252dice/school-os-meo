@@ -65,9 +65,9 @@ every stable test and all 95% coverage gates. No skips or timeout increases.
 - [x] Restore stable runtime/tests; record tree/blob equality and exact test delta.
 - [x] Full `PLAYWRIGHT_BROWSERS_PATH=/tmp/school-os-playwright npm run codex:verify`.
 - [x] Review desktop/mobile screenshots; no real provider/DB/OAuth operations.
-- [ ] Draft PR, push/PR CI with actual checkout SHA and tree identity.
-- [ ] Independent review and final diff against main and stable.
-- [ ] Stop before merge/deploy; document residual risks and rollback procedure.
+- [x] Draft PR, push/PR CI with actual checkout SHA and tree identity.
+- [x] Independent review and final diff against main and stable.
+- [x] Stop before merge/deploy; document residual risks and rollback procedure.
 
 ## Release boundary and rollback
 
@@ -121,5 +121,35 @@ physical mobile-device checks are NOT RUN and remain stopped.
 
 Dependency installation used the unchanged lockfile with `npm ci --ignore-scripts`.
 Its audit reported 19 pre-existing dependency advisories; no dependency upgrade or
-audit fix was attempted in this baseline-only change. Draft PR CI and final
-independent review remain the outstanding development gates.
+audit fix was attempted in this baseline-only change.
+
+## Completed development verification
+
+Draft [PR #20](https://github.com/invincible20252dice/school-os-meo/pull/20)
+contains the implementation commit `51ada584eb55fce37829977e925c86771b9e9126`,
+tree `ae57de48860ad3cd730b22622fd5f1996127a36a`. Both initial CI jobs passed:
+
+- Push run `38375242697`, job `115222433245`: actual checkout `51ada584eb55fce37829977e925c86771b9e9126`.
+- PR run `38375586463`, job `115223006880`: actual checkout `6d55cef1694d0cf8d19c58ec67b10deb4d0c1ede`.
+- PR test-merge tree is `ae57de48860ad3cd730b22622fd5f1996127a36a`, equal to HEAD.
+- Both job logs confirm 2,032 unit/integration cases, 44 desktop/mobile E2E,
+  typecheck, lint, coverage and build passed. No failed tests were skipped or weakened.
+- Independent review of the exact implementation commit found no actionable new
+  defects; source/test tree equality, test withdrawal scope, project boundaries
+  and documentation links were checked independently.
+
+At 18:23 JST, a read-only Vercel history check returned zero deployments for
+both this branch and the exact implementation SHA (no next page). Both public
+aliases remained on stable/READY. This is a point-in-time verification, not a
+guarantee against future manual actions or external automation.
+
+The management-only follow-up moves this plan to completed and updates its
+three inbound links. It changes no runtime, test, build, workflow or hosting
+configuration. Its exact final HEAD and subsequent push/PR CI are recorded in
+the PR description/checks and local verification evidence, avoiding a self-referential
+commit ID in this file. Check the final PR HEAD before any later approval.
+
+Development is complete; the PR remains draft and unmerged. No production or
+OAuth operation was performed. Next: parent review of the final SHA/tree and a
+separate decision about merge, which can trigger a Production build. Retain the
+stable aliases until a concrete separately authorized release step.
