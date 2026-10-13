@@ -1,5 +1,13 @@
 # Auth-only production release
 
+**Paused after rollback (2026-10-13):** PR #18 merged as `b9867de`, but live
+acceptance was **observation-insufficient / unjudged**, not a confirmed auth
+failure. Both aliases now use stable `25f39b1`. The current authorized work is
+[main/stable alignment](main-stable-alignment.md): preserve the PR #12 exclusion,
+isolate the unjudged canonical/logout code, verify a draft PR, then stop before
+merge/deploy. Historical release permissions below are not permission to resume
+OAuth or republish these changes.
+
 ## Scope and authority
 User approved a single release PR from current main, reverting PR #12 and applying only PR #15 canonical Google login and PR #16 local logout/session gate. Independent review must pass before merge. Full CI/E2E and stable rollback verification are prerequisites. No reset/force push, DB/migrations, env/secrets, scopes, Site URL, temporary callbacks, candidate OAuth or Instagram repairs.
 
