@@ -1,5 +1,11 @@
 # Auth-only callback origin repair
 
+**Paused (2026-10-13):** PR #18 production acceptance was observation-insufficient,
+not a confirmed authentication failure. Production aliases were restored to
+stable `25f39b1`. [Main/stable alignment](../completed/main-stable-alignment.md) removes this
+unjudged implementation from the release path. The history below does not
+authorize another OAuth run, merge, deployment or alias change.
+
 Current release integration and authority: [auth-production-release.md](auth-production-release.md). The following records the original isolated PR work; its earlier deployment restrictions/status do not supersede the approved release plan.
 
 Base production 25f39b138684dd67c652d7fba345fb6c9cc5c29f, not main (which includes

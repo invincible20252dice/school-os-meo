@@ -7,19 +7,18 @@ import styles from "./layout.module.css";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <AuthApprovalGate>
-      <div className={styles.shell}>
+    <div className={styles.shell}>
+      <AuthApprovalGate />
+      <Suspense fallback={null}>
+        <Sidebar />
+      </Suspense>
+      <div className={styles.content}>
         <Suspense fallback={null}>
-          <Sidebar />
+          <DashboardHeader />
         </Suspense>
-        <div className={styles.content}>
-          <Suspense fallback={null}>
-            <DashboardHeader />
-          </Suspense>
-          <SupportChat />
-          {children}
-        </div>
+        <SupportChat />
+        {children}
       </div>
-    </AuthApprovalGate>
+    </div>
   );
 }

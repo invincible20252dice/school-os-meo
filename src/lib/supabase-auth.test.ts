@@ -14,25 +14,6 @@ afterEach(() => {
 });
 
 describe("supabase auth", () => {
-  it.each(["https://app.jukumeo.com", "https://school-os-meo.vercel.app", "http://localhost:3030", "http://localhost:3031"])("uses approved browser origin %s despite stale legacy build base", async origin => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://school-os-meo.vercel.app";
-    const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
-    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin)).resolves.toEqual({ redirectTo: `${origin}/auth/callback` });
-    expect(signInWithOAuth).toHaveBeenCalledWith(expect.objectContaining({ options: expect.objectContaining({ redirectTo: `${origin}/auth/callback` }) }));
-  });
-  it.each(["", "null", "https://evil.invalid", "https://app.jukumeo.com.evil.invalid", "https://app.jukumeo.com@evil.invalid", "https://user@app.jukumeo.com", "https://app.jukumeo.com/path", "https://app.jukumeo.com?next=evil", "https://app.jukumeo.com#evil", "http://app.jukumeo.com", "https://app.jukumeo.com:444", "http://localhost:4317", "http://127.0.0.1:4317", "//app.jukumeo.com", " https://app.jukumeo.com"])("rejects unapproved supplied origin %s without OAuth", async origin => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://school-os-meo.vercel.app";
-    const signInWithOAuth = vi.fn();
-    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin)).rejects.toThrow("このURLからはログインを開始できません。");
-    expect(signInWithOAuth).not.toHaveBeenCalled();
-  });
-  it("rejects an unapproved configured fallback without OAuth", async () => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://evil.invalid";
-    const signInWithOAuth = vi.fn();
-    await expect(startGoogleOAuth({ auth: { signInWithOAuth } })).rejects.toThrow("このURLからはログインを開始できません。");
-    expect(signInWithOAuth).not.toHaveBeenCalled();
-  });
-
   it("builds the callback URL from NEXT_PUBLIC_APP_URL", () => {
     expect(getAuthCallbackUrl("https://school-os-meo.vercel.app/")).toBe(
       "https://school-os-meo.vercel.app/auth/callback",

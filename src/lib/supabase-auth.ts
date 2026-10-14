@@ -111,19 +111,10 @@ export async function startGoogleOAuth(
   client: SupabaseOAuthClient,
   browserOrigin?: string,
 ) {
-  // App login returns to its approved browser origin, even when an older build's
-  // shared public base URL points at the legacy domain. Provider integrations and
-  // magic-link callback selection deliberately retain their existing behavior.
-  const origin = browserOrigin ?? (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL);
-  if (!origin || ![
-    "https://app.jukumeo.com",
-    "https://school-os-meo.vercel.app",
-    "http://localhost:3030",
-    "http://localhost:3031",
-  ].includes(origin)) {
-    throw new Error("このURLからはログインを開始できません。");
-  }
-  const redirectTo = getAuthCallbackUrl(origin);
+  const redirectTo = getAuthCallbackUrl(
+    process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL,
+    browserOrigin,
+  );
   const { error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
