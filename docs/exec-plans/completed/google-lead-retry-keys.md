@@ -72,7 +72,10 @@ No customer data, credentials, external provider calls or paid services.
   operation success is established by E2E, not screenshot hit-testing.
 - [x] Independent code re-review confirmed the POST 409 correction, current POST
   payload shape and epoch/signal guards; no remaining actionable code findings.
-- [ ] Feature push, draft PR and exact checkout SHA/tree CI.
+- [x] Feature push and draft [PR #21](https://github.com/invincible20252dice/school-os-meo/pull/21).
+  Implementation commit `65e3966e19b7fa78d0a4486844e8164027a75473`, tree
+  `c0ce9f93368a66d8e58a5132750c5e4b007f3152`. Both push and PR CI passed;
+  exact checkout identities are recorded below.
 
 ## Review decisions and execution evidence
 
@@ -116,5 +119,47 @@ Git deployment and extend its existing tooling assertion. Preserve all prior
 exclusions, routing, runtime and build behavior. No main merge/deploy/promote,
 alias change, production DB/migration/env/secret operations in this task.
 
-Next steps and completion evidence will be recorded here. Existing production
-OAuth and Instagram issues remain separate; do not mix PR #19 or isolated work.
+## Delivery evidence (2026-10-14)
+
+Implementation CI completed successfully for both triggers:
+
+- [Push run 38531412149](https://github.com/invincible20252dice/school-os-meo/actions/runs/38531412149),
+  job `115743933181`, checked out implementation SHA
+  `65e3966e19b7fa78d0a4486844e8164027a75473`.
+- [PR run 38531521601](https://github.com/invincible20252dice/school-os-meo/actions/runs/38531521601),
+  job `115744277893`, checked out synthetic merge SHA
+  `ec67ab7b73ae8e8e148789ef126fe303139d097b`. Its parents are the baseline
+  main SHA and implementation SHA; its tree equals the implementation tree.
+
+Both job logs confirm typecheck, lint, 168 test files / 2,037 unit/integration
+tests, coverage 99.25% statements / 97.53% branches / 99.77% functions / 99.25%
+lines, plain build, 50 desktop/mobile E2E and the final isolated-check PASS.
+The exact checkout and result excerpts are saved locally as
+`implementation-ci-push.txt` and `implementation-ci-pr.txt` in the evidence
+directory. All 14 E2E screenshots are saved under its `screenshots/` directory.
+
+Vercel's read-only deployment query after this push returned zero deployments
+for this exact branch and implementation SHA, with no next page. The result is
+saved as `postpush-vercel-readonly.json`. No production alias/settings changes,
+additional deployment, Supabase database access, migration, environment/secret
+change, or OAuth verification occurred in this implementation task.
+
+This completion record is a subsequent documentation-only commit. Its final
+HEAD/tree, push/PR CI checkout identities and results are recorded in PR #21 and
+the task evidence after that push; the implementation runs above are not claimed
+to test the later documentation commit.
+
+## Remaining boundaries and next safe work
+
+Implementation and isolated verification are complete; PR #21 stays draft for
+PM review. Main merge, production rollout and production acceptance of this new
+client fix have not been performed and need concrete authorization. Existing
+production OAuth and Instagram issues remain separate; do not mix PR #19 or
+isolated work. No new Supabase verification project was created.
+
+Unresolved keys still do not survive a full reload, unmount or new tab. The next
+safe investigation is to reproduce that remaining uncertainty boundary with
+synthetic fixtures and specify a bounded persistence/reconciliation contract
+before changing storage behavior. Preserve school isolation, explicit new-save
+intent and edited/deleted-row conflict handling. Do not repeat PR #5's completed
+production lifecycle acceptance or duplicate PR #7's pending release-record work.
