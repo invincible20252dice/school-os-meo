@@ -61,3 +61,7 @@
 
 .kpis > .caption { grid-column: 1 / -1; }
 @media (max-width: 600px) { .table { font-size: 12px; } .table th, .table td { padding: 10px 3px; } }
+
+.recovery { padding: 18px; margin: 16px 0; border: 1px solid #d9c27f; border-radius: 8px; background: #fffbef; }
+.recovery article + article { border-top: 1px solid #e9dfc2; padding-top: 16px; margin-top: 16px; }
+.recovery h3 { font-size: 15px; margin: 0; }
