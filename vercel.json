@@ -10,7 +10,8 @@
       "codex/google-settings-access": false,
       "codex/test-notification-auth": false,
       "codex/auth-production-release": false,
-      "codex/main-stable-alignment": false
+      "codex/main-stable-alignment": false,
+      "codex/google-lead-retry-keys": false
     }
   }
 }

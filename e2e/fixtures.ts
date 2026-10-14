@@ -3,15 +3,15 @@ import { startChallenge, updateChallenge, weeklyActions } from "../src/lib/chall
 import { snapshot } from "../src/test/challenge-fixtures";
 import { buildEmptySchoolSetting } from "../src/lib/settings";
 import type { AioViewData, MeasurementView } from "../src/lib/aio-view";
-import { aggregateLeads, leadPeriod, type LeadFact } from "../src/lib/google-leads";
+import { aggregateLeads, LeadError, leadPeriod, parseLeadEdit, type LeadFact } from "../src/lib/google-leads";
 import { advanceLeadStage, aggregateLeadLifecycle } from "../src/lib/google-lead-lifecycle";
 
 const origin = "http://127.0.0.1:4317";
 const schools = [{ id: "school-a", name: "検証用A校" }, { id: "school-b", name: "検証用B校" }];
-export type FixtureState = { failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
+export type FixtureState = { failNextLeadResponseAfterSave: boolean; failNextLeadRead: boolean; failedSave: boolean; aioReadFailure: boolean; aioConfigured: boolean; aioFailure: boolean; aioCanMeasure: boolean; aioRecommended: boolean; aioCount: number; aioMixed: boolean; aioHistory: boolean; calls: Array<{ path: string; method: string; schoolId: string }>; unexpected: string[] };
 
 async function install(page: Page): Promise<FixtureState> {
-  const state: FixtureState = { failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
+  const state: FixtureState = { failNextLeadResponseAfterSave: false, failNextLeadRead: false, failedSave: false, aioReadFailure: false, aioConfigured: true, aioFailure: false, aioCanMeasure: true, aioRecommended: false, aioCount: 1, aioMixed: false, aioHistory: false, calls: [], unexpected: [] };
   const leads = new Map<string, Array<LeadFact & { id: string; idempotencyKey: string; version: number; grade: null }>>(schools.map(s => [s.id, []]));
   const measurements = new Map<string, MeasurementView>();
   const documents = new Map(schools.map(s => [s.id, { document: startChallenge(10, snapshot()), version: 1 }]));
@@ -60,12 +60,35 @@ async function install(page: Page): Promise<FixtureState> {
           row = { id: `lead-${schoolId}-${rows.length}`, idempotencyKey: body.idempotencyKey, version: 1, grade: null, source: "google", status: "inquiry", channel: body.channel, occurredAt: new Date(), meetingAt: null, deletedAt: null };
           rows.push(row);
         }
+        if (row.channel !== body.channel || row.deletedAt) {
+          return json({ success: false, error: "この登録は処理済みです。最新の一覧を確認してください。" }, 409);
+        }
+        // The record is retained even though its acknowledgement cannot reach
+        // the client. Retrying must reuse the original scoped idempotency key.
+        if (state.failNextLeadResponseAfterSave) {
+          state.failNextLeadResponseAfterSave = false;
+          return json({ success: false, error: "検証用の保存応答失敗" }, 503);
+        }
         return json({ success: true, lead: row });
       }
-      if (request.method() === "PATCH") {
-        const body = request.postDataJSON(), row = rows.find(r => r.id === body.id);
-        if (!row || row.version !== body.version) return json({ success: false, error: "更新競合" }, 409);
-        Object.assign(row, body.stage ? advanceLeadStage(row, body.stage, new Date()) : { status: body.status }); row.meetingAt = row.status === "meeting" ? row.meetingAt ?? new Date() : null; row.version++;
+      if (request.method() === "PATCH" || request.method() === "DELETE") {
+        const body = request.postDataJSON(), row = rows.find(r => r.id === body.id && !r.deletedAt);
+        if (!row) return json({ success: false, error: "対象の記録が見つかりません。" }, 404);
+        if (row.version !== body.version) return json({ success: false, error: "更新競合" }, 409);
+        if (request.method() === "DELETE") row.deletedAt = new Date();
+        else {
+          const hasMetadata = ["channel", "grade", "status", "occurredAt"].some(field => body[field] !== undefined);
+          try {
+            Object.assign(row, {
+              ...(hasMetadata || body.stage === undefined ? parseLeadEdit(body, new Date()) : {}),
+              ...(body.stage === undefined ? {} : advanceLeadStage(row, body.stage, new Date())),
+            });
+          } catch (error) {
+            return json({ success: false, error: error instanceof Error ? error.message : "変更内容を確認してください。" }, error instanceof LeadError ? error.status : 400);
+          }
+          row.meetingAt = row.status === "meeting" ? row.meetingAt ?? new Date() : null;
+        }
+        row.version++;
         return json({ success: true, id: row.id });
       }
       if (request.method() === "GET") {

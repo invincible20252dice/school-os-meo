@@ -17,13 +17,17 @@ const periods = { month: "今月", previous: "先月", six: "過去6ヶ月" };
 const dateText = (value: string) => new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 const localDate = (value: string) => new Date(new Date(value).getTime() + 9 * 3600_000).toISOString().slice(0, 16);
 
+class LeadApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 async function api(url: string, method: string, body?: unknown, signal?: AbortSignal) {
   const { data } = await createBrowserSupabaseClient().auth.getSession();
   if (!data.session) throw new Error("ログイン後にGoogle集客成果を確認してください。");
   signal?.throwIfAborted();
   const response = await fetch(url, { method, headers: { Authorization: `Bearer ${data.session.access_token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store", signal });
   const result = await response.json();
-  if (!response.ok || !result.success) throw new Error(result.error || "取得・保存できませんでした。再取得してください。");
+  if (!response.ok || !result.success) throw new LeadApiError(result.error || "取得・保存できませんでした。再取得してください。", response.status);
   return result;
 }
 
@@ -36,7 +40,7 @@ export default function GoogleResultsClient() {
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
   const [created, setCreated] = useState<RecordRow | null>(null), [editing, setEditing] = useState<RecordRow | null>(null), [deleting, setDeleting] = useState<RecordRow | null>(null);
   const epoch = useRef(0), saving = useRef(false), controller = useRef<AbortController | null>(null);
-  const pending = useRef<{ schoolId: string; channel: string; id: string } | null>(null);
+  const pending = useRef(new Map<string, string>());
   const dialog = useRef<HTMLDialogElement>(null);
   const endpoint = `/api/dashboard/google-results?schoolId=${encodeURIComponent(schoolId)}&period=${period}`;
 
@@ -66,6 +70,10 @@ export default function GoogleResultsClient() {
   async function mutate(method: string, body: Record<string, unknown>, message: string) {
     if (saving.current || !data) return;
     const generation = epoch.current, signal = controller.current!.signal;
+    const releasePending = () => {
+      const request = JSON.stringify([schoolId, body.channel]);
+      if (method === "POST" && pending.current.get(request) === body.idempotencyKey) pending.current.delete(request);
+    };
     saving.current = true; setBusy(true); setNotice("");
     let persisted = false;
     try {
@@ -75,12 +83,15 @@ export default function GoogleResultsClient() {
       // The saved mutation makes the previous counts and record versions obsolete.
       // Keep writes unavailable until the authoritative read succeeds.
       setState({ key, data: null, error: "" });
-      if (method === "POST") { pending.current = null; setCreated(result.lead); }
+      if (method === "POST") { releasePending(); setCreated(result.lead); }
       else { setCreated(null); setEditing(null); setDeleting(null); }
       const latest = await api(endpoint, "GET", undefined, signal);
       if (!signal.aborted && epoch.current === generation) { setState({ key, data: latest, error: "" }); setNotice(message); }
     } catch (error) {
       if (!signal.aborted && epoch.current === generation) {
+        // The saved row was edited or deleted: this key cannot be retried.
+        // Surface the conflict and require a new explicit +1; never auto-resubmit.
+        if (!persisted && error instanceof LeadApiError && error.status === 409) releasePending();
         if (persisted) setState({ key, data: null, error: "保存済みですが一覧を再取得できませんでした。再取得してください。" });
         else setNotice(error instanceof Error ? error.message : "保存できませんでした。再試行してください。");
       }
@@ -90,8 +101,12 @@ export default function GoogleResultsClient() {
   }
   function add(channel: LeadChannel) {
     if (saving.current) return;
-    if (pending.current?.schoolId !== schoolId || pending.current.channel !== channel) pending.current = { schoolId, channel, id: crypto.randomUUID() };
-    void mutate("POST", { channel, idempotencyKey: pending.current.id }, `${leadChannels[channel]}経由の問い合わせを1件記録しました。`);
+    // An unresolved save may already exist on the server. Other registrations
+    // must not discard the key needed to retry it without counting it twice.
+    const request = JSON.stringify([schoolId, channel]);
+    const idempotencyKey = pending.current.get(request) ?? crypto.randomUUID();
+    pending.current.set(request, idempotencyKey);
+    void mutate("POST", { channel, idempotencyKey }, `${leadChannels[channel]}経由の問い合わせを1件記録しました。`);
   }
   const update = (row: RecordRow, fields: Record<string, unknown>) => void mutate("PATCH", { id: row.id, version: row.version, ...fields }, "問い合わせ記録を更新しました。");
   const closeDialog = () => { if (!busy) { setEditing(null); setDeleting(null); } };

@@ -205,3 +205,78 @@ it("distinguishes planned, held, enrolled and unknown legacy meetings with expli
   await screen.findByText("問い合わせ記録を更新しました。");
   expect(mutation().at(-1)?.body).toMatchObject({ id: "enrolled", stage: "inquiry" });
 });
+
+it("retains unresolved inquiry keys across channel registrations and releases only acknowledged keys", async () => {
+  const normal = mocks.fetch.getMockImplementation()!;
+  let lostResponse = true;
+  mocks.fetch.mockImplementation((url, init) => {
+    if (init.method === "POST" && lostResponse) { lostResponse = false; return Promise.reject(new Error("応答を受信できませんでした")); }
+    return normal(url, init);
+  });
+  render(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("応答を受信できませんでした");
+  fireEvent.click(screen.getByText("電話 +1")); await screen.findByText("電話経由の問い合わせを1件記録しました。");
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  expect(mutation()[2].body.idempotencyKey).toBe(mutation()[0].body.idempotencyKey);
+  expect(mutation()[1].body.idempotencyKey).not.toBe(mutation()[0].body.idempotencyKey);
+  fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(mutation()).toHaveLength(4));
+  await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  expect(mutation()[3].body.idempotencyKey).not.toBe(mutation()[0].body.idempotencyKey);
+});
+
+it("keeps an obsolete school's unresolved key when another school's inquiry succeeds", async () => {
+  const normal = mocks.fetch.getMockImplementation()!;
+  let complete!: (value: Response) => void;
+  mocks.fetch.mockImplementation((url, init) => init.method === "POST" && url.includes("schoolId=a")
+    ? new Promise<Response>(resolve => { complete = resolve; }) : normal(url, init));
+  const view = render(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(mutation()).toHaveLength(1));
+  mocks.params = new URLSearchParams("schoolId=b"); current = { ...results([]), school: { id: "b", name: "校舎B" } };
+  view.rerender(<GoogleResultsClient />); await screen.findByText("校舎B");
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  await act(async () => complete(response({ success: true, lead: row })));
+  expect(screen.getByText("校舎B")).toBeTruthy();
+  mocks.fetch.mockImplementation(normal);
+  mocks.params = new URLSearchParams("schoolId=a"); current = results(); view.rerender(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  expect(mutation()[2].body.idempotencyKey).toBe(mutation()[0].body.idempotencyKey);
+  expect(mutation()[1].body.idempotencyKey).not.toBe(mutation()[0].body.idempotencyKey);
+});
+
+it.each([409, 503])("retires only a terminal POST conflict, preserving other unresolved keys (%s)", async status => {
+  const normal = mocks.fetch.getMockImplementation()!;
+  let attempts = 0;
+  mocks.fetch.mockImplementation((url, init) => init.method === "POST"
+    ? Promise.resolve(response({ success: false, error: ++attempts <= 2 ? "保存応答が不明です" : "再試行を拒否しました" }, attempts <= 2 ? 503 : status)) : normal(url, init));
+  render(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("保存応答が不明です");
+  fireEvent.click(screen.getByText("電話 +1")); await waitFor(() => expect(mutation()).toHaveLength(2)); await screen.findByText("保存応答が不明です");
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("再試行を拒否しました");
+  expect(mutation()).toHaveLength(3); // No automatic resubmission after a conflict.
+  expect(mutation()[2].body.idempotencyKey).toBe(mutation()[0].body.idempotencyKey);
+  mocks.fetch.mockImplementation(normal);
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  expect(mutation()[3].body.idempotencyKey === mutation()[0].body.idempotencyKey).toBe(status !== 409);
+  fireEvent.click(screen.getByText("電話 +1")); await screen.findByText("電話経由の問い合わせを1件記録しました。");
+  expect(mutation()[4].body.idempotencyKey).toBe(mutation()[1].body.idempotencyKey);
+});
+
+it("does not release the current retry key when an obsolete request returns a conflict", async () => {
+  const normal = mocks.fetch.getMockImplementation()!;
+  const pending: Array<(value: Response) => void> = [];
+  mocks.fetch.mockImplementation((url, init) => init.method === "POST"
+    ? new Promise<Response>(resolve => pending.push(resolve)) : normal(url, init));
+  const view = render(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(pending).toHaveLength(1));
+  mocks.params = new URLSearchParams("schoolId=b"); current = { ...results([]), school: { id: "b", name: "校舎B" } };
+  view.rerender(<GoogleResultsClient />); await screen.findByText("校舎B");
+  mocks.params = new URLSearchParams("schoolId=a"); current = results(); view.rerender(<GoogleResultsClient />); await loaded();
+  fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(pending).toHaveLength(2));
+  await act(async () => pending[0](response({ success: false, error: "古い競合" }, 409)));
+  expect(screen.queryByText("古い競合")).toBeNull();
+  await act(async () => pending[1](response({ success: false, error: "保存応答が不明です" }, 503)));
+  await screen.findByText("保存応答が不明です");
+  mocks.fetch.mockImplementation(normal);
+  fireEvent.click(screen.getByText("LINE +1")); await screen.findByText("LINE経由の問い合わせを1件記録しました。");
+  expect(mutation().map(call => call.body.idempotencyKey)).toEqual(Array(3).fill(mutation()[0].body.idempotencyKey));
+});
