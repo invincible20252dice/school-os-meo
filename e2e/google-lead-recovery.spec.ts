@@ -1,6 +1,6 @@
 import { test, expect, installFixture, secondSyntheticUserId, type FixtureState } from "./fixtures";
 import type { Page, TestInfo } from "@playwright/test";
-import { LEAD_RECOVERY_STORAGE_KEY, LEAD_RECOVERY_MAX_AGE_MS } from "../src/lib/google-lead-recovery-storage";
+import { LEAD_RECOVERY_STORAGE_KEY, LEAD_RECOVERY_MAX_AGE_MS, LEAD_RECOVERY_CHANGED } from "../src/lib/google-lead-recovery-storage";
 
 const route = "/dashboard/roi?schoolId=school-a";
 const recovery = (page: Page) => page.getByRole("region", { name: "前回の登録", exact: true });
@@ -253,3 +253,39 @@ test("a real opener-created tab discards copied recovery state while the origina
   await evidence(child, childFixture, testInfo, "copied-opener-state-discarded");
   await child.close();
 });
+
+for (const reason of ["cancel", "expiry", "external"] as const) {
+  test(`${reason} during acknowledged-save list refresh exposes explicit read recovery`, async ({ page, fixture }, testInfo) => {
+    await page.goto(route); await count(page, 0);
+    let release!: () => void, received!: () => void, block = true;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const waiting = new Promise<void>(resolve => { received = resolve; });
+    await page.route("**/api/dashboard/google-results?**", async intercepted => {
+      if (intercepted.request().method() === "GET" && block) {
+        block = false; received(); await pending;
+      }
+      await intercepted.fallback();
+    });
+    await line(page).click(); await waiting;
+    await expect.poll(async () => (await stored(page))[0]?.state).toBe("confirmed");
+    if (reason === "cancel") await recovery(page).getByRole("button", { name: "この操作の再確認をやめる", exact: true }).click();
+    else await page.evaluate(({ reason, key, age, changed }) => {
+      if (reason === "expiry") {
+        const rows = JSON.parse(sessionStorage.getItem(key)!); rows[0].startedAt = Date.now() - age;
+        sessionStorage.setItem(key, JSON.stringify(rows)); document.dispatchEvent(new Event("visibilitychange"));
+      } else { sessionStorage.removeItem(key); window.dispatchEvent(new Event(changed)); }
+    }, { reason, key: LEAD_RECOVERY_STORAGE_KEY, age: LEAD_RECOVERY_MAX_AGE_MS, changed: LEAD_RECOVERY_CHANGED });
+    const alert = page.getByRole("alert").filter({ hasText: "最新の成果は「再取得」で確認してください。" });
+    await expect(alert).toBeVisible(); await expect(page.getByText("成果を読み込んでいます…", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "再取得", exact: true })).toBeEnabled();
+    expect(await stored(page)).toEqual([]); expect(posts(fixture)).toHaveLength(1); expect(commits(fixture)).toHaveLength(1);
+    await evidence(page, fixture, testInfo, `${reason}-pending-list-explicit-recovery`);
+    const delayed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/dashboard/google-results" && response.request().method() === "GET");
+    release(); await delayed;
+    await expect(alert).toBeVisible();
+    await page.getByRole("button", { name: "再取得", exact: true }).click(); await count(page, 1);
+    await expect(alert).toHaveCount(0); await expect(line(page)).toBeEnabled();
+    expect(await stored(page)).toEqual([]); expect(posts(fixture)).toHaveLength(1); expect(commits(fixture)).toHaveLength(1);
+    await evidence(page, fixture, testInfo, `${reason}-pending-list-recovered-one`);
+  });
+}

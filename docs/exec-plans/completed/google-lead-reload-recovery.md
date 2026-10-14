@@ -160,3 +160,34 @@ Implementation, local aggregate verification and independent review completed on
   payload/browser secret storage, auth-method change or automatic resend.
   Live provider/Prisma transport/production acceptance, main merge and deployment
   remain separately authorized follow-up, not covered by synthetic tests.
+
+## Parent review follow-up: cancelled list refresh
+
+Reopened 2026-10-14 after parent independent review. A POST200 followed by a
+pending list GET clears displayed data. Cancelling the operation correctly drops
+the stale response but leaves the UI saying it is loading forever. Reproduce with
+a failing component test, then show an explicit read-only reacquisition state on
+cancellation when no current data is available. No automatic GET/POST, operation
+resurrection, auth, DB or production change. Verify late success/failure and
+user/school changes; add desktop/mobile browser acceptance and rerun all checks.
+
+### Follow-up result (2026-10-14)
+
+- Reproduced cancellation/expiry/external metadata removal during the pending
+  acknowledged-save list GET, including late success/failure: eight regression
+  cases failed before the fix. The focused suite now passes all 75 tests.
+- Centralized tracked-operation release: keep existing data/error; when neither
+  exists, show an explicit error directing the user to the existing read-only
+  reacquire button. No automatic GET/POST and no operation resurrection. Existing
+  user/school/generation protections still reject stale responses.
+- Added desktop/mobile browser cases for all three cleanup boundaries. Each
+  remains one POST/one committed inquiry before and after explicit reacquisition.
+- Fresh complete verification passed 2,182 unit/integration tests in 173 files,
+  coverage 99.27/97.50/99.78/99.27%, typecheck, lint, build and 92 E2E
+  (46 desktop / 46 mobile). Mobile recovery and desktop restored-results
+  screenshots visually checked; recovery controls are readable and usable.
+- Independent read-only follow-up review: no actionable findings. Parent's
+  loading-state finding is addressed; production restrictions remain unchanged.
+- This result precedes the follow-up commit. Repeat full verification on its
+  committed HEAD and record actual GitHub checkout SHA/tree, CI and evidence in
+  the PR and external evidence manifest; do not reuse earlier CI as final proof.

@@ -85,6 +85,12 @@ export default function GoogleResultsClient() {
   function finish(token: symbol) {
     if (work.current === token) { work.current = null; activeOperation.current = null; saving.current = false; setBusy(false); }
   }
+  function releaseTrackedOperation() {
+    work.current = null; activeOperation.current = null; saving.current = false; setBusy(false);
+    // Its pending list response will be ignored after the operation disappears.
+    // Leave an explicit read-only recovery path instead of an endless spinner.
+    setState(previous => previous.data || previous.error ? previous : { ...previous, error: "登録操作の確認を終了しました。最新の成果は「再取得」で確認してください。" });
+  }
   async function refresh(ctx: RecoveryContext, operationId?: string) {
     setState({ key, data: null, error: "" });
     const latest = await api(endpoint, "GET", undefined, ctx.signal, ctx.scope.userId, () => active(ctx, operationId));
@@ -155,7 +161,7 @@ export default function GoogleResultsClient() {
       if (ownStorageChange.current || !context.current) return;
       const stored = reconcile(context.current.scope);
       if (activeOperation.current && !stored.operations.some(op => op.operationId === activeOperation.current)) {
-        work.current = null; activeOperation.current = null; saving.current = false; setBusy(false);
+        releaseTrackedOperation();
       }
     };
     const { data: authListener } = createBrowserSupabaseClient().auth.onAuthStateChange((event, session) => {
@@ -233,9 +239,9 @@ export default function GoogleResultsClient() {
   }
   function cancelOperation(op: RecoveryView) {
     const ctx = context.current;
-    if (!ctx) return;
+    if (!ctx || !active(ctx)) return;
     store(ctx, () => dropLeadRecovery(op.operationId));
-    if (activeOperation.current === op.operationId) { work.current = null; activeOperation.current = null; saving.current = false; setBusy(false); }
+    if (activeOperation.current === op.operationId) releaseTrackedOperation();
     setNotice("この操作の再確認を終了しました。すでに保存された問い合わせは削除されません。");
   }
   const update = (row: RecordRow, fields: Record<string, unknown>) => void mutate("PATCH", { id: row.id, version: row.version, ...fields }, "問い合わせ記録を更新しました。");

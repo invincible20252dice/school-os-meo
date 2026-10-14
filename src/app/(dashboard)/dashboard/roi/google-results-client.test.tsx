@@ -460,14 +460,42 @@ it("stops before registration when a safe operation identity cannot be generated
   fireEvent.click(screen.getByText("LINE +1")); await screen.findByText(/このタブで登録操作を一時保存できない/);
   expect(mutation()).toHaveLength(0); random.mockRestore();
 });
-it("does not show a delayed refreshed list from a cancelled operation", async () => {
-  let complete!: (value: Response) => void;
+it.each(["cancel", "expiry", "external"].flatMap(reason => ["success", "failure"].map(outcome => [reason, outcome])))("%s during list refresh exposes explicit recovery and ignores late %s", async (reason, outcome) => {
+  let complete!: (value: Response) => void, fail!: (error: Error) => void;
   render(<GoogleResultsClient />); await loaded();
-  mocks.fetch.mockImplementation((_url, init) => init.method === "POST" ? response({ success: true, lead: row }) : new Promise<Response>(resolve => { complete = resolve; }));
+  const normal = mocks.fetch.getMockImplementation()!;
+  mocks.fetch.mockImplementation((_url, init) => init.method === "POST" ? response({ success: true, lead: row }) : new Promise<Response>((resolve, reject) => { complete = resolve; fail = reject; }));
   fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(mocks.operations[0]?.state).toBe("confirmed"));
+  await waitFor(() => expect(complete).toBeDefined());
+  if (reason === "cancel") fireEvent.click(screen.getByText("この操作の再確認をやめる"));
+  else act(() => { if (reason === "expiry") mocks.operations[0].startedAt = Date.now() - 86400000; else mocks.operations = []; window.dispatchEvent(new Event("lead-recovery-test")); });
+  expect(screen.queryByText("成果を読み込んでいます…")).toBeNull();
+  expect(screen.getByRole("alert").textContent).toContain("再取得");
+  expect(screen.getByText("再取得")).toHaveProperty("disabled", false);
+  expect(mocks.operations.filter(op => Date.now() - op.startedAt < 86400000)).toEqual([]); expect(mutation()).toHaveLength(1);
+  await act(async () => { if (outcome === "success") complete(response({ ...current, school: { id: "a", name: "obsolete-list" } })); else fail(new Error("obsolete-failure")); });
+  expect(screen.queryByText("obsolete-list")).toBeNull(); expect(screen.queryByText("obsolete-failure")).toBeNull();
+  expect(screen.getByRole("alert").textContent).toContain("再取得");
+  mocks.fetch.mockImplementation(normal);
+  fireEvent.click(screen.getByText("再取得")); await loaded();
+  expect(screen.getByText("LINE +1")).toHaveProperty("disabled", false);
+  expect(screen.queryByRole("alert")).toBeNull(); expect(mocks.operations.filter(op => Date.now() - op.startedAt < 86400000)).toEqual([]); expect(mutation()).toHaveLength(1);
+});
+it.each(["school", "user"])("cancelled list response cannot overwrite a new %s context", async boundary => {
+  let complete!: (value: Response) => void;
+  const view = render(<GoogleResultsClient />); await loaded();
+  const normal = mocks.fetch.getMockImplementation()!;
+  mocks.fetch.mockImplementation((_url, init) => init.method === "POST" ? response({ success: true, lead: row }) : new Promise<Response>(resolve => { complete = resolve; }));
+  fireEvent.click(screen.getByText("LINE +1")); await waitFor(() => expect(complete).toBeDefined());
   fireEvent.click(screen.getByText("この操作の再確認をやめる"));
+  expect(screen.getByRole("alert").textContent).toContain("再取得");
+  mocks.fetch.mockImplementation(normal); current = { ...current, school: { id: "b", name: "new-context" } };
+  if (boundary === "school") { mocks.params = new URLSearchParams("schoolId=b"); view.rerender(<GoogleResultsClient />); }
+  else { mocks.session.mockResolvedValue(authSession(otherUser)); act(() => mocks.authChange!("SIGNED_IN", { user: { id: otherUser } })); }
+  await screen.findByText("new-context");
   await act(async () => complete(response({ ...current, school: { id: "a", name: "obsolete-list" } })));
-  expect(screen.queryByText("obsolete-list")).toBeNull(); expect(mocks.operations).toEqual([]);
+  expect(screen.getByText("new-context")).toBeTruthy(); expect(screen.queryByText("obsolete-list")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull(); expect(mocks.operations).toEqual([]); expect(mutation()).toHaveLength(1);
 });
 it("ignores a delayed failed status refresh after route leaves", async () => {
   seedOperation(); let reject!: (error: Error) => void; let listReads = 0;
