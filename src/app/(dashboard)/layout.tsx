@@ -7,8 +7,8 @@ import styles from "./layout.module.css";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
+    <AuthApprovalGate>
     <div className={styles.shell}>
-      <AuthApprovalGate />
       <Suspense fallback={null}>
         <Sidebar />
       </Suspense>
@@ -20,5 +20,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {children}
       </div>
     </div>
+    </AuthApprovalGate>
   );
 }
