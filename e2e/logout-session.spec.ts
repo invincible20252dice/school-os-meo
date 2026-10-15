@@ -60,7 +60,8 @@ for (const role of ["admin", "manager"] as const) {
     const auth = await mockAuth(page);
     await page.goto("/login");
     await login(page);
-    await page.goto("/dashboard?schoolId=school-a");
+    // Start on a fixture-supported protected page; overview data is outside this auth test.
+    await page.goto("/dashboard/settings?schoolId=school-a");
     await expect(page.getByRole("button", { name: "ログアウト", exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("button", { name: "ログアウト", exact: true })).toBeVisible();
