@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AuthAccessBadge from "@/components/dashboard/AuthAccessBadge";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { clearLeadRecovery } from "@/lib/google-lead-recovery-storage";
 import styles from "@/app/(dashboard)/layout.module.css";
 
 type DashboardContextResponse = {
@@ -148,7 +149,7 @@ export default function DashboardHeader() {
             <HeaderIcon type="settings" />
             <span>設定</span>
           </Link>
-          <Link href="/login" className={styles.logoutLink} aria-label="ログアウト">
+          <Link href="/login" className={styles.logoutLink} aria-label="ログアウト" onClick={() => { clearLeadRecovery(); }}>
             <HeaderIcon type="logout" />
             <span>ログアウト</span>
           </Link>

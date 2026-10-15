@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET, POST, PATCH, DELETE } from "@/app/api/dashboard/google-results/route";
+import { GET as OPERATION_STATUS } from "@/app/api/dashboard/google-results/operation-status/route";
 import { resolveRequestAccess } from "./supabase-access";
+import { createLeadOperationKey } from "./google-lead-operation-key";
 
 const transport = vi.hoisted(() => ({ school: { findUnique: vi.fn() }, googleLead: { findMany: vi.fn(), upsert: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() } }));
 vi.mock("./prisma", () => ({ prisma: transport }));
@@ -30,7 +32,7 @@ function predicate(where: Fields, values: unknown[]): string {
     values.push(value); return `${column(key)} = $${values.length}`;
   }).join(" AND ");
 }
-async function select(table: string, args: { where: Fields; select?: Fields; orderBy?: Fields[]; take?: number }) {
+async function select(table: string, args: { where: Fields; select?: Fields; omit?: Fields; orderBy?: Fields[]; take?: number }) {
   const values: unknown[] = [];
   const fields = args.select ? Object.keys(args.select).filter(key => args.select?.[key]).map(column).join(",") : "*";
   const where = predicate(args.where, values);
@@ -39,7 +41,7 @@ async function select(table: string, args: { where: Fields; select?: Fields; ord
     return `${column(key)} ${direction}`;
   }).join(",")).join(",");
   const limit = args.take === undefined ? "" : (values.push(args.take), ` LIMIT $${values.length}`);
-  return (await db.query(`SELECT ${fields} FROM ${column(table)} WHERE ${where}${order ? ` ORDER BY ${order}` : ""}${limit}`, values)).rows;
+  return (await db.query(`SELECT ${fields} FROM ${column(table)} WHERE ${where}${order ? ` ORDER BY ${order}` : ""}${limit}`, values)).rows.map(row => args.omit ? Object.fromEntries(Object.entries(row as Fields).filter(([key]) => !args.omit?.[key])) : row);
 }
 const identity = (schoolId: string) => ({ isAuthenticated: true, access: { userId: `user-${schoolId}`, role: "manager" as const, schoolIds: [schoolId], schoolId, status: "active" as const, name: "担当", email: "", source: "profiles" as const } });
 const request = (body?: unknown, school = "a", period = "month") => new Request(`https://example.test/api/dashboard/google-results?schoolId=${school}&period=${period}`, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) });
@@ -226,4 +228,79 @@ it("rejects mixed stage/legacy commands and inquiry dates after confirmed milest
   expect((await PATCH(request({ id: lead.id, version: 2, occurredAt: "2026-10-09T03:00:00Z" }))).status).toBe(400);
   expect((await PATCH(request({ id: lead.id, version: 2, stage: "inquiry" }))).status).toBe(200);
   expect(await read()).toMatchObject({ lifecycle: { scheduledCount: 0, heldCount: 0 }, recent: [{ version: 3, meetingScheduledAt: null }] });
+});
+
+const recoveryUser = "11111111-2222-4333-8444-555555555555";
+const recoveryNonce = "99999999-8888-4777-8666-555555555555";
+const recoveryKey = createLeadOperationKey(recoveryUser, "line", recoveryNonce);
+const recoveryIdentity = (userId = recoveryUser) => ({ ...identity("a"), access: { ...identity("a").access, userId } });
+const operationRequest = (operationId = recoveryKey, school = "a") => new Request(`https://example.test/api/dashboard/google-results/operation-status?schoolId=${school}&operationId=${operationId}`);
+const operationState = async () => {
+  const response = await OPERATION_STATUS(operationRequest());
+  expect(response.status).toBe(200);
+  return response.json();
+};
+
+it("uses read-only operation status to recognize committed response loss, changed and deleted rows", async () => {
+  vi.mocked(resolveRequestAccess).mockResolvedValue(recoveryIdentity());
+  const original = transport.googleLead.upsert.getMockImplementation()!;
+  transport.googleLead.upsert.mockImplementationOnce(async args => { await original(args); throw new Error("synthetic response lost after commit"); });
+  expect((await POST(request({ channel: "line", idempotencyKey: recoveryKey }))).status).toBe(503);
+  expect(await operationState()).toEqual({ success: true, state: "saved" });
+  expect(transport.googleLead.upsert).toHaveBeenCalledTimes(1);
+  expect((await db.query('SELECT count(*)::int AS count FROM "GoogleLead"')).rows).toEqual([{ count: 1 }]);
+  clock("2026-10-09T02:00:00Z");
+  const snapshot = await read();
+  expect(snapshot.inquiriesCount).toBe(1);
+  expect(snapshot.recent[0]).not.toHaveProperty("idempotencyKey");
+  expect(JSON.stringify(snapshot)).not.toContain(recoveryUser.replaceAll("-", ""));
+  const lead = snapshot.recent[0];
+  expect((await PATCH(request({ id: lead.id, version: 1, channel: "phone" }))).status).toBe(200);
+  expect((await POST(request({ channel: "line", idempotencyKey: recoveryKey }))).status).toBe(409);
+  expect(await operationState()).toEqual({ success: true, state: "changed" });
+  expect((await DELETE(request({ id: lead.id, version: 2 }))).status).toBe(200);
+  expect((await POST(request({ channel: "line", idempotencyKey: recoveryKey }))).status).toBe(409);
+  expect(await operationState()).toEqual({ success: true, state: "deleted" });
+  expect((await db.query('SELECT count(*)::int AS count FROM "GoogleLead"')).rows).toEqual([{ count: 1 }]);
+});
+
+it("keeps one SQL row when absent lookup races a delayed original commit and explicit same-key retry", async () => {
+  vi.mocked(resolveRequestAccess).mockResolvedValue(recoveryIdentity());
+  const original = transport.googleLead.upsert.getMockImplementation()!;
+  let received!: () => void;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { received = resolve; });
+  const proceed = new Promise<void>(resolve => { release = resolve; });
+  transport.googleLead.upsert.mockImplementationOnce(async args => { received(); await proceed; return original(args); });
+  const pendingOriginal = POST(request({ channel: "line", idempotencyKey: recoveryKey }));
+  await waiting;
+  expect(await operationState()).toEqual({ success: true, state: "absent" });
+  const retried = await POST(request({ channel: "line", idempotencyKey: recoveryKey }));
+  expect(retried.status).toBe(200);
+  release();
+  const first = await pendingOriginal;
+  expect(first.status).toBe(200);
+  expect((await first.json()).lead.id).toBe((await retried.json()).lead.id);
+  expect(transport.googleLead.upsert).toHaveBeenCalledTimes(2);
+  expect((await db.query('SELECT count(*)::int AS count FROM "GoogleLead"')).rows).toEqual([{ count: 1 }]);
+  expect(await operationState()).toEqual({ success: true, state: "saved" });
+});
+
+it("does not disclose or replay another user's same-school recovery key through real handlers", async () => {
+  vi.mocked(resolveRequestAccess).mockResolvedValue(recoveryIdentity());
+  const response = await POST(request({ channel: "line", idempotencyKey: recoveryKey }));
+  expect(response.status).toBe(200);
+  expect((await response.json()).lead).not.toHaveProperty("idempotencyKey");
+  const foreignUser = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  vi.mocked(resolveRequestAccess).mockResolvedValue(recoveryIdentity(foreignUser));
+  const previousReads = transport.googleLead.findFirst.mock.calls.length;
+  expect((await OPERATION_STATUS(operationRequest())).status).toBe(403);
+  expect(transport.googleLead.findFirst).toHaveBeenCalledTimes(previousReads);
+  expect((await POST(request({ channel: "line", idempotencyKey: recoveryKey }))).status).toBe(403);
+  expect(transport.googleLead.upsert).toHaveBeenCalledTimes(1);
+  const ownKey = createLeadOperationKey(foreignUser, "line", recoveryNonce);
+  const own = await OPERATION_STATUS(operationRequest(ownKey));
+  expect(await own.json()).toEqual({ success: true, state: "absent" });
+  expect((await OPERATION_STATUS(operationRequest(ownKey, "b"))).status).toBe(403);
+  expect((await db.query('SELECT count(*)::int AS count FROM "GoogleLead"')).rows).toEqual([{ count: 1 }]);
 });

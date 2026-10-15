@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { prisma } from "./prisma";
-import { changeGoogleLead, createGoogleLead, loadGoogleLeads } from "./google-lead-store";
+import { changeGoogleLead, createGoogleLead, loadGoogleLeadOperation, loadGoogleLeads } from "./google-lead-store";
+import { createLeadOperationKey } from "./google-lead-operation-key";
 vi.mock("./prisma", () => ({ prisma: { googleLead: { findMany: vi.fn(), upsert: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() } } }));
 const now = new Date("2026-10-03T12:00:00Z");
 const row = { id: "r", schoolId: "a", channel: "line", grade: null, status: "inquiry", version: 1, occurredAt: new Date("2026-10-01T00:00Z"), meetingAt: null, closedAt: null, deletedAt: null };
@@ -27,6 +28,33 @@ it("rejects key reuse for a changed/deleted record and preserves valid replays",
   await expect(createGoogleLead("a", { channel: "web", idempotencyKey: "x" })).rejects.toMatchObject({ status: 409 });
   vi.mocked(prisma.googleLead.upsert).mockResolvedValue({ ...row, deletedAt: now } as never);
   await expect(createGoogleLead("a", { channel: "line", idempotencyKey: "x" })).rejects.toMatchObject({ status: 409 });
+});
+const recoveryOwner = "11111111-2222-4333-8444-555555555555";
+const recoveryKey = createLeadOperationKey(recoveryOwner, "line", "99999999-8888-4777-8666-555555555555");
+it("validates reserved POST ownership/channel before any write and redacts the key", async () => {
+  await expect(createGoogleLead("a", { channel: "line", idempotencyKey: recoveryKey })).rejects.toMatchObject({ status: 403 });
+  await expect(createGoogleLead("a", { channel: "phone", idempotencyKey: recoveryKey }, now, recoveryOwner)).rejects.toMatchObject({ status: 400 });
+  await expect(createGoogleLead("a", { channel: "line", idempotencyKey: "gr1_bad" }, now, recoveryOwner)).rejects.toMatchObject({ status: 400 });
+  expect(prisma.googleLead.upsert).not.toHaveBeenCalled();
+  vi.mocked(prisma.googleLead.upsert).mockResolvedValue({ ...row, idempotencyKey: recoveryKey } as never);
+  expect(await createGoogleLead("a", { channel: "line", idempotencyKey: recoveryKey }, now, recoveryOwner)).toEqual(row);
+});
+it.each([
+  [null, "absent"],
+  [row, "saved"],
+  [{ ...row, channel: "phone" }, "changed"],
+  [{ ...row, version: 2 }, "changed"],
+  [{ ...row, version: 2, deletedAt: now }, "deleted"],
+] as const)("returns only recovery state %s -> %s from exact scoped read", async (stored, expected) => {
+  vi.mocked(prisma.googleLead.findFirst).mockResolvedValue(stored as never);
+  expect(await loadGoogleLeadOperation("a", recoveryKey, recoveryOwner)).toBe(expected);
+  expect(prisma.googleLead.findFirst).toHaveBeenCalledWith({ where: { schoolId: "a", idempotencyKey: recoveryKey, source: "google" }, select: { channel: true, version: true, deletedAt: true } });
+  expect(prisma.googleLead.upsert).not.toHaveBeenCalled();
+  expect(prisma.googleLead.updateMany).not.toHaveBeenCalled();
+});
+it("never queries operation state for legacy, malformed, or foreign-owner keys", async () => {
+  for (const key of ["legacy-key", "gr1_bad", recoveryKey]) await expect(loadGoogleLeadOperation("a", key, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")).rejects.toThrow();
+  expect(prisma.googleLead.findFirst).not.toHaveBeenCalled();
 });
 it("updates meeting once, preserves its date during edits, and supports reverting", async () => {
   await changeGoogleLead("a", { id: "r", version: 1, status: "meeting" }, false, now);

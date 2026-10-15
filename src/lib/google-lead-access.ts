@@ -16,7 +16,7 @@ export async function leadScope(request: Request) {
   if (!canAccessSchool(access, schoolId)) throw new LeadError("この校舎へのアクセス権限がありません。", 403);
   const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { id: true, name: true } });
   if (!school) throw new LeadError("校舎が見つかりません。", 404);
-  return { school, url };
+  return { school, url, userId: access.userId };
 }
 export async function leadBody(request: Request) {
   try { return leadObject(await request.json()); } catch { throw new LeadError("入力内容を確認してください。"); }
