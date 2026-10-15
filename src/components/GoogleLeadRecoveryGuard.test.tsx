@@ -5,7 +5,8 @@ import { StrictMode } from "react";
 import { createLeadOperationKey } from "@/lib/google-lead-operation-key";
 import type * as Recovery from "@/lib/google-lead-recovery-storage";
 
-const mocks = vi.hoisted(() => ({ pathname: "/dashboard/roi", params: new URLSearchParams("schoolId=a"), subscribe: vi.fn(), client: vi.fn(), unsubscribe: vi.fn(), router: { push: vi.fn(), replace: vi.fn() }, session: vi.fn() }));
+const mocks = vi.hoisted(() => ({ logoutPhase: "idle", pathname: "/dashboard/roi", params: new URLSearchParams("schoolId=a"), subscribe: vi.fn(), client: vi.fn(), unsubscribe: vi.fn(), router: { push: vi.fn(), replace: vi.fn() }, session: vi.fn() }));
+vi.mock("@/lib/logout-operation", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/logout-operation")>(), getLogoutPhase: () => mocks.logoutPhase }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname, useSearchParams: () => mocks.params, useRouter: () => mocks.router }));
 vi.mock("@/lib/supabase", () => ({ createBrowserSupabaseClient: mocks.client }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
@@ -21,6 +22,7 @@ function seeded() { window.sessionStorage.setItem(storage.LEAD_RECOVERY_STORAGE_
 function auth(event: string, id: string | null) { act(() => { mocks.subscribe.mock.calls.at(-1)![0](event, id ? { user: { id } } : null); }); }
 const exists = () => window.sessionStorage.getItem(storage.LEAD_RECOVERY_STORAGE_KEY) !== null;
 beforeEach(async () => {
+  mocks.logoutPhase = "idle";
   vi.resetModules(); vi.clearAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now);
   window.sessionStorage.clear(); mocks.pathname = "/dashboard/roi"; mocks.params = new URLSearchParams("schoolId=a");
   Object.defineProperty(window.performance, "getEntriesByType", { configurable: true, value: () => [{ type: "reload" }] });
@@ -88,13 +90,26 @@ it("does not invent successful deletion when storage refuses removal", () => {
   auth("SIGNED_OUT", null); denied.mockRestore();
   expect(exists()).toBe(true); expect(storage.readLeadRecovery(scope)).toEqual({ ok: false, operations: [] });
 });
-it("logout link immediately removes only recovery data while preserving the existing navigation and auth behavior", async () => {
+it("successful local logout removes only recovery data", async () => {
   vi.useRealTimers(); seeded(); storage.readLeadRecovery(scope);
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ currentSchoolId: "a", currentSchoolName: "校舎A", schools: [] }))));
+  const signOut = vi.fn().mockResolvedValue({ error: null });
+  mocks.client.mockReturnValue({ auth: { getSession: mocks.session, signOut } });
   const Header = (await import("./dashboard/DashboardHeader")).default;
   render(<Header />); await waitFor(() => expect(screen.getByText("校舎A")).toBeTruthy());
-  const logout = screen.getByRole("link", { name: "ログアウト" }); expect(logout.getAttribute("href")).toBe("/login");
-  logout.addEventListener("click", (event) => event.preventDefault()); fireEvent.click(logout);
-  expect(exists()).toBe(false); expect(window.sessionStorage.getItem("unrelated")).toBe("preserved");
+  const logout = screen.getByRole("button", { name: "ログアウト" });
+  fireEvent.click(logout);
+  await waitFor(() => expect(exists()).toBe(false));
+  expect(signOut).toHaveBeenCalledWith({ scope: "local" }); expect(window.sessionStorage.getItem("unrelated")).toBe("preserved");
   expect(mocks.subscribe).not.toHaveBeenCalled();
+});
+
+it.each(["pending", "failed"])("defers null-session cleanup only during explicit logout %s; identity/school changes still clear", phase => {
+  seeded(); const view = render(<Guard />); auth("INITIAL_SESSION", userId);
+  mocks.logoutPhase = phase;
+  auth("SIGNED_OUT", null); auth("INITIAL_SESSION", null); auth("SIGNED_OUT", null);
+  expect(exists()).toBe(true);
+  auth("SIGNED_IN", otherUser); expect(exists()).toBe(false);
+  seeded(); mocks.params = new URLSearchParams("schoolId=b"); view.rerender(<Guard />);
+  expect(exists()).toBe(false);
 });
