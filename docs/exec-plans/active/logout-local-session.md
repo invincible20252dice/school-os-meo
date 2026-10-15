@@ -1,7 +1,7 @@
 # Local-session logout from current main
 
 Current status: LOCAL VERIFIED. Earlier blocked findings below are resolved.
-Push/draft PR remain held for branch deployment-suppression approval.
+Branch deployment suppression approved and applied; Draft PR #22 created. Remote CI verification in progress.
 
 Base: fdca0da5229193acf9c592522c5ec23278f37e80 (PR21). Dedicated worktree and
 codex/logout-local-session branch. No old branch cherry-picks.
@@ -129,3 +129,14 @@ push/draft PR, then final remote head/synthetic merge tree CI. Main merge, a fre
 candidate build, staging alias and real OAuth require their separate approvals.
 No prior candidate is accepted for this fix. Live backend revocation/other-device
 behavior and production BFCache are not claimed from isolated endpoint mocks.
+
+## Remote review phase
+
+User explicitly approved the exact branch-only deploymentEnabled:false addition.
+Existing ten entries and all other Vercel settings remain unchanged. Draft PR #22
+was created; the first push CI correctly rejected the stale exact configuration
+expectation. Added the same single false entry to that expectation, retaining the
+strict deep equality and all safety checks. No deployment was created for the
+branch at the initial post-push observation. Final SHA/CI/alias evidence is stored
+externally to avoid changing the commit being verified. Earlier approval holds
+above are historical. Main merge, candidate creation, alias and live OAuth stay held.
