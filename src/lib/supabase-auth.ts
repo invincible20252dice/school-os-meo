@@ -111,10 +111,23 @@ export async function startGoogleOAuth(
   client: SupabaseOAuthClient,
   browserOrigin?: string,
 ) {
-  const redirectTo = getAuthCallbackUrl(
-    process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL,
-    browserOrigin,
-  );
+  // Compare the unmodified origin: URL parsing/normalization would accept paths,
+  // credentials or explicit default ports that are outside this allowlist.
+  const allowedOrigins = [
+    "https://staging.jukumeo.com",
+    "https://app.jukumeo.com",
+    "https://school-os-meo.vercel.app",
+  ];
+  const developmentOrigins = [
+    "http://localhost:3030",
+    "http://localhost:3031",
+    "http://127.0.0.1:3030",
+  ];
+  if (!browserOrigin || !(allowedOrigins.includes(browserOrigin)
+    || (process.env.NODE_ENV === "development" && developmentOrigins.includes(browserOrigin)))) {
+    throw new Error("このURLではGoogleログインを開始できません。正規のログインURLをご利用ください。");
+  }
+  const redirectTo = `${browserOrigin}/auth/callback`;
   const { error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
