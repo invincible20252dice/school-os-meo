@@ -74,3 +74,15 @@ alias change. No deployment, alias, Protection or environment mutation attempted
 Rollback: discard this isolated unmerged branch. No remote runtime/data change
 needs reversal. Live Google OAuth, production session persistence and other-device
 behavior are outside synthetic test evidence and were not exercised.
+
+
+## Authorized remote review phase
+
+The user approved the exact codex/google-oauth-origin:false addition and matching
+strict-map test in section 15 of the attached autonomous-development instructions.
+Applied only those two configuration/test changes; all previous 11 entries remain
+false and there are no wildcard/true matches. Reverification, branch push, stacked
+Draft PR against PR22 and exact-head GitHub CI are authorized. Candidate deployment
+creation is now explicitly prohibited, regardless of the earlier conditional gate.
+No shared operational-rule changes belong in this callback PR. Final SHA, CI and
+alias comparison are recorded externally to preserve the verified commit.
