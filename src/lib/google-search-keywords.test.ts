@@ -74,6 +74,43 @@ describe("Google monthly search protocol", () => {
   });
 });
 describe("monthly persistence and connection isolation", () => {
+  // Promote the original review-only recovery check into the normal CI suite.
+  it.each(["AVAILABLE", "EMPTY"] as const)("replaces retained failure data on same-school recovery to %s, then reuses the cache", async status => {
+    const old = new Date("2026-10-01T00:00:00Z"), checkedAt = new Date("2026-10-09T10:00:00Z");
+    const cachedAt = new Date("2026-10-09T10:30:00Z"), recoveredAt = new Date("2026-10-09T12:00:00Z");
+    const saved = { status: "API_ERROR", rows: [{ query: "old", impressions: 9, threshold: null }],
+      fetchedAt: old, checkedAt, diagnostic: { ...d(), stage: "OAUTH", httpStatus: 400,
+        googleError: { message: "private@example.invalid SECRET_MARKER" } } };
+    vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mockImplementation(() => Promise.resolve(saved) as never);
+    vi.mocked(prisma.googleSearchKeywordMonth.upsert).mockImplementation(args => {
+      Object.assign(saved, args.update);
+      return Promise.resolve(saved) as never;
+    });
+    const f = vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res(status === "EMPTY" ? {} : page("recovered")));
+    vi.stubGlobal("fetch", f);
+
+    expect(await loadSearchKeywords("a", "2026-09", cachedAt)).toMatchObject({ status: "API_ERROR", rows: [], fetchedAt: null });
+    expect(f).not.toHaveBeenCalled();
+    expect(prisma.googleSearchKeywordMonth.upsert).not.toHaveBeenCalled();
+    expect(saved.rows).toEqual([{ query: "old", impressions: 9, threshold: null }]);
+    expect(saved.fetchedAt).toEqual(old);
+
+    const rows = status === "EMPTY" ? [] : [{ query: "recovered", impressions: 25, threshold: null }];
+    const recovered = await loadSearchKeywords("a", "2026-09", recoveredAt);
+    expect(recovered).toMatchObject({ status, rows, diagnostic: { stage: "FETCHED", httpStatus: 200 } });
+    expect(saved).toMatchObject({ status, rows, fetchedAt: recoveredAt, checkedAt: recoveredAt });
+    expect(saved.diagnostic).toMatchObject({ stage: "FETCHED", httpStatus: 200 });
+    expect(JSON.stringify(saved.diagnostic)).not.toMatch(/SECRET_MARKER|private@/);
+
+    const cached = await loadSearchKeywords("a", "2026-09", new Date(recoveredAt.getTime() + 1000));
+    expect(cached).toMatchObject({ status, rows, fetchedAt: recoveredAt.toISOString(),
+      diagnostic: { schoolId: "a", locationId: "123", month: "2026-09", stage: "FETCHED", httpStatus: 200 } });
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(prisma.googleSearchKeywordMonth.upsert).toHaveBeenCalledTimes(1);
+    const where = { schoolId_locationId_month: { schoolId: "a", locationId: "123", month: "2026-09" } };
+    for (const [args] of vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mock.calls) expect(args).toEqual({ where });
+    expect(prisma.googleSearchKeywordMonth.upsert).toHaveBeenCalledWith(expect.objectContaining({ where }));
+  });
   it("stores verified counts and month/location scope", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res(page())));
     const result = await loadSearchKeywords("a", "2026-09");
