@@ -219,6 +219,60 @@ it("persists the full explicit lifecycle and leaves old meeting rows unknown unt
   expect(await read()).toMatchObject({ lifecycle: { heldCount: 1 } });
 });
 
+it("excludes a soft-deleted enrolled lead from fresh aggregates while retaining its SQL row and other leads", async () => {
+  const removed = await create("enrolled-to-delete");
+  clock("2026-10-09T01:01:00Z");
+  const retained = await create("enrolled-to-keep");
+  clock("2026-10-09T01:02:00Z");
+  const inquiry = await create("inquiry-to-keep");
+  for (const [i, stage] of ["scheduled", "held", "enrolled"].entries()) {
+    clock(`2026-10-09T0${i + 2}:00:00Z`);
+    for (const lead of [removed, retained]) {
+      expect((await PATCH(request({ id: lead.id, version: i + 1, stage }))).status).toBe(200);
+    }
+  }
+  clock("2026-10-09T05:00:00Z");
+  const emptyMonths = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+  const before = await read();
+  expect(before).toMatchObject({
+    inquiriesCount: 3, meetingsCount: 2, convertedCount: 2, meetingRate: 66.7,
+    lifecycle: { scheduledCount: 2, heldCount: 2, enrolledCount: 2, cohortHeldCount: 2, cohortEnrolledCount: 2,
+      heldRate: 66.7, enrollmentRate: 66.7, legacyMeetingCount: 0 },
+  });
+  expect(before.lifecycle.monthlyTrend).toEqual([
+    ...emptyMonths.map(month => ({ month, inquiries: 0, scheduled: 0, held: 0, enrolled: 0 })),
+    { month: "2026-10", inquiries: 3, scheduled: 2, held: 2, enrolled: 2 },
+  ]);
+  expect(before.recent.map((lead: { id: string }) => lead.id)).toEqual([inquiry.id, retained.id, removed.id]);
+  const rowsBefore = (await db.query<Fields>('SELECT * FROM "GoogleLead" ORDER BY id')).rows;
+
+  const deletedAt = new Date("2026-10-09T06:00:00Z");
+  clock(deletedAt.toISOString());
+  expect((await DELETE(request({ id: removed.id, version: 4 }))).status).toBe(200);
+  clock("2026-10-09T07:00:00Z");
+  for (let i = 0; i < 2; i++) {
+    const after = await read();
+    expect(after).toMatchObject({
+      inquiriesCount: 2, meetingsCount: 1, convertedCount: 1, meetingRate: 50,
+      lifecycle: { scheduledCount: 1, heldCount: 1, enrolledCount: 1, cohortHeldCount: 1, cohortEnrolledCount: 1,
+        heldRate: 50, enrollmentRate: 50, legacyMeetingCount: 0 },
+    });
+    expect(after.monthlyTrend).toEqual([
+      ...emptyMonths.map(month => ({ month, inquiries: 0, meetings: 0 })),
+      { month: "2026-10", inquiries: 2, meetings: 1 },
+    ]);
+    expect(after.lifecycle.monthlyTrend).toEqual([
+      ...emptyMonths.map(month => ({ month, inquiries: 0, scheduled: 0, held: 0, enrolled: 0 })),
+      { month: "2026-10", inquiries: 2, scheduled: 1, held: 1, enrolled: 1 },
+    ]);
+    expect(after.recent).toEqual(before.recent.filter((lead: { id: string }) => lead.id !== removed.id));
+  }
+  // Soft deletion keeps all persisted milestones and leaves unrelated rows intact.
+  expect((await db.query<Fields>('SELECT * FROM "GoogleLead" ORDER BY id')).rows).toEqual(
+    rowsBefore.map(row => row.id === removed.id ? { ...row, deletedAt, updatedAt: deletedAt, version: 5 } : row),
+  );
+});
+
 it("rejects mixed stage/legacy commands and inquiry dates after confirmed milestones", async () => {
   const lead = await create();
   clock("2026-10-09T02:00:00Z");
