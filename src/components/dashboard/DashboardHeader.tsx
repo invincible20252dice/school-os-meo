@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import AuthAccessBadge from "@/components/dashboard/AuthAccessBadge";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { clearLeadRecovery } from "@/lib/google-lead-recovery-storage";
+import { getLogoutPhase, getServerLogoutPhase, startLocalLogout, subscribeLogout } from "@/lib/logout-operation";
 import styles from "@/app/(dashboard)/layout.module.css";
 
 type DashboardContextResponse = {
@@ -60,6 +60,8 @@ function withSchoolId(pathname: string, params: URLSearchParams, schoolId: strin
 }
 
 export default function DashboardHeader() {
+  const logoutPhase = useSyncExternalStore(subscribeLogout, getLogoutPhase, getServerLogoutPhase);
+  const isLoggingOut = logoutPhase === "pending" || logoutPhase === "complete";
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -149,10 +151,11 @@ export default function DashboardHeader() {
             <HeaderIcon type="settings" />
             <span>設定</span>
           </Link>
-          <Link href="/login" className={styles.logoutLink} aria-label="ログアウト" onClick={() => { clearLeadRecovery(); }}>
+          <button type="button" className={styles.logoutLink} aria-label="ログアウト" disabled={isLoggingOut} onClick={() => { void startLocalLogout(); }}>
             <HeaderIcon type="logout" />
-            <span>ログアウト</span>
-          </Link>
+            <span>{isLoggingOut ? "ログアウト中" : "ログアウト"}</span>
+          </button>
+          {logoutPhase === "failed" && <span role="alert">ログアウトできませんでした。再度お試しください。</span>}
         </nav>
         <div className={styles.user}>
           <div>

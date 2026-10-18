@@ -9,6 +9,7 @@ import type { loadGoogleLeads } from "@/lib/google-lead-store";
 import type { loadPerformance } from "@/lib/google-performance";
 import styles from "./page.module.css";
 import { createLeadOperationKey, parseLeadOperationKey } from "@/lib/google-lead-operation-key";
+import { getLogoutPhase } from "@/lib/logout-operation";
 import { readLeadRecovery, saveLeadRecovery, updateLeadRecovery, dropLeadRecovery, pruneLeadRecovery, LEAD_RECOVERY_CHANGED, type LeadRecoveryOperation, type LeadRecoveryScope } from "@/lib/google-lead-recovery-storage";
 import { leadStage, leadStageLabels, leadStageChoices, type LeadStage } from "@/lib/google-lead-lifecycle";
 
@@ -61,7 +62,7 @@ export default function GoogleResultsClient() {
   const metrics = performance.key === key ? performance.data : null;
 
   function active(ctx: RecoveryContext, operationId?: string) {
-    if (ctx.signal.aborted || epoch.current !== ctx.generation || currentScope.current.schoolId !== ctx.scope.schoolId || currentScope.current.pathname !== ctx.scope.route) return false;
+    if (getLogoutPhase() !== "idle" || ctx.signal.aborted || epoch.current !== ctx.generation || currentScope.current.schoolId !== ctx.scope.schoolId || currentScope.current.pathname !== ctx.scope.route) return false;
     return !operationId || readLeadRecovery(ctx.scope).operations.some(op => op.operationId === operationId);
   }
   function reconcile(scope: LeadRecoveryScope) {
@@ -133,7 +134,7 @@ export default function GoogleResultsClient() {
       setState({ key, data: null, error: "ヘッダーで対象の校舎を選択してください。" });
       return () => abort.abort();
     }
-    const current = () => !abort.signal.aborted && epoch.current === generation;
+    const current = () => getLogoutPhase() === "idle" && !abort.signal.aborted && epoch.current === generation;
     void (async () => {
       try {
         const { data: auth } = await createBrowserSupabaseClient().auth.getSession();
@@ -165,6 +166,7 @@ export default function GoogleResultsClient() {
       }
     };
     const { data: authListener } = createBrowserSupabaseClient().auth.onAuthStateChange((event, session) => {
+      if (!session?.user.id && getLogoutPhase() !== "idle") return;
       const ctx = context.current;
       if ((ctx && session?.user.id.toLowerCase() !== ctx.scope.userId) || (!ctx && event !== "INITIAL_SESSION")) {
         ++epoch.current; context.current = null; work.current = null; saving.current = false; activeOperation.current = null;

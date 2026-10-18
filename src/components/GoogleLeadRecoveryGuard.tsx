@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { getLogoutPhase } from "@/lib/logout-operation";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { clearLeadRecovery, initializeLeadRecoveryDocument, LEAD_RECOVERY_CHANGED, LEAD_RECOVERY_ROUTE, nextLeadRecoveryExpiry, pruneLeadRecovery } from "@/lib/google-lead-recovery-storage";
 
@@ -23,6 +24,9 @@ export default function GoogleLeadRecoveryGuard() {
     try {
       const { data } = createBrowserSupabaseClient().auth.onAuthStateChange((_event, session) => {
         if (!active) return;
+        // Explicit logout owns cleanup after SDK success, even if SDK clears its
+        // session before returning an error. User switches still prune normally.
+        if (!session?.user.id && getLogoutPhase() !== "idle") return;
         // No async Supabase call inside its auth-state callback.
         if (!session?.user.id) clearLeadRecovery();
         pruneLeadRecovery({ userId: session?.user.id.toLowerCase() || "" });

@@ -213,7 +213,7 @@ for (const boundary of ["user", "expiry", "route", "logout", "cancel"] as const)
       await page.goto("/dashboard/challenge?schoolId=school-a");
       await expect(page).toHaveURL(/\/dashboard\/challenge/);
     } else if (boundary === "logout") {
-      await page.getByRole("link", { name: "ログアウト", exact: true }).click();
+      await page.getByRole("button", { name: "ログアウト", exact: true }).click();
       await expect(page).toHaveURL(/\/login/);
     } else {
       await recovery(page).getByRole("button", { name: "この操作の再確認をやめる", exact: true }).click();
