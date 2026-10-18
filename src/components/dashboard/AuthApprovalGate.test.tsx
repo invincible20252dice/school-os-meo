@@ -2,6 +2,7 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { startLocalLogout } from "@/lib/logout-operation";
+import { LEAD_RECOVERY_STORAGE_KEY } from "@/lib/google-lead-recovery-storage";
 import Gate from "./AuthApprovalGate";
 const m = vi.hoisted(() => ({ signOut: vi.fn(), session: vi.fn(), subscribe: vi.fn(), replace: vi.fn(), unsubscribe: vi.fn(), router: { replace: vi.fn() } }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard/settings", useRouter: () => m.router }));
@@ -33,6 +34,50 @@ it("rejects late approval after signout", async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalled());
   act(() => m.subscribe.mock.calls[0][0]("SIGNED_OUT", null));
   await act(async () => done(Response.json({ approved: true })));
+  expect(screen.queryByText("protected")).toBeNull();
+});
+it.each([
+  { approved: true, phase: "pending" },
+  { approved: false, phase: "pending" },
+  { approved: true, phase: "failed" },
+  { approved: false, phase: "failed" },
+])("ignores late approval=$approved during $phase logout without an auth event", async ({ approved, phase }) => {
+  let approve!: (value: Response) => void;
+  let finishLogout!: (value: { error: Error }) => void;
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { approve = resolve; })));
+  m.signOut.mockImplementationOnce(() => new Promise(resolve => { finishLogout = resolve; }));
+  sessionStorage.setItem(LEAD_RECOVERY_STORAGE_KEY, "synthetic recovery marker");
+  render(<Gate><div>protected</div></Gate>);
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+
+  let logout!: Promise<void>;
+  act(() => { logout = startLocalLogout(); });
+  expect(screen.getByRole("status").textContent).toContain("ログアウト中");
+  const failLogout = async () => {
+    await act(async () => { finishLogout({ error: new Error("private failure") }); await logout; });
+  };
+  if (phase === "failed") await failLogout();
+  // Deliberately do not emit SIGNED_OUT: the logout phase must guard this response.
+  await act(async () => approve(Response.json({ approved })));
+  expect(screen.queryByText("protected")).toBeNull();
+  expect(m.router.replace).not.toHaveBeenCalled();
+  expect(m.replace).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(LEAD_RECOVERY_STORAGE_KEY)).toBe("synthetic recovery marker");
+  if (phase === "pending") {
+    expect(screen.getByRole("status").textContent).toContain("ログアウト中");
+    await failLogout();
+  }
+  expect(screen.getByRole("alert").textContent).toContain("再度");
+  expect(m.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+  expect(m.router.replace).not.toHaveBeenCalled();
+  expect(m.replace).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(LEAD_RECOVERY_STORAGE_KEY)).toBe("synthetic recovery marker");
+
+  await act(async () => screen.getByRole("button", { name: "ログアウトを再試行" }).click());
+  expect(m.signOut).toHaveBeenCalledTimes(2);
+  expect(m.signOut).toHaveBeenLastCalledWith({ scope: "local" });
+  expect(sessionStorage.getItem(LEAD_RECOVERY_STORAGE_KEY)).toBeNull();
+  expect(m.replace).toHaveBeenCalledExactlyOnceWith("/login");
   expect(screen.queryByText("protected")).toBeNull();
 });
 it("preserves the pending approval redirect", async () => {
