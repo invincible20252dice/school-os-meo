@@ -11,7 +11,8 @@
       "codex/test-notification-auth": false,
       "codex/auth-production-release": false,
       "codex/main-stable-alignment": false,
-      "codex/google-lead-retry-keys": false
+      "codex/google-lead-retry-keys": false,
+      "codex/autonomous-pm-docs": false
     }
   }
 }
