@@ -10,8 +10,8 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    const { school } = await leadScope(request);
-    return NextResponse.json({ success: true, lead: await createGoogleLead(school.id, await leadBody(request)) }, { headers: leadHeaders });
+    const { school, userId } = await leadScope(request);
+    return NextResponse.json({ success: true, lead: await createGoogleLead(school.id, await leadBody(request), undefined, userId) }, { headers: leadHeaders });
   } catch (error) { return leadFailure(error); }
 }
 async function update(request: Request, remove: boolean) {

@@ -6,7 +6,14 @@
       "codex/aio-phase2": false,
       "codex/google-lead-measurement": false,
       "codex/google-data-diagnostics": false,
-      "codex/google-lifecycle-release-record": false
+      "codex/google-lifecycle-release-record": false,
+      "codex/security-access-boundaries": false,
+      "codex/school-line-settings-access": false,
+      "codex/google-settings-access": false,
+      "codex/test-notification-auth": false,
+      "codex/auth-production-release": false,
+      "codex/main-stable-alignment": false,
+      "codex/google-lead-retry-keys": false
     }
   }
 }

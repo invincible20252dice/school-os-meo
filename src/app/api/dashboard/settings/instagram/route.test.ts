@@ -95,8 +95,8 @@ describe("/api/dashboard/settings/instagram", () => {
       schoolId: "school-1",
       metaAppId: "meta-app-live",
       instagramMetaAppId: "meta-app-live",
-      metaAppSecret: "meta-secret-live",
-      instagramMetaAppSecret: "meta-secret-live",
+      metaAppSecret: "********",
+      instagramMetaAppSecret: "********",
       instagramBusinessAccountId: "17841400000000000",
       instagramAccessToken: "********",
       instagramConnected: true,
@@ -155,7 +155,7 @@ describe("/api/dashboard/settings/instagram", () => {
     expect(response.status).toBe(200);
     expect(body.setting).toMatchObject({
       metaAppId: "school-meta-app",
-      metaAppSecret: "school-meta-secret",
+      metaAppSecret: "********",
       instagramConnected: true,
       instagramAccessToken: "",
       businessAccountStatus: "DISCONNECTED",
@@ -180,7 +180,7 @@ describe("/api/dashboard/settings/instagram", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.setting.instagramMetaAppSecret).toBe("secret-new");
+    expect(body.setting.instagramMetaAppSecret).toBe("********");
     expect(prisma.instagramSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { schoolId: "school-1" },
@@ -222,7 +222,7 @@ describe("/api/dashboard/settings/instagram", () => {
     expect(response.status).toBe(200);
     expect(body.setting).toMatchObject({
       instagramMetaAppId: "school-key-meta",
-      instagramMetaAppSecret: "school-key-secret",
+      instagramMetaAppSecret: "********",
       instagramBusinessAccountId: "17841400000000000",
     });
     expect(prisma.instagramSetting.upsert).toHaveBeenCalledWith(

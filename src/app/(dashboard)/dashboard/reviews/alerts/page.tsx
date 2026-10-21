@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import styles from "./page.module.css";
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await createBrowserSupabaseClient().auth.getSession();
+  if (!data.session?.access_token) throw new Error("ログインしてください。");
+  return { Authorization: `Bearer ${data.session.access_token}` };
+}
 
 type ChurnAlertStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED";
 
@@ -180,10 +187,11 @@ export default function RetentionAlertsPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    fetch(`/api/dashboard/churn-alert?${params.toString()}`, {
+    authHeaders().then(headers => fetch(`/api/dashboard/churn-alert?${params.toString()}`, {
+      headers,
       signal: controller.signal,
       cache: "no-store",
-    })
+    }))
       .then(async (response) => {
         const body = (await response.json()) as ChurnAlertResponse;
 
@@ -227,9 +235,9 @@ export default function RetentionAlertsPage() {
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/dashboard/churn-alert", {
+      const response = await fetch(`/api/dashboard/churn-alert?schoolId=${encodeURIComponent(selectedSchoolId)}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...await authHeaders() },
         body: JSON.stringify({ alertId, status }),
       });
       const body = (await response.json()) as ChurnAlertResponse & {

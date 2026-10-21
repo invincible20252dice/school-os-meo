@@ -490,7 +490,7 @@ describe("supabase-access", () => {
       auth: {
         getUser: vi.fn(async () => ({
           data: { user: null },
-          error: { message: "Invalid JWT" },
+          error: { message: "Invalid JWT", status: 401 },
         })),
       },
       from: vi.fn(),
@@ -504,7 +504,7 @@ describe("supabase-access", () => {
         new URL("http://localhost/api"),
         client as never,
       ),
-    ).rejects.toThrow("Invalid JWT");
+    ).rejects.toThrow("UNAUTHENTICATED");
   });
 
   it("surfaces profile lookup errors", async () => {
@@ -518,4 +518,32 @@ describe("supabase-access", () => {
       ),
     ).rejects.toThrow("profiles fetch failed");
   });
+});
+
+ it.each(["pending", "suspended"])("accepted invitation cannot reactivate a %s profile", async status => {
+  const client=buildInvitationClient();
+  const query=(data: unknown)=>({ select:vi.fn(()=>({eq:vi.fn(()=>({maybeSingle:vi.fn(async()=>({data,error:null}))}))})) });
+  client.from.mockImplementation((table:string)=>(table==="profiles" ? {...query({id:"user-1",role:"manager",school_id:"school-1",school_ids:["school-1"],status}),upsert:client.profileUpsert} : {...query({email:"manager@example.com",role:"admin",status:"accepted"}),update:client.invitationUpdate}) as never);
+  const req=new Request("http://localhost/api",{headers:{authorization:"Bearer fixture"}});
+  const result=await resolveRequestAccess(req,new URL(req.url),client as never);
+  expect(result.access.status).toBe("pending");
+  expect(result.access.role).toBe("manager");
+  expect(client.profileUpsert).not.toHaveBeenCalled();
+  expect(client.invitationUpdate).not.toHaveBeenCalled();
+ });
+
+it.each([400, 401, 403, 500, 0, undefined])("classifies auth status %s without exposing provider details", async status => {
+ const client = {auth:{getUser:vi.fn().mockResolvedValue({data:{user:null},error:{message:"PRIVATE_PROVIDER_DETAIL",status}})},from:vi.fn()};
+ const request = new Request("http://localhost/api", {headers:{authorization:"Bearer fixture"}});
+ await expect(resolveRequestAccess(request,new URL(request.url),client as never)).rejects.toThrow(
+  status === 400 || status === 401 || status === 403 ? "UNAUTHENTICATED" : "ログイン状態を確認できませんでした。"
+ );
+ expect(client.from).not.toHaveBeenCalled();
+});
+
+it("rejects a missing authenticated user before profile lookup", async () => {
+ const client = {auth:{getUser:vi.fn().mockResolvedValue({data:{user:null},error:null})},from:vi.fn()};
+ const request = new Request("http://localhost/api", {headers:{authorization:"Bearer fixture"}});
+ await expect(resolveRequestAccess(request,new URL(request.url),client as never)).rejects.toThrow("UNAUTHENTICATED");
+ expect(client.from).not.toHaveBeenCalled();
 });

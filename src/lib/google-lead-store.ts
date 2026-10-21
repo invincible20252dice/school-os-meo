@@ -1,21 +1,33 @@
 import { prisma } from "./prisma";
 import { advanceLeadStage, aggregateLeadLifecycle } from "./google-lead-lifecycle";
 import { aggregateLeads, LeadError, leadChannels, leadChoice, leadId, leadPeriod, leadVersion, parseLeadEdit } from "./google-leads";
+import { validateLeadCreateKey, validateLeadOperationKey } from "./google-lead-operation-key";
 
 export async function loadGoogleLeads(schoolId: string, periodName: string, now = new Date()) {
   const period = leadPeriod(periodName, now);
   const where = { schoolId, source: "google", deletedAt: null };
   const rows = await prisma.googleLead.findMany({ where: { ...where, OR: [{ occurredAt: { gte: period.trendFrom, lt: now } }, { meetingAt: { gte: period.trendFrom, lt: now } }, ...["meetingScheduledAt", "meetingHeldAt", "enrolledAt"].map(field => ({ [field]: { gte: period.trendFrom, lt: now } }))] },
     select: { source: true, status: true, channel: true, occurredAt: true, meetingAt: true, meetingScheduledAt: true, meetingHeldAt: true, enrolledAt: true, deletedAt: true } });
-  const recent = await prisma.googleLead.findMany({ where: { ...where, occurredAt: { gte: period.from, lt: period.to } }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], take: 20 });
+  const recent = await prisma.googleLead.findMany({ where: { ...where, occurredAt: { gte: period.from, lt: period.to } }, omit: { idempotencyKey: true }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], take: 20 });
   return { period: { name: periodName, from: period.from.toISOString(), to: period.to.toISOString() }, ...aggregateLeads(rows, period), lifecycle: aggregateLeadLifecycle(rows, period), recent };
 }
-export async function createGoogleLead(schoolId: string, body: Record<string, unknown>, now = new Date()) {
+export async function createGoogleLead(schoolId: string, body: Record<string, unknown>, now = new Date(), userId = "") {
   const channel = leadChoice(body.channel, leadChannels), idempotencyKey = leadId(body.idempotencyKey);
+  validateLeadCreateKey(idempotencyKey, userId, channel);
   const row = await prisma.googleLead.upsert({ where: { schoolId_idempotencyKey: { schoolId, idempotencyKey } }, update: {},
     create: { schoolId, channel, idempotencyKey, occurredAt: now } });
   if (row.channel !== channel || row.deletedAt) throw new LeadError("この登録は処理済みです。最新の一覧を確認してください。", 409);
-  return row;
+  // Recovery keys contain an internal user ID; other school readers do not need it.
+  const { idempotencyKey: _operationKey, ...publicRow } = row;
+  return publicRow;
+}
+export type LeadOperationState = "absent" | "saved" | "changed" | "deleted";
+export async function loadGoogleLeadOperation(schoolId: string, operationId: string, userId: string): Promise<LeadOperationState> {
+  const identity = validateLeadOperationKey(operationId, userId);
+  const row = await prisma.googleLead.findFirst({ where: { schoolId, idempotencyKey: operationId, source: "google" }, select: { channel: true, version: true, deletedAt: true } });
+  if (!row) return "absent";
+  if (row.deletedAt) return "deleted";
+  return row.version > 1 || row.channel !== identity.channel ? "changed" : "saved";
 }
 export async function changeGoogleLead(schoolId: string, body: Record<string, unknown>, remove: boolean, now = new Date()) {
   const id = leadId(body.id), version = leadVersion(body.version);

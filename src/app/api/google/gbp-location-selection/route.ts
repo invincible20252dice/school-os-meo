@@ -1,4 +1,6 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
+import { canAccessSchool } from "@/lib/auth-access";
 import { isApprovedAccess } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
@@ -32,9 +34,10 @@ function normalizeLocationName(value: unknown) {
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
-    const accessResult = await resolveRequestAccess(request, url);
+    const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
 
-    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+    if (!accessResult.isAuthenticated) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    if (!isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         { message: "アカウント承認後にGBP店舗を保存できます。" },
         { status: 403 },
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
       requestedSchoolId,
     );
 
-    if (scopedSchool.effectiveSchoolId !== requestedSchoolId) {
+    if (!canAccessSchool(accessResult.access, requestedSchoolId) || scopedSchool.effectiveSchoolId !== requestedSchoolId) {
       return NextResponse.json(
         { message: "この校舎のGBP店舗は変更できません。" },
         { status: 403 },
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
         },
       }),
       prisma.googleAccount.upsert({
+        select: { id: true, schoolId: true, locationId: true, status: true, updatedAt: true },
         where: { schoolId: requestedSchoolId },
         create: {
           schoolId: requestedSchoolId,
@@ -124,7 +128,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       school,
-      account: googleAccount,
+      account: { id: googleAccount.id, schoolId: googleAccount.schoolId, locationId: googleAccount.locationId, status: googleAccount.status, updatedAt: googleAccount.updatedAt },
       setting: {
         ...setting,
         googleRefreshToken: setting.googleRefreshToken ? "********" : "",
@@ -132,7 +136,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error(error);
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
+    console.error("GBP location persistence failed");
     return NextResponse.json(
       { message: "GBP店舗の紐付けを保存できませんでした。" },
       { status: 500 },

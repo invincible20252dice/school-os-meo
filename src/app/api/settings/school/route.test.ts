@@ -498,3 +498,35 @@ describe("/api/settings/school", () => {
     expect(body.message).toContain("保存できませんでした");
   });
 });
+
+
+describe("stored-profile settings authorization", () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, "error").mockImplementation(() => undefined); });
+  for (const [method, handler] of [["GET", GET], ["PATCH", PATCH]] as const) {
+    for (const scenario of ["unauthenticated", "pending", "cross-school", "invalid"] as const) {
+      it(`${method} rejects ${scenario} before business queries or secret responses`, async () => {
+        const { resolveRequestAccess } = await import("@/lib/supabase-access");
+        const { RequestAuthenticationError } = await import("@/lib/request-authentication-error");
+        const { prisma } = await import("@/lib/prisma");
+        if (scenario === "invalid") vi.mocked(resolveRequestAccess).mockRejectedValueOnce(new RequestAuthenticationError());
+        else vi.mocked(resolveRequestAccess).mockResolvedValueOnce({
+          isAuthenticated: scenario !== "unauthenticated",
+          access: { userId: "fixture", role: scenario === "unauthenticated" ? "admin" : "manager",
+            schoolId: "school-1", schoolIds: ["school-1"], name: "Fixture", email: "fixture@example.invalid",
+            status: scenario === "pending" ? "pending" : "active",
+            source: scenario === "unauthenticated" ? "fallback" : "profiles" },
+        });
+        const schoolId = scenario === "cross-school" ? "school-2" : "school-1";
+        const response = await handler(new Request(`https://app.example.com/api/settings?schoolId=${schoolId}&role=admin`, {
+          method, headers: { "x-user-role": "admin" },
+          ...(method === "GET" ? {} : { body: JSON.stringify({ schoolId, lineNotifyEnabled: true }) }),
+        }));
+        expect(response.status).toBe(scenario === "invalid" || scenario === "unauthenticated" ? 401 : 403);
+        const body = await response.text();
+        for (const secret of ["line-token", "meta-secret", "instagram-token"]) expect(body).not.toContain(secret);
+        for (const operation of [prisma.school.findUnique, prisma.schoolSetting.findUnique, prisma.schoolSetting.upsert, prisma.instagramSetting.findUnique]) expect(operation).not.toHaveBeenCalled();
+        expect(resolveRequestAccess).toHaveBeenLastCalledWith(expect.any(Request), expect.any(URL), undefined, { requireActiveProfile: true });
+      });
+    }
+  }
+});

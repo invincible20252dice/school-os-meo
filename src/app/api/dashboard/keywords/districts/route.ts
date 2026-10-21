@@ -1,3 +1,4 @@
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -19,7 +20,7 @@ async function handle(request: Request) {
     if (typeof schoolId !== "string") return NextResponse.json({ success: false, error: "校舎を選択してください。" }, { status: 400 });
     if (!schoolId || schoolId === "all") return NextResponse.json({ success: false, error: "校舎を選択してください。" }, { status: 400 });
     if (!canAccessSchool(access.access, schoolId)) return NextResponse.json({ success: false, error: "この校舎の操作権限がありません。" }, { status: 403 });
-    if (request.method === "GET") return NextResponse.json({ success: true, districts: await prisma.targetDistrict.findMany({ where: { schoolId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }) });
+    if (request.method === "GET") return NextResponse.json({ success: true, districts: await prisma.targetDistrict.findMany({ where: { schoolId }, select: { id: true, name: true, focusPoint: true, aiMessage: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }) });
     const id = url.searchParams.get("id");
     if (request.method !== "POST" && !id) return NextResponse.json({ success: false, error: "校区IDが必要です。" }, { status: 400 });
     if (request.method === "DELETE") {
@@ -33,6 +34,7 @@ async function handle(request: Request) {
     const result = await prisma.targetDistrict.updateMany({ where: { id: id!, schoolId }, data });
     return NextResponse.json({ success: result.count > 0 }, { status: result.count ? 200 : 404 });
   } catch (error) {
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログインしてください。" }, { status: 401 });
     const duplicate = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
     return NextResponse.json({ success: false, error: duplicate ? "同じ名前の校区が登録されています。" : "校区情報を保存・取得できませんでした。再試行してください。" }, { status: duplicate ? 409 : 500 });
   }
