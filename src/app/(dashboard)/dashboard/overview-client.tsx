@@ -38,7 +38,10 @@ export default function OverviewClient() {
   const current = state.key === schoolId ? state : null;
   const data = current?.data;
   const summary = data?.summary;
-  const href = (path: string) => `${path}?schoolId=${encodeURIComponent(data?.schoolId ?? "all")}`;
+  const href = (path: string) => {
+    const targetSchool = data?.schoolId ?? (path === "/dashboard/rankings" ? summary?.meo?.schoolId : null) ?? "all";
+    return `${path}?schoolId=${encodeURIComponent(targetSchool)}`;
+  };
   return <main className={styles.page}>
     <header className={styles.hero}>
       <p className={styles.kicker}>Overview</p><h1>店舗運用ダッシュボード</h1>
