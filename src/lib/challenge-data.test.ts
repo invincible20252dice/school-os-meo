@@ -72,3 +72,10 @@ describe("challenge data reads", () => {
     expect(snapshot.errors).toEqual([expect.stringContaining("Google検索語句API")]);
   });
 });
+
+it("carries only allowlisted failure stage/status and excludes retained keyword rows", async () => {
+  vi.mocked(loadSearchKeywords).mockResolvedValue({ status: "API_ERROR", rows: [{ query: "old", impressions: 99 }], diagnostic: { stage: "OAUTH", httpStatus: 400, googleError: { message: "SECRET_MARKER" } }, fetchedAt: now.toISOString() } as never);
+  const { snapshot } = await loadChallengeData("a", null, now);
+  expect(snapshot).toMatchObject({ demand: null, demandStage: "OAUTH", demandHttpStatus: 400 });
+  expect(JSON.stringify(snapshot)).not.toMatch(/SECRET_MARKER|old/);
+});

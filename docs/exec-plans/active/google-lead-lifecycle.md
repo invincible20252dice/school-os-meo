@@ -45,7 +45,9 @@ RLS is enabled with no public policies. No customer IDs/records are copied here.
 - [x] Full local verification and PR-wide release approval packet.
 - Exact-head CI evidence is maintained in PR #5 and the final handoff, so a
   documentation-only evidence update is not mistaken for a tested code SHA.
-- [ ] Real Supabase persistence across independent sessions and browser reload.
+- [x] Real Supabase persistence across independent sessions and browser reload.
+- [ ] Canonical-domain fresh OAuth login: Google unverified-app warning left for
+  the user; no warning bypass, new credentials or permission grant performed.
 
 Prepare scripts/procedures and local evidence before requesting one concrete
 approval bundle for additive migration, strictly isolated synthetic school data,
@@ -63,6 +65,37 @@ GitHub read-only inspection found no rulesets and main is not protected. Release
 must resolve that documented gate; no repository settings were changed.
 
 Implementation commit af4b5a06015a4236a0f925dd040470e4aab1890b is pushed in PR #5.
-Next: pin both final-head CI runs in PR #5, then obtain the single concrete approval
-bundle. Keep this plan active until real DB acceptance; no production action has
-been authorized by this local/CI work.
+User subsequently gave concrete conditional authorization, including main rules,
+the additive migration, exact PR #5 merge/release, limited fixtures, cleanup and
+conditional rollback. Main ruleset 24785246 is active with no bypass actors.
+Production merge 2bc8685fb6bbcc7647884432c704938099cd950c passed main CI and Vercel
+deployment dpl_J7gHkQ8DAvoJiAYkdwY5tcLNnKt1 is READY on app.jukumeo.com.
+
+Actual production acceptance used the existing administrator session on the same
+deployment's school-os-meo.vercel.app alias. Two synthetic inquiries only; the A
+row progressed through all stages, reload and fresh SQL sessions agreed, two
+competing UI updates produced one success and one conflict, and B stayed separate.
+Both leads are now logically deleted and both schools ARCHIVED; all 15 existing
+business-table counts/digests match pre-migration data. No new User was necessary:
+the existing loginless system-user was reused without modification.
+
+Fixture setup initially rolled back on the School.googlePlaceId unique index.
+Use unique CODEX_TEST markers (no real Google place), retain identity guards and
+verify the actual uniqueness constraint in the fixture test. No existing DB
+constraint was relaxed. Details: docs/google-lead-production-acceptance.md.
+
+Remaining: canonical-domain fresh login requires the user's handling of Google's
+unverified-app warning. Keep this plan active for that boundary. The application
+already showed a Google-performance retrieval error before release; investigate
+that separately without confusing it with manual inquiry persistence.
+
+Read-only follow-up: production desktop Chrome emulation now verified at actual
+390px and 320px widths using archived fixture A, without writes or recreation.
+No horizontal overflow, covered inquiry controls or out-of-bounds help dialog;
+real-device/mobile-write acceptance remains separate. Reconfirmed exact alias
+deployment/SHA and effective main rules. PR #6 self-review has no blocking finding
+and stays draft/unmerged. Google-performance schema/location format checks passed,
+but retained request logs omit runtime details; root cause remains unknown. Its
+GET may upsert metrics, so customer refresh was not used for read-only diagnosis.
+See the follow-up section in google-lead-production-acceptance.md for impact and
+the next safe diagnostic-instrumentation task, requiring no secret disclosure.

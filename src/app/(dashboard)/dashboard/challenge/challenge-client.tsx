@@ -8,7 +8,7 @@ import { buildSurveyPublicUrl } from "@/lib/survey-public-url";
 import { challengeStatuses, missions, photoConfirmation, remainingChecks, statusLabels, type ChallengeDocument, type ChallengeStatus, type Evidence, type MissionProgress, type Snapshot, type WeeklyAction } from "@/lib/challenge";
 import styles from "./page.module.css";
 import { DayCards, DayDetail, DiagnosticDetails, OverallProgress } from "./day-detail";
-import { ActionPanel, ChallengeGoal } from "./next-actions";
+import { ActionPanel, ChallengeGoal, SearchDemandNotice } from "./next-actions";
 import { deriveJourney, fieldAnchor } from "@/lib/challenge-journey";
 import { Journey } from "./journey";
 import { guideForAction, guideForField } from "@/lib/action-guides";
@@ -201,6 +201,7 @@ export default function ChallengeClient({ weekly = false }: { weekly?: boolean }
     {data ? <>
       {!weekly && journeyDoc ? <Journey doc={journeyDoc} snapshot={data.snapshot} viewingDay={selected?.day ?? 0} schoolId={schoolId} onTask={(targetDay, key) => setTaskTarget({ schoolId, day: targetDay, key, urlDay: day })} /> : null}
       {!doc ? <><form id="challenge-start" className={styles.form} onSubmit={e => { e.preventDefault(); void save({ action: "start", additionalTarget: target }); }}><h2>7つのミッションを始める</h2><p>同じ日に複数のミッションへ進めます。成果の件数と、行動の完了は別に記録します。</p><label>DAY4の追加依頼目標人数<input type="number" min={1} max={10000} required value={target} onChange={e => setTarget(Number(e.target.value))} disabled={busy} /></label><p>DAY3は10名、DAY4は別の{target}名へ依頼します。</p><button disabled={busy}>チャレンジを開始</button></form><DayCards doc={null} snapshot={data.snapshot} schoolId={schoolId} /></> : <>
+        {!weekly ? <SearchDemandNotice snapshot={data.snapshot} /> : null}
         {weekly ? <><ChallengeGoal doc={doc} snapshot={data.snapshot} /><ActionPanel doc={doc} snapshot={data.snapshot} schoolId={schoolId} day={day || undefined} weekly save={save} busy={busy} /></> : null}
         {weekly ? <section className={styles.grid}>{data.actions.length ? data.actions.map(action => <WeeklyRecord key={`${data.version}-${action.key}`} action={action} data={data} save={save} busy={busy} />) : <p>現在、記録が必要なアクションはありません。</p>}</section> : <>
           {selected && selected.status !== "COMPLETED" && journey?.currentDay && selected.day !== journey.currentDay.day ? <p className={styles.viewing}>DAY{selected.day}を閲覧しています。現在取り組むDAYはDAY{journey.currentDay.day}です。<Link href={href(`/dashboard/challenge?day=${journey.currentDay.day}`)}>現在のDAYに戻る →</Link></p> : null}

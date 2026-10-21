@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { Prisma } from "@prisma/client";
+import { googleDiagnostic } from "./google-diagnostics";
 import { GOOGLE_BUSINESS_SCOPE } from "./google-gbp-oauth";
 
 export type KeywordState = "AVAILABLE" | "EMPTY" | "DISCONNECTED" | "API_ERROR" | "DB_ERROR";
@@ -7,7 +8,6 @@ export type KeywordRow = { query: string; impressions: number | null; threshold:
 export type KeywordDiagnostic = {
   schoolId: string; locationId: string | null; month: string; requiredScope: string;
   grantedScope: string | null; stage: string; httpStatus: number | null;
-  googleError?: { code?: number; status?: string; message?: string };
   pages: number; dbCode?: string;
 };
 export type KeywordResult = { status: KeywordState; rows: KeywordRow[]; diagnostic: KeywordDiagnostic; fetchedAt: string | null };
@@ -52,8 +52,6 @@ export async function fetchKeywordMonth(diagnostic: KeywordDiagnostic, refreshTo
     d.httpStatus = response.status;
     const data = await response.json();
     if (!response.ok) {
-      const e = record(record(data).error);
-      d.googleError = { code: response.status, status: typeof e.status === "string" ? e.status : "OAUTH_ERROR", message: typeof e.message === "string" ? e.message : String(record(data).error_description ?? "Google request rejected") };
       throw new Error("Google rejected request");
     }
     return data;
@@ -66,8 +64,9 @@ export async function fetchKeywordMonth(diagnostic: KeywordDiagnostic, refreshTo
     d.stage = "OAUTH";
     const token = record(await json(await request("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: clientId, client_secret: secret, refresh_token: refreshToken, grant_type: "refresh_token" }) })));
     if (typeof token.access_token !== "string" || !token.access_token) throw new Error("Missing access token");
-    d.grantedScope = typeof token.scope === "string" ? token.scope : null;
-    if (d.grantedScope !== null && !d.grantedScope.split(" ").includes(GOOGLE_BUSINESS_SCOPE)) { d.stage = "SCOPE"; throw new Error("Missing business scope"); }
+    const scope = typeof token.scope === "string" ? token.scope : null;
+    d.grantedScope = scope?.split(" ").includes(GOOGLE_BUSINESS_SCOPE) ? GOOGLE_BUSINESS_SCOPE : null;
+    if (scope !== null && d.grantedScope === null) { d.stage = "SCOPE"; throw new Error("Missing business scope"); }
     const rows: KeywordRow[] = [], seen = new Set<string>(), tokens = new Set<string>();
     let next = "";
     do {
@@ -103,18 +102,29 @@ export async function loadSearchKeywords(schoolId: string, month = previousKeywo
     diagnostic.stage = "DB_READ";
     const where = { schoolId_locationId_month: { schoolId, locationId: diagnostic.locationId, month } };
     const saved = await prisma.googleSearchKeywordMonth.findUnique({ where });
-    if (saved && saved.checkedAt.getTime() > now.getTime() - 3600000) return { status: saved.status as KeywordState, rows: ["AVAILABLE", "EMPTY"].includes(saved.status) ? saved.rows as unknown as KeywordRow[] : [], diagnostic: saved.diagnostic as unknown as KeywordDiagnostic, fetchedAt: saved.fetchedAt?.toISOString() ?? null };
+    if (saved && saved.checkedAt.getTime() > now.getTime() - 3600000) {
+      const known = ["AVAILABLE", "EMPTY", "API_ERROR", "DB_ERROR", "DISCONNECTED"].includes(saved.status);
+      const status = known ? saved.status as KeywordState : "DB_ERROR";
+      const successful = status === "AVAILABLE" || status === "EMPTY";
+      const cached = known ? googleDiagnostic(saved.diagnostic) : googleDiagnostic({ stage: "DB_READ" });
+      const metadata = record(saved.diagnostic);
+      const pages = typeof metadata.pages === "number" && Number.isInteger(metadata.pages) && metadata.pages >= 0 && metadata.pages <= 100 ? metadata.pages : 0;
+      const grantedScope = metadata.grantedScope === GOOGLE_BUSINESS_SCOPE ? GOOGLE_BUSINESS_SCOPE : null;
+      return { status, rows: status === "AVAILABLE" ? saved.rows as unknown as KeywordRow[] : [],
+        diagnostic: { ...diagnostic, ...cached, pages, grantedScope }, fetchedAt: successful ? saved.fetchedAt?.toISOString() ?? null : null };
+    }
     const result = await fetchKeywordMonth(diagnostic, pair.token);
     Object.assign(diagnostic, result.diagnostic, { stage: "DB_SAVE" });
     const success = result.status === "AVAILABLE" || result.status === "EMPTY";
     const data = { status: result.status, diagnostic: result.diagnostic as unknown as Prisma.InputJsonValue, checkedAt: now,
       ...(success ? { rows: result.rows as unknown as Prisma.InputJsonValue, fetchedAt: now } : {}) };
     await prisma.googleSearchKeywordMonth.upsert({ where, create: { ...where.schoolId_locationId_month, ...data }, update: data });
-    console.info("[Search keywords]", { ...result.diagnostic, status: result.status, rowCount: result.rows.length, saved: true });
+    console.info("[Search keywords]", { ...googleDiagnostic(result.diagnostic), status: result.status, saved: true });
     return result;
   } catch (error) {
-    diagnostic.dbCode = String(record(error).code ?? "UNKNOWN");
-    console.error("[Search keywords]", { ...diagnostic, status: "DB_ERROR" });
+    const code = record(error).code;
+    diagnostic.dbCode = typeof code === "string" && /^P[0-9]{4}$/.test(code) ? code : "UNKNOWN";
+    console.error("[Search keywords]", { ...googleDiagnostic(diagnostic), dbCode: diagnostic.dbCode, status: "DB_ERROR" });
     return { status: "DB_ERROR", rows: [], diagnostic, fetchedAt: null };
   }
 }

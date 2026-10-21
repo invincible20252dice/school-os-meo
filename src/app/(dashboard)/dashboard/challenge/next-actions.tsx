@@ -9,8 +9,13 @@ import { challengeHref } from "./day-detail";
 import styles from "./page.module.css";
 import { guideForAction } from "@/lib/action-guides";
 import { ActionExecutionGuide } from "./action-guide";
+import { googleFailureDetail } from "@/lib/google-diagnostics";
 
 type Save = (command: Record<string, unknown>) => Promise<void>;
+export function SearchDemandNotice({ snapshot }: { snapshot: Snapshot }) {
+  if (snapshot.demandStatus !== "API_ERROR" && snapshot.demandStatus !== "DB_ERROR") return null;
+  return <p role="status" aria-label="検索需要の取得状態" className={styles.warning}>{googleFailureDetail({ stage: snapshot.demandStage, httpStatus: snapshot.demandHttpStatus })}取得できた情報と手動確認に基づく提案を表示しています。対応中の提案の根拠は開始時の記録です。</p>;
+}
 function ActionRecord({ record, save, busy, schoolId, snapshot }: { record: NextActionRecord; save: Save; busy: boolean; schoolId: string; snapshot: Snapshot }) {
   const [note, setNote] = useState(record.note);
   const [status, setStatus] = useState(record.status);
@@ -26,6 +31,7 @@ export function ActionPanel({ doc, snapshot, schoolId, day, weekly = false, save
   const actions = selected ? selected.actions : weekly ? plan.days.flatMap(d => d.actions) : plan.top ? [plan.top] : [];
   const active = selected ? selected.active : plan.active;
   return <section className={styles.section} aria-label="校舎別NEXT ACTION"><h2>{weekly ? "今週の優先アクション" : day ? "この校舎で優先する改善" : "今日のNEXT ACTION"}</h2>
+    <SearchDemandNotice snapshot={snapshot} />
     {actions.length ? <ol className={styles.checklist}>{actions.map(action => <li className={styles.checkItem} key={action.key}><p className={styles.kicker}>DAY{action.day} / {priorityLabels[action.priority]} / 約{action.minutes}分</p><h3>{action.title}</h3><p>{action.reason}</p><small>判定根拠：{action.source}</small><ActionExecutionGuide guide={guideForAction(action.key)} schoolId={schoolId} snapshot={snapshot} /><div className={styles.links}><Link href={challengeHref(action.path, schoolId)}>関連機能を開く →</Link><button disabled={busy} onClick={() => void save({ action: "next-action", key: action.key, status: "IN_PROGRESS", note: "" })}>この改善を開始する</button></div></li>)}</ol> : <p>新しい優先提案はありません。対応中の記録や確認項目を見直し、次のDAYへ進めます。</p>}
     {(day === 3 || weekly) ? <div className={styles.facts}><h3>口コミ依頼の目標</h3><p>{doc.requestTarget?.reason ?? plan.request.reason}</p><p>保存済みの実行目標：{doc.requestTarget?.count ?? 10}名</p>{!doc.requestTarget && doc.missions[2].status === "NOT_STARTED" && plan.request.count !== null ? <button disabled={busy} onClick={() => void save({ action: "adopt-request-target" })}>提案の{plan.request.count}名をDAY3目標に適用</button> : null}</div> : null}
     {(day === 4 || weekly) ? <div className={styles.facts}><h3>追加依頼の目標</h3><p>{doc.additionalRequestTarget?.reason ?? plan.additionalRequest.reason}</p><p>保存済みの追加目標：{doc.additionalTarget}名</p>{!doc.additionalRequestTarget && doc.missions[3].status === "NOT_STARTED" && plan.additionalRequest.count !== null ? <button disabled={busy} onClick={() => void save({ action: "adopt-request-target", day: 4 })}>提案の{plan.additionalRequest.count}名をDAY4目標に適用</button> : null}</div> : null}

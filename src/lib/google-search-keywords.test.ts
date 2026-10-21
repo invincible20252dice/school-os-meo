@@ -43,13 +43,13 @@ describe("Google monthly search protocol", () => {
   it("accepts a successful empty response", async () => {
     expect((await fetchKeywordMonth(d(), "r", vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res({})))).status).toBe("EMPTY");
   });
-  it.each([403, 429, 500])("preserves Google HTTP %i and error information", async status => {
+  it.each([403, 429, 500])("preserves Google HTTP %i without raw provider error information", async status => {
     const result = await fetchKeywordMonth(d(), "r", vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res({ error: { status: "RESOURCE_EXHAUSTED", message: "quota" } }, status)));
-    expect(result).toMatchObject({ status: "API_ERROR", diagnostic: { stage: "GOOGLE_API", httpStatus: status, googleError: { message: "quota" } } });
+    expect(result).toMatchObject({ status: "API_ERROR", diagnostic: { stage: "GOOGLE_API", httpStatus: status,  } });
   });
   it("separates revoked OAuth and missing scope", async () => {
     const revoked = await fetchKeywordMonth(d(), "r", vi.fn().mockResolvedValue(res({ error: "invalid_grant", error_description: "revoked" }, 400)));
-    expect(revoked.diagnostic).toMatchObject({ stage: "OAUTH", googleError: { status: "OAUTH_ERROR", message: "revoked" } });
+    expect(revoked.diagnostic).toMatchObject({ stage: "OAUTH", httpStatus: 400 });
     const missing = await fetchKeywordMonth(d(), "r", vi.fn().mockResolvedValue(res({ access_token: "s", scope: "email" })));
     expect(missing.diagnostic.stage).toBe("SCOPE");
   });
@@ -74,6 +74,43 @@ describe("Google monthly search protocol", () => {
   });
 });
 describe("monthly persistence and connection isolation", () => {
+  // Promote the original review-only recovery check into the normal CI suite.
+  it.each(["AVAILABLE", "EMPTY"] as const)("replaces retained failure data on same-school recovery to %s, then reuses the cache", async status => {
+    const old = new Date("2026-10-01T00:00:00Z"), checkedAt = new Date("2026-10-09T10:00:00Z");
+    const cachedAt = new Date("2026-10-09T10:30:00Z"), recoveredAt = new Date("2026-10-09T12:00:00Z");
+    const saved = { status: "API_ERROR", rows: [{ query: "old", impressions: 9, threshold: null }],
+      fetchedAt: old, checkedAt, diagnostic: { ...d(), stage: "OAUTH", httpStatus: 400,
+        googleError: { message: "private@example.invalid SECRET_MARKER" } } };
+    vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mockImplementation(() => Promise.resolve(saved) as never);
+    vi.mocked(prisma.googleSearchKeywordMonth.upsert).mockImplementation(args => {
+      Object.assign(saved, args.update);
+      return Promise.resolve(saved) as never;
+    });
+    const f = vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res(status === "EMPTY" ? {} : page("recovered")));
+    vi.stubGlobal("fetch", f);
+
+    expect(await loadSearchKeywords("a", "2026-09", cachedAt)).toMatchObject({ status: "API_ERROR", rows: [], fetchedAt: null });
+    expect(f).not.toHaveBeenCalled();
+    expect(prisma.googleSearchKeywordMonth.upsert).not.toHaveBeenCalled();
+    expect(saved.rows).toEqual([{ query: "old", impressions: 9, threshold: null }]);
+    expect(saved.fetchedAt).toEqual(old);
+
+    const rows = status === "EMPTY" ? [] : [{ query: "recovered", impressions: 25, threshold: null }];
+    const recovered = await loadSearchKeywords("a", "2026-09", recoveredAt);
+    expect(recovered).toMatchObject({ status, rows, diagnostic: { stage: "FETCHED", httpStatus: 200 } });
+    expect(saved).toMatchObject({ status, rows, fetchedAt: recoveredAt, checkedAt: recoveredAt });
+    expect(saved.diagnostic).toMatchObject({ stage: "FETCHED", httpStatus: 200 });
+    expect(JSON.stringify(saved.diagnostic)).not.toMatch(/SECRET_MARKER|private@/);
+
+    const cached = await loadSearchKeywords("a", "2026-09", new Date(recoveredAt.getTime() + 1000));
+    expect(cached).toMatchObject({ status, rows, fetchedAt: recoveredAt.toISOString(),
+      diagnostic: { schoolId: "a", locationId: "123", month: "2026-09", stage: "FETCHED", httpStatus: 200 } });
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(prisma.googleSearchKeywordMonth.upsert).toHaveBeenCalledTimes(1);
+    const where = { schoolId_locationId_month: { schoolId: "a", locationId: "123", month: "2026-09" } };
+    for (const [args] of vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mock.calls) expect(args).toEqual({ where });
+    expect(prisma.googleSearchKeywordMonth.upsert).toHaveBeenCalledWith(expect.objectContaining({ where }));
+  });
   it("stores verified counts and month/location scope", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res(page())));
     const result = await loadSearchKeywords("a", "2026-09");
@@ -114,4 +151,43 @@ describe("monthly persistence and connection isolation", () => {
     vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValue(new Error("secret"));
     const r = await loadSearchKeywords("a"); expect(r.diagnostic.dbCode).toBe("UNKNOWN"); expect(JSON.stringify(r)).not.toContain("secret");
   });
+});
+
+it("does not leak raw provider error content or arbitrary scope in diagnostics/storage/logs", async () => {
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const f = vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(res({ error: { status: "SECRET_MARKER", message: "https://auth.invalid/SECRET_MARKER" } }, 403));
+    vi.stubGlobal("fetch", f);
+    const result = await loadSearchKeywords("a");
+    expect(result).toMatchObject({ status: "API_ERROR", diagnostic: { stage: "GOOGLE_API", httpStatus: 403 } });
+    expect(JSON.stringify([result, info.mock.calls, vi.mocked(prisma.googleSearchKeywordMonth.upsert).mock.calls])).not.toContain("SECRET_MARKER");
+    expect(info).toHaveBeenCalledWith("[Search keywords]", { stage: "GOOGLE_API", httpStatus: 403, status: "API_ERROR", saved: true });
+    const other = await fetchKeywordMonth(d(), "r", vi.fn().mockResolvedValueOnce(res({ access_token: "SECRET_MARKER", scope: GOOGLE_BUSINESS_SCOPE + " SECRET_MARKER" })).mockResolvedValueOnce(res({})));
+    expect(JSON.stringify(other)).not.toContain("SECRET_MARKER");
+  } finally { info.mockRestore(); }
+});
+it.each(["API_ERROR", "DB_ERROR", "UNKNOWN"])("never serves retained success rows/time or unsafe diagnostics for cached %s", async status => {
+  const f = vi.fn(); vi.stubGlobal("fetch", f);
+  vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mockResolvedValue({ status, rows: [{ query: "stale", impressions: 900 }], diagnostic: { ...d(), stage: "OAUTH", httpStatus: 400, googleError: { message: "SECRET_MARKER" } }, checkedAt: new Date(), fetchedAt: new Date() } as never);
+  const result = await loadSearchKeywords("a");
+  expect(result).toMatchObject({ status: status === "UNKNOWN" ? "DB_ERROR" : status, rows: [], fetchedAt: null, diagnostic: { stage: status === "UNKNOWN" ? "DB_READ" : "OAUTH", httpStatus: status === "UNKNOWN" ? null : 400 } });
+  expect(JSON.stringify(result)).not.toMatch(/SECRET_MARKER|stale/);
+  expect(f).not.toHaveBeenCalled();
+  expect(prisma.googleSearchKeywordMonth.upsert).not.toHaveBeenCalled();
+});
+it("allowlists database codes and never logs arbitrary exception fields", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    vi.mocked(prisma.schoolSetting.findUnique).mockRejectedValue({ code: "SECRET_MARKER", message: "PRIVATE" });
+    expect((await loadSearchKeywords("a")).diagnostic.dbCode).toBe("UNKNOWN");
+    expect(error).toHaveBeenCalledWith("[Search keywords]", { stage: "SETTINGS", httpStatus: null, dbCode: "UNKNOWN", status: "DB_ERROR" });
+  } finally { error.mockRestore(); }
+});
+it("retains bounded cached metadata without arbitrary provider strings", async () => {
+  vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mockResolvedValue({ status: "EMPTY", rows: [], diagnostic: { ...d(), stage: "FETCHED", pages: 2, grantedScope: GOOGLE_BUSINESS_SCOPE }, checkedAt: new Date(), fetchedAt: new Date() } as never);
+  expect((await loadSearchKeywords("a")).diagnostic).toMatchObject({ pages: 2, grantedScope: GOOGLE_BUSINESS_SCOPE });
+  for (const pages of [-1, 101, 1.5, "2"]) {
+    vi.mocked(prisma.googleSearchKeywordMonth.findUnique).mockResolvedValue({ status: "API_ERROR", rows: [], diagnostic: { pages, grantedScope: "SECRET_MARKER" }, checkedAt: new Date(), fetchedAt: null } as never);
+    expect((await loadSearchKeywords("a")).diagnostic).toMatchObject({ pages: 0, grantedScope: null });
+  }
 });

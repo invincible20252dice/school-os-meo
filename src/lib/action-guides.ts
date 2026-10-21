@@ -1,3 +1,4 @@
+import { googleFailureDetail } from "./google-diagnostics";
 import type { Snapshot } from "./challenge";
 
 export type GuideImage = { src: string; alt: string; kind: "GOOD" | "NG" };
@@ -98,13 +99,14 @@ export function guideForField(day: number, key: string) {
   return guideForAction(`check-${day}-${key}`) ?? guideForAction(`day-${day}`);
 }
 export function postTopics(snapshot: Snapshot) {
-  const topics = (snapshot.demand ?? []).filter(row => row.impressions > 0).toSorted((a, b) => b.impressions - a.impressions)
+  const usable = snapshot.demandStatus === undefined || snapshot.demandStatus === "AVAILABLE";
+  const topics = (usable ? snapshot.demand ?? [] : []).filter(row => row.impressions > 0).toSorted((a, b) => b.impressions - a.impressions)
     .filter((row, i, rows) => rows.findIndex(other => other.query === row.query) === i).slice(0, 3);
   return { topics, message: topics.length ? "Googleで自校舎が見つかった検索語句（保存済み）。市場全体の検索数ではありません。"
     : snapshot.demandStatus === "DISCONNECTED" ? "検索語句を取得するGoogle店舗が未連携です。Google連携設定を確認してください。"
     : snapshot.demandStatus === "EMPTY" ? "Googleから正常に取得しましたが、対象月の検索語句は0件です。"
-    : snapshot.demandStatus === "API_ERROR" ? snapshot.demandHttpStatus === 429 ? "Google検索語句APIの利用枠制限（429）で取得できません。管理者がGoogle CloudのAPI利用承認・割り当てを確認してください。" : "Google検索語句APIの取得に失敗しました。確認済みの教室情報からテーマを入力できます。"
-    : snapshot.demandStatus === "DB_ERROR" ? "検索語句のDB取得・保存に失敗しました。管理者にお問い合わせください。"
+    : snapshot.demandStatus === "API_ERROR" ? snapshot.demandHttpStatus === 429 && (snapshot.demandStage === undefined || snapshot.demandStage === "GOOGLE_API") ? "Google検索語句APIの利用枠制限（429）で取得できません。管理者がGoogle CloudのAPI利用承認・割り当てを確認してください。" : `Google検索語句API：${googleFailureDetail({ stage: snapshot.demandStage, httpStatus: snapshot.demandHttpStatus })}確認済みの教室情報から手動でテーマを入力できます。`
+    : snapshot.demandStatus === "DB_ERROR" ? `検索語句のDB取得・保存に失敗しました。${googleFailureDetail({ stage: snapshot.demandStage, httpStatus: snapshot.demandHttpStatus })}管理者にお問い合わせください。`
     : snapshot.demandStatus === "AVAILABLE" ? "Googleの検索語句は取得済みですが、正確な表示数を確認できる語句がありません。少数データの閾値を表示数として扱いません。"
     : snapshot.demand === null ? "検索語句を取得できませんでした。確認済みの教室情報からテーマを入力できます。"
       : "検索語句の保存データがありません。確認済みの教室情報からテーマを入力できます。" };

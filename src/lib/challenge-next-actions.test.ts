@@ -208,3 +208,15 @@ describe("action/mission evidence integration", () => {
     expect(reconcileActionHistory(doc, s, "u").nextActionHistory![0].status).toBe("COMPLETED");
   });
 });
+
+it.each(["API_ERROR", "DB_ERROR", "DISCONNECTED", "EMPTY"] as const)("does not rank retained search demand as current when state is %s", demandStatus => {
+  const s = snapshot(); s.demandStatus = demandStatus; s.demandStage = "OAUTH"; s.demandHttpStatus = 400;
+  s.demand = [{ query: "古い需要", month: "2026-09", impressions: 999, updatedAt: s.at }];
+  const plan = nextActions(challengeDocument(), s);
+  expect(plan.available.some(a => a.key === "publish-古い需要")).toBe(false);
+  expect(plan.days[4].actions[0]).toMatchObject({ key: "publish-manual", source: "手動テーマ" });
+  if (demandStatus === "API_ERROR") {
+    expect(plan.days[4].actions[0].reason).toContain("認証情報の更新で失敗しました（HTTP 400）");
+    expect(plan.days[4].actions[0].reason).toContain("情報不足");
+  }
+});

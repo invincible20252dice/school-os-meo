@@ -92,6 +92,17 @@ describe("OverviewClient", () => {
     expect(screen.getByRole("link", { name: "口コミを確認" }).getAttribute("href")).toBe("/dashboard/reviews?schoolId=all");
   });
 
+  it.each(["", "schoolId=all"])("opens the measured school's ranking from an all-school action (%s)", async query => {
+    route.params = new URLSearchParams(query);
+    const body = payload({ keywords: [{ id: "k-b", schoolId: "school-b", keyword: "B校 個別指導", rankHistories: [{ rank: 8, checkedAt: now }], aioScoreHistories: [] }] }, { schoolId: null, schoolName: "全校舎", schoolCount: 2 });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body)));
+    render(<OverviewClient />);
+    await screen.findByText("全校舎（2校舎）");
+    for (const name of ["順位を確認", "「B校 個別指導」の最新順位と競合状況を確認してください。"])
+      expect(screen.getByRole("link", { name }).getAttribute("href")).toBe("/dashboard/rankings?schoolId=school-b");
+    expect(screen.getByRole("link", { name: "口コミを確認" }).getAttribute("href")).toBe("/dashboard/reviews?schoolId=all");
+  });
+
   it("shows only loading until the API completes, then renders the received metrics", async () => {
     const pending = deferred();
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending.promise));

@@ -1,5 +1,19 @@
 # Google lifecycle: release and real Supabase acceptance approval packet
 
+2026-10-09 execution update: the user explicitly approved the concrete operations.
+Main protection, additive migration, PR #5 merge, production deployment, limited
+real persistence tests and cleanup succeeded. The actual owner strategy reused
+the unchanged loginless system-user (no new User), and unique CODEX_TEST place
+markers satisfied School.googlePlaceId's existing unique index. See
+[production acceptance](google-lead-production-acceptance.md) for the exact
+deployment/SHA, data comparison and remaining canonical-domain OAuth boundary.
+
+The following is the original pre-approval proposal, retained as historical
+context. Its NOT AUTHORIZED status, original owner fixture and setup/cleanup
+hashes describe that earlier proposal, not the current release state/scripts.
+
+## Original proposal
+
 Status: NOT AUTHORIZED / NOT DEPLOYED. Implementation and local verification are
 complete in draft PR #5, branch codex/google-lead-measurement. The final
 handoff and PR description pin the exact reviewed HEAD and CI runs. Do not treat
