@@ -1,13 +1,15 @@
 import { test, expect } from "./fixtures";
 
-test("Google login starts OAuth with local callback only", async ({ page }) => {
+test("Google login rejects an unapproved loopback origin before OAuth", async ({ page }) => {
+  const oauthRequests: string[] = [];
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/auth/v1/authorize") oauthRequests.push(request.url());
+  });
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "ログイン", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Google/ }).click();
-  await expect(page).toHaveURL(/127\.0\.0\.1:54321\/auth\/v1\/authorize/);
-  const url = new URL(page.url());
-  expect(url.searchParams.get("provider")).toBe("google");
-  expect(url.searchParams.get("redirect_to")).toBe("http://127.0.0.1:4317/auth/callback");
+  await expect(page.getByText("このURLではGoogleログインを開始できません。正規のログインURLをご利用ください。")).toBeVisible();
+  await expect(page).toHaveURL("http://127.0.0.1:4317/login");
+  expect(oauthRequests).toEqual([]);
 });
 
 test("challenge execution record survives reload and stays isolated across schools", async ({ page, fixture }, testInfo) => {

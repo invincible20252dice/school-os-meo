@@ -10,6 +10,7 @@ import {
 const originalEnv = process.env;
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   process.env = { ...originalEnv };
 });
 
@@ -69,14 +70,14 @@ describe("supabase auth", () => {
     });
   });
 
-  it("starts Google OAuth with the shared auth callback URL", async () => {
+  it("starts Google OAuth with the browser callback URL", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://school-os-meo.vercel.app";
     const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
 
     await expect(
       startGoogleOAuth({
         auth: { signInWithOAuth },
-      }),
+      }, "https://school-os-meo.vercel.app"),
     ).resolves.toEqual({
       redirectTo: "https://school-os-meo.vercel.app/auth/callback",
     });
@@ -98,6 +99,7 @@ describe("supabase auth", () => {
     process.env.NEXT_PUBLIC_SITE_URL = "";
     const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
 
+    vi.stubEnv("NODE_ENV", "development");
     await startGoogleOAuth(
       {
         auth: { signInWithOAuth },
@@ -126,7 +128,7 @@ describe("supabase auth", () => {
             .fn()
             .mockResolvedValue({ error: { message: "Google provider disabled." } }),
         },
-      }),
+      }, "https://school-os-meo.vercel.app"),
     ).rejects.toThrow("Google provider disabled.");
   });
 
@@ -319,5 +321,60 @@ describe("supabase auth", () => {
         },
       ),
     ).rejects.toThrow("認証トークンが見つかりません。");
+  });
+});
+
+
+describe("Google OAuth origin boundary", () => {
+  const origins = [
+    "https://staging.jukumeo.com",
+    "https://app.jukumeo.com",
+    "https://school-os-meo.vercel.app",
+  ];
+  it.each(origins)("uses exact browser origin %s despite stale public configuration", async (origin) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://school-os-meo.vercel.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://external.example");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_URL", "external.example");
+    const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
+    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin))
+      .resolves.toEqual({ redirectTo: `${origin}/auth/callback` });
+    expect(signInWithOAuth).toHaveBeenCalledExactlyOnceWith({
+      provider: "google",
+      options: {
+        redirectTo: `${origin}/auth/callback`,
+        scopes: "https://www.googleapis.com/auth/business.manage",
+        queryParams: { access_type: "offline", prompt: "consent" },
+      },
+    });
+  });
+  it.each([
+    undefined, "", "null", "https://external.example", "//app.jukumeo.com",
+    "http://app.jukumeo.com", "https://app.jukumeo.com.evil.example",
+    "https://evil-app.jukumeo.com", "https://app.jukumeo.com:443",
+    "https://app.jukumeo.com:444", "https://app.jukumeo.com/",
+    "https://app.jukumeo.com/auth/callback", "https://app.jukumeo.com?next=https://evil.example",
+    "https://app.jukumeo.com#evil", "https://user@app.jukumeo.com",
+    "https://app.jukumeo.com@evil.example", " https://app.jukumeo.com",
+    "https://app.jukumeo.com\n", "https://APP.jukumeo.com", "https://app.jukumeo.com.",
+    "http://localhost:3030", "http://localhost:3031", "http://127.0.0.1:3030",
+  ])("rejects production input %s before calling SDK even with valid env fallback", async (origin) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.jukumeo.com");
+    const signInWithOAuth = vi.fn();
+    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin)).rejects.toThrow();
+    expect(signInWithOAuth).not.toHaveBeenCalled();
+  });
+  it.each(["http://localhost:3030", "http://localhost:3031", "http://127.0.0.1:3030"])("preserves explicit development origin %s", async (origin) => {
+    vi.stubEnv("NODE_ENV", "development");
+    const signInWithOAuth = vi.fn().mockResolvedValue({ error: null });
+    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin))
+      .resolves.toEqual({ redirectTo: `${origin}/auth/callback` });
+  });
+  it.each(["http://localhost:9999", "http://127.0.0.1:4317", "http://localhost:3030/", "http://localhost:3030?next=x", "http://localhost.evil:3030"])("rejects unlisted development origin %s", async (origin) => {
+    vi.stubEnv("NODE_ENV", "development");
+    const signInWithOAuth = vi.fn();
+    await expect(startGoogleOAuth({ auth: { signInWithOAuth } }, origin)).rejects.toThrow();
+    expect(signInWithOAuth).not.toHaveBeenCalled();
   });
 });
