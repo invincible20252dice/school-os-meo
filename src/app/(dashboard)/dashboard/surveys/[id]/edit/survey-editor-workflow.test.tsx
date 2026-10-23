@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { createServerRequest } from "@/test-utils/server-request";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/surveys/route";
 import { serializePublicSurvey } from "@/lib/public-survey-query";
@@ -67,7 +68,7 @@ beforeEach(() => {
   // Exercise the real route, authorization scope, normalization, and persistence.
   // Only the network/session/Prisma boundaries are substituted.
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-    const request = new Request(new URL(url, "https://school.test"), init);
+    const request = createServerRequest(new URL(url, "https://school.test"), init);
     return request.method === "POST" ? POST(request) : GET(request);
   }));
 });

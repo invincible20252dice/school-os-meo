@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createServerRequest } from "@/test-utils/server-request";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma, Review, School } from "@prisma/client";
 import type { resolveRequestAccess } from "@/lib/supabase-access";
@@ -56,7 +57,7 @@ beforeEach(() => {
   // Dispatch the browser request to the real route; only OpenAI's HTTP boundary is substituted.
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     if (typeof input === "string" && input.startsWith("/api/dashboard/reviews/analytics")) {
-      const response = await GET(new Request(`https://school.test${input}`, init));
+      const response = await GET(createServerRequest(`https://school.test${input}`, init));
       statuses.push(response.status);
       expect(response.headers.get("cache-control")).toBe("private, no-store");
       return response;
