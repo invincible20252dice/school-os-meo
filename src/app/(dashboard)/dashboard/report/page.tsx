@@ -1,21 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { normalizeMonthlyReportData, type ReportMetric } from "@/lib/mock/reportData";
-import {
-  buildInsightComparisonItems,
-  buildMockInsightComparisonData,
-  type InsightComparisonItem,
-  type InsightMetricKey,
-} from "@/lib/mock/insightData";
+import type { MonthlyReportData, ReportMetric } from "@/lib/mock/reportData";
 import styles from "./page.module.css";
 
 type ReportApiResponse = {
   success?: boolean;
   error?: string;
   targetMonth?: string;
-  report?: Parameters<typeof normalizeMonthlyReportData>[0];
+  report?: unknown;
 };
 
 function getDefaultMonth() {
@@ -186,32 +180,45 @@ function toneClass(tone: ReportMetric["tone"]) {
   return `${styles.metricCard} ${styles.watch}`;
 }
 
-function insightTrendClass(trend: InsightComparisonItem["trend"]) {
-  if (trend === "increase") {
-    return `${styles.deltaBadge} ${styles.deltaIncrease}`;
-  }
-
-  if (trend === "decrease") {
-    return `${styles.deltaBadge} ${styles.deltaDecrease}`;
-  }
-
-  return `${styles.deltaBadge} ${styles.deltaFlat}`;
+// Validate the existing display contract without inventing missing measurements.
+// Successful API-side zero/baseline values cannot be distinguished here; that
+// provenance limitation requires a separate API contract change.
+function isReport(value: unknown): value is MonthlyReportData {
+  if (!value || typeof value !== "object") return false;
+  const report = value as Record<string, unknown>;
+  const strings = (item: unknown, keys: string[]) =>
+    !!item && typeof item === "object" && keys.every(key => typeof (item as Record<string, unknown>)[key] === "string");
+  return strings(report, ["schoolName", "period", "monthOverMonth", "aiComment"])
+    && typeof report.score === "number" && Number.isFinite(report.score)
+    && ["S", "A", "B", "C"].includes(report.rank as string)
+    && Array.isArray(report.metrics) && report.metrics.every(metric =>
+      strings(metric, ["label", "value", "detail", "trend"])
+      && ["good", "watch", "alert"].includes(metric.tone))
+    && Array.isArray(report.actions) && report.actions.every(action => strings(action, ["title", "detail", "owner"]));
 }
+
+type ReportState =
+  | { key: string; status: "loading" | "missing" }
+  | { key: string; status: "error"; message: string }
+  | { key: string; status: "ready"; report: MonthlyReportData };
 
 export default function MonthlyReportPage() {
   const searchParams = useSearchParams();
   const selectedSchoolId = searchParams.get("schoolId") || "";
-  const [month, setMonth] = useState(searchParams.get("month") || getDefaultMonth());
-  const [reportData, setReportData] = useState<ReportApiResponse["report"] | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const report = normalizeMonthlyReportData(reportData ?? {});
-  const insightComparison = useMemo(() => buildMockInsightComparisonData(), []);
-  const insightItems = useMemo(
-    () => buildInsightComparisonItems(insightComparison),
-    [insightComparison],
-  );
-  const gaugeDash = `${Math.min(100, Math.max(0, report.score))} ${100 - Math.min(100, Math.max(0, report.score))}`;
+  const urlMonth = searchParams.get("month") || getDefaultMonth();
+  const [selection, setSelection] = useState({ urlMonth, month: urlMonth });
+  const month = selection.urlMonth === urlMonth ? selection.month : urlMonth;
+  const requestKey = JSON.stringify([selectedSchoolId, month]);
+  const [state, setState] = useState<ReportState>({ key: requestKey, status: "loading" });
+  // Key the visible result during render, before the next effect starts. Old
+  // school/month data must never flash under the newly selected filters.
+  const current: ReportState = state.key === requestKey ? state : { key: requestKey, status: "loading" };
+  const report = current.status === "ready" ? current.report : null;
+  const errorMessage = current.status === "error" ? current.message : "";
+  const isLoading = current.status === "loading";
+  const score = report?.score ?? 0;
+  const gaugeDash = `${Math.min(100, Math.max(0, score))} ${100 - Math.min(100, Math.max(0, score))}`;
+  const monthOptions = Array.from(new Set([month, "2026-08", "2026-07", "2026-06"]));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -221,8 +228,7 @@ export default function MonthlyReportPage() {
       params.set("schoolId", selectedSchoolId);
     }
 
-    setIsLoading(true);
-    setErrorMessage("");
+    setState({ key: requestKey, status: "loading" });
 
     fetch(`/api/dashboard/reports?${params.toString()}`, {
       signal: controller.signal,
@@ -230,32 +236,22 @@ export default function MonthlyReportPage() {
     })
       .then(async (response) => {
         const body = (await response.json()) as ReportApiResponse;
+        if (controller.signal.aborted) return;
         if (!response.ok || body.success === false) {
           throw new Error(body.error || "月次レポートを取得できませんでした。");
         }
 
-        setReportData(body.report ?? null);
+        setState(isReport(body.report)
+          ? { key: requestKey, status: "ready", report: body.report }
+          : { key: requestKey, status: "missing" });
       })
-      .catch((error) => {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
-        }
-
-        setReportData(null);
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "月次レポートを取得できませんでした。",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setState({ key: requestKey, status: "error", message: "月次レポートを取得できませんでした。対象期間を選び直してお試しください。" });
       });
 
     return () => controller.abort();
-  }, [month, selectedSchoolId]);
+  }, [month, selectedSchoolId, requestKey]);
 
   return (
     <main className={styles.page}>
@@ -263,7 +259,7 @@ export default function MonthlyReportPage() {
         <div>
           <p className={styles.kicker}>Monthly Report</p>
           <h1>月次総合診断レポート</h1>
-          <p>{report.schoolName} のMEO・口コミ・Instagram・AIO状況をまとめて確認できます。</p>
+          <p>{report ? `${report.schoolName} のMEO・口コミ・Instagram・AIO状況をまとめて確認できます。` : "選択した校舎・対象期間のレポートを確認できます。"}</p>
         </div>
         <div className={styles.headerActions}>
           <label>
@@ -271,12 +267,11 @@ export default function MonthlyReportPage() {
             <select
               value={month}
               aria-label="対象期間"
-              onChange={(event) => setMonth(event.target.value)}
+              onChange={(event) => setSelection({ urlMonth, month: event.target.value })}
             >
-              <option value={month}>{report.period}</option>
-              <option value="2026-08">2026年8月度</option>
-              <option value="2026-07">2026年7月度</option>
-              <option value="2026-06">2026年6月度</option>
+              {monthOptions.map(value => (
+                <option key={value} value={value}>{value.replace(/^(\d{4})-(\d{2})$/, (_, year, month) => `${year}年${Number(month)}月度`)}</option>
+              ))}
             </select>
           </label>
           <button type="button" className={styles.printButton}>
@@ -289,9 +284,10 @@ export default function MonthlyReportPage() {
       <div className={styles.periodNotice} role={errorMessage ? "alert" : "status"}>
         {isLoading
           ? "月次レポートを取得しています。"
-          : errorMessage || "本番DBの月次レポートデータを表示しています。"}
+          : errorMessage || (report ? "取得した月次レポートを表示しています。" : "この校舎・対象期間のレポートは未取得です。")}
       </div>
 
+      {report && <>
       <section className={styles.scorePanel}>
         <div className={styles.scoreVisual}>
           <svg viewBox="0 0 120 120" role="img" aria-label={`総合評価 ${report.score}点`}>
@@ -327,56 +323,19 @@ export default function MonthlyReportPage() {
         ))}
       </section>
 
+      </>}
+
       <section className={styles.insightPanel} aria-labelledby="insight-comparison-title">
         <div className={styles.insightHeader}>
           <div>
             <p className={styles.kicker}>GBP Insights</p>
             <h2 id="insight-comparison-title">インサイトサマリー</h2>
-            <p>登録初期と直近期間を比較し、検索・行動指標の伸びを確認できます。</p>
+            <p>比較データは未取得です。</p>
           </div>
-          <div className={styles.insightControls}>
-            <label>
-              <span>比較期間</span>
-              <select defaultValue={insightComparison.period} aria-label="インサイト比較期間">
-                <option>{insightComparison.period}</option>
-                <option>過去90日間</option>
-                <option>今月</option>
-              </select>
-            </label>
-            <button type="button" className={styles.compareButton} aria-pressed="true">
-              初期比較
-            </button>
-            <button type="button" className={styles.csvButton}>
-              <ReportIcon type="csv" />
-              CSV出力
-            </button>
-          </div>
-        </div>
-        <div className={styles.periodNotice}>
-          初期期間: {insightComparison.initialPeriod} / 比較対象: {insightComparison.recentPeriod}
-        </div>
-        <div className={styles.insightGrid}>
-          {insightItems.map((item) => (
-            <article className={styles.insightCard} key={item.key}>
-              <div className={styles.insightCardTop}>
-                <ReportIcon type={item.key as InsightMetricKey} />
-                <div>
-                  <span>{item.label}</span>
-                  <small>初期値 {item.initialLabel}</small>
-                </div>
-              </div>
-              <div className={styles.insightCardBottom}>
-                <strong>{item.recentLabel}</strong>
-                <span className={insightTrendClass(item.trend)}>
-                  {item.differenceLabel} / {item.differenceRateLabel}
-                </span>
-              </div>
-            </article>
-          ))}
         </div>
       </section>
 
-      <section className={styles.actionPanel}>
+      {report && <section className={styles.actionPanel}>
         <div className={styles.panelTitle}>
           <ReportIcon type="action" />
           <div>
@@ -395,7 +354,7 @@ export default function MonthlyReportPage() {
             </li>
           ))}
         </ol>
-      </section>
+      </section>}
     </main>
   );
 }
