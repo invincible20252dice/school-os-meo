@@ -116,3 +116,16 @@ candidate using that flag alone. Snapshot every current production domain/alias,
 identify the deployment actually behind each alias, and document rollout and
 rollback side effects before the final publication decision. No production
 operation has yet been performed by this release extension.
+
+Independent review of 6cb8462 found that the shared scoped-school helper could
+replace an already authorized requested school with the manager's primary school.
+The report route now reads exactly the school checked by canAccessSchool. Two
+real-resolver regression cases failed before the change and pass afterward:
+multi-school membership and a primary school absent from the membership list.
+No shared role or membership behavior was changed. Full verification of 6cb8462
+passed (including 98 browser cases); the corrected final SHA is reverified.
+
+Vercel project access returned scope 403. The user completed the official team
+consent link, but retrying the same request on the same connection still returned
+403. No alternate credential or deployment attempt was used. Production remains
+blocked until this connection can read the project and current alias targets.

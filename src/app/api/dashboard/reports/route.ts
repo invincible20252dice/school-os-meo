@@ -12,10 +12,7 @@ import {
   type DashboardReportSchoolRecord,
 } from "@/lib/dashboard-reports";
 import { prisma } from "@/lib/prisma";
-import {
-  buildScopedSchoolFilter,
-  resolveRequestAccess,
-} from "@/lib/supabase-access";
+import { resolveRequestAccess } from "@/lib/supabase-access";
 
 function normalizeSchoolId(value: string | null) {
   const schoolId = value?.trim() || "";
@@ -222,11 +219,7 @@ export async function GET(request: Request) {
       normalizeSchoolId(url.searchParams.get("schoolId")) ||
       (accessResult.access.role === "admin" ? DEFAULT_REPORT_SCHOOL_ID : accessResult.access.schoolId || accessResult.access.schoolIds[0]);
     if (!requestedSchoolId || !canAccessSchool(accessResult.access, requestedSchoolId)) return NextResponse.json({ success: false, error: "この校舎のレポートは閲覧できません。" }, { status: 403, headers });
-    const scopedSchool = buildScopedSchoolFilter(
-      accessResult.access,
-      requestedSchoolId,
-    );
-    const schoolId = scopedSchool.effectiveSchoolId || requestedSchoolId;
+    const schoolId = requestedSchoolId;
     const requestedMonth = url.searchParams.get("month")?.trim() || "";
     const month = requestedMonth || getCurrentReportMonth();
     const school = await prisma.school.findUnique({

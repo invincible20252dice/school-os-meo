@@ -51,3 +51,11 @@ it("allows an active stored administrator to select the requested school", async
   expect(result.status).toBe(200);
   expect((await result.json()).school.id).toBe("b");
 });
+it.each([["a", "b"], ["b"]])("reads the explicitly authorized school without substituting the primary school (%j)", async (...schoolIds) => {
+  boundary.profile = { id: "u", role: "manager", school_id: "a", school_ids: schoolIds, status: "active" };
+  const result = await GET(request("b"));
+  expect(result.status).toBe(200);
+  expect((await result.json()).school.id).toBe("b");
+  expect(boundary.school).toHaveBeenCalledWith({ where: { id: "b" }, select: { id: true, name: true } });
+  expect(boundary.report).toHaveBeenCalledWith({ where: { schoolId_targetMonth: { schoolId: "b", targetMonth: "2026-08" } } });
+});
