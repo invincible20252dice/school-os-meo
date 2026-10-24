@@ -207,6 +207,11 @@ export default function MonthlyReportPage() {
   const selectedSchoolId = searchParams.get("schoolId") || "";
   const urlMonth = searchParams.get("month") || getDefaultMonth();
   const [selection, setSelection] = useState({ urlMonth, month: urlMonth });
+  // Discard manual choices when navigation changes the URL month, including
+  // back/forward navigation to a month visited before that manual choice.
+  if (selection.urlMonth !== urlMonth) {
+    setSelection({ urlMonth, month: urlMonth });
+  }
   const month = selection.urlMonth === urlMonth ? selection.month : urlMonth;
   const requestKey = JSON.stringify([selectedSchoolId, month]);
   const [state, setState] = useState<ReportState>({ key: requestKey, status: "loading" });
@@ -260,6 +265,7 @@ export default function MonthlyReportPage() {
           <p className={styles.kicker}>Monthly Report</p>
           <h1>月次総合診断レポート</h1>
           <p>{report ? `${report.schoolName} のMEO・口コミ・Instagram・AIO状況をまとめて確認できます。` : "選択した校舎・対象期間のレポートを確認できます。"}</p>
+          {report && <p>レポート対象期間: {report.period}</p>}
         </div>
         <div className={styles.headerActions}>
           <label>

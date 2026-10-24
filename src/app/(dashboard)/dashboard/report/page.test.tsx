@@ -120,3 +120,28 @@ it("recovers from an error when another month loads successfully", async () => {
   await screen.findByRole("img", { name: "総合評価 42点" });
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
+it("invalidates a manual month choice when URL months change and return", async () => {
+  mocks.fetch.mockResolvedValue(response({ success: true, report: report() }));
+  const view = render(<MonthlyReportPage />);
+  await screen.findByRole("img", { name: "総合評価 42点" });
+  fireEvent.change(screen.getByLabelText("対象期間"), { target: { value: "2026-07" } });
+  await screen.findByRole("img", { name: "総合評価 42点" });
+  mocks.params = new URLSearchParams("schoolId=school-a&month=2026-06");
+  view.rerender(<MonthlyReportPage />);
+  await screen.findByRole("img", { name: "総合評価 42点" });
+  mocks.params = new URLSearchParams("schoolId=school-a&month=2026-08");
+  view.rerender(<MonthlyReportPage />);
+  expect((screen.getByLabelText("対象期間") as HTMLSelectElement).value).toBe("2026-08");
+  await screen.findByRole("img", { name: "総合評価 42点" });
+  expect(mocks.fetch.mock.calls.at(-1)?.[0]).toContain("month=2026-08");
+});
+
+it("shows the returned report period separately from the requested month", async () => {
+  mocks.params = new URLSearchParams("schoolId=school-a&month=2026-07");
+  mocks.fetch.mockResolvedValue(response({ success: true, report: report() }));
+  render(<MonthlyReportPage />);
+  await screen.findByRole("img", { name: "総合評価 42点" });
+  expect((screen.getByLabelText("対象期間") as HTMLSelectElement).value).toBe("2026-07");
+  expect(screen.getByText("レポート対象期間: 2026年8月度")).toBeTruthy();
+});

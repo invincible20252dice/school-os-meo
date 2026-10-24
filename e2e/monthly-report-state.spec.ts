@@ -37,10 +37,12 @@ test("report loading, error, missing and zero recovery stay truthful", async ({ 
   await neutral();
   await page.screenshot({ path: testInfo.outputPath("report-missing.png"), fullPage: true });
   await page.getByLabel("対象期間", { exact: true }).selectOption("2026-08");
-  await respond(2, { success: true, report: report("検証用A校", 0) });
+  await respond(2, { success: true, report: { ...report("検証用A校", 0), period: "2026年7月度" } });
   await expect(page.getByRole("img", { name: "総合評価 0点" })).toBeVisible();
   await expect(page.getByText("0/100点", { exact: true })).toBeVisible();
   await expect(page.getByText("0件", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("対象期間", { exact: true })).toHaveValue("2026-08");
+  await expect(page.getByText("レポート対象期間: 2026年7月度")).toBeVisible();
   await expect(page.getByText("比較データは未取得です。")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("report-zero.png"), fullPage: true });
 });
