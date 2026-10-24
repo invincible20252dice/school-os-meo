@@ -3,7 +3,12 @@ import { normalizeMonthlyReportData } from "@/lib/mock/reportData";
 export const DEFAULT_REPORT_SCHOOL_ID = "cms5tnzlr0001jt04qh0lluva";
 export const DEFAULT_REPORT_SCHOOL_NAME = "大学受験専門塾 iスクール予備校";
 
+export type ReportField = "totalReviews" | "averageRating" | "top3RankingRate" | "aioScore" | "searchImpression" | "actionCount";
+export type ReportAvailability = Record<ReportField, boolean>;
+export type ReportProvenance = { source: "stored" | "aggregate"; measurement: "unverified"; available: ReportAvailability; evaluationInputsComplete: boolean };
+
 export type DashboardReportRecord = {
+  availableFields?: ReportAvailability;
   targetMonth?: string | null;
   totalReviews?: number | null;
   averageRating?: number | null;
@@ -30,6 +35,7 @@ export type DashboardReportSchoolRecord = {
 };
 
 export type DashboardReportAggregateInput = {
+  hasSourceRows?: boolean;
   month: string;
   totalReviews?: number | null;
   averageRating?: number | null;
@@ -40,20 +46,12 @@ export type DashboardReportAggregateInput = {
   actionCount?: number | null;
 };
 
-export const ISCHOOL_REPORT_BASELINE: DashboardReportRecord = {
-  targetMonth: "2026-08",
-  totalReviews: 2,
-  averageRating: 5,
-  top3RankingRate: 85,
-  aioScore: 78,
-  searchImpression: 2386,
-  actionCount: 348,
-  aiAnalysisSummary:
-    "「大学受験」「個別指導」関連の検索露出が先月比+92.4%と急拡大。下通エリアでの上位表示と高評価口コミ（★5.0）が成果に直結しています。",
-};
-
 function trim(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -162,11 +160,17 @@ export function buildReportFromAggregates(
     searchImpression > 0 ||
     actionCount > 0;
 
-  if (!hasAggregatedData) {
+  if (!hasAggregatedData && !input.hasSourceRows) {
     return null;
   }
 
   return {
+    availableFields: {
+      totalReviews: isNumber(input.totalReviews), averageRating: isNumber(input.averageRating),
+      top3RankingRate: totalKeywordCount > 0 && isNumber(input.top3KeywordCount),
+      aioScore: (input.aioScores ?? []).some(isNumber),
+      searchImpression: isNumber(input.searchImpression), actionCount: isNumber(input.actionCount),
+    },
     targetMonth: input.month,
     totalReviews,
     averageRating,
@@ -184,13 +188,24 @@ export function buildDashboardReportPayload({
   report,
   queries,
   month,
+  source = "stored",
 }: {
   school?: DashboardReportSchoolRecord | null;
   report?: DashboardReportRecord | null;
   queries?: DashboardQueryLogRecord[] | null;
   month: string;
+  source?: ReportProvenance["source"];
 }) {
-  const schoolName = trim(school?.name) || DEFAULT_REPORT_SCHOOL_NAME;
+  const schoolName = trim(school?.name) || "校舎名未取得";
+  if (!report) return { school: { id: trim(school?.id), name: schoolName }, targetMonth: month, report: null, queries: normalizeQueryLogs(queries ?? []) };
+  const available: ReportAvailability = report.availableFields ?? {
+    totalReviews: isNumber(report.totalReviews), averageRating: isNumber(report.averageRating),
+    top3RankingRate: isNumber(report.top3RankingRate), aioScore: isNumber(report.aioScore),
+    searchImpression: isNumber(report.searchImpression), actionCount: isNumber(report.actionCount),
+  };
+  const provenance: ReportProvenance = { source, measurement: "unverified", available,
+    evaluationInputsComplete: available.top3RankingRate && available.aioScore && available.averageRating };
+  const display = (field: ReportField, formatted: string) => available[field] ? formatted : "未取得";
   const targetMonth = trim(report?.targetMonth) || month;
   const totalReviews = numberValue(report?.totalReviews, 0);
   const averageRating = numberValue(report?.averageRating, 0);
@@ -213,58 +228,39 @@ export function buildDashboardReportPayload({
     period: formatMonth(targetMonth),
     score,
     rank: rankFromScore(score),
-    monthOverMonth: "DB集計",
+    monthOverMonth: "比較未取得",
     aiComment: aiAnalysisSummary,
     metrics: [
       {
-        label: "口コミ獲得・返信率",
-        value: `${totalReviews}件 / ${formatRating(averageRating)}`,
-        detail: `平均評価 ${formatRating(averageRating)} / 5.0`,
-        trend: "本番DB集計",
+        label: "登録口コミ数・平均評価",
+        value: `${display("totalReviews", `${totalReviews}件`)} / ${display("averageRating", formatRating(averageRating))}`,
+        detail: "登録された口コミの件数と平均評価",
+        trend: "DB登録値",
         tone: averageRating >= 4 ? "good" : "watch",
       },
       {
         label: "MEO順位",
-        value: `Top3率 ${Math.round(top3RankingRate)}%`,
-        detail: "登録キーワードの上位表示率",
+        value: display("top3RankingRate", `Top3率 ${Math.round(top3RankingRate)}%`),
+        detail: "登録キーワードの上位表示率（最新順位・対象月外を含む場合があります）",
         trend: "順位ログ連動",
         tone: top3RankingRate >= 70 ? "good" : "watch",
       },
       {
         label: "GBP検索表示",
-        value: `${searchImpression.toLocaleString("ja-JP")}回`,
-        detail: `アクション数 ${actionCount.toLocaleString("ja-JP")}件`,
+        value: display("searchImpression", `${searchImpression.toLocaleString("ja-JP")}回`),
+        detail: `保存アクション数 ${display("actionCount", `${actionCount.toLocaleString("ja-JP")}件`)}（未取得項目を含む場合があります）`,
         trend: "流入語句ログ連動",
         tone: searchImpression > 0 ? "good" : "watch",
       },
       {
-        label: "AIOスコア",
-        value: `${aioScore}/100`,
-        detail: "AI検索での推奨度・言及率",
+        label: "AIO旧方式の保存スコア",
+        value: display("aioScore", `${aioScore}/100`),
+        detail: "旧方式の保存値です。新しい実測AIOの結果ではありません。",
         trend: "AIO履歴連動",
         tone: aioScore >= 70 ? "good" : "watch",
       },
     ],
-    actions: [
-      {
-        title: "検索露出の高い語句をGBP投稿に反映",
-        detail:
-          normalizedQueries[0]?.query
-            ? `「${normalizedQueries[0].query}」を次回投稿・口コミ依頼文に自然に含めます。`
-            : "検索クエリログを蓄積し、露出が伸びている語句を投稿へ反映します。",
-        owner: "MEO担当",
-      },
-      {
-        title: "口コミ返信とアンケート導線を継続運用",
-        detail: "高評価口コミの獲得と返信品質を維持し、月次レポートへ成果を反映します。",
-        owner: "教室長",
-      },
-      {
-        title: "AIO強化キーワードを校舎ページへ追加",
-        detail: "AI検索に拾われやすい校舎特徴・地域語句を公式情報へ追記します。",
-        owner: "コンテンツ担当",
-      },
-    ],
+    actions: [],
   });
 
   return {
@@ -275,6 +271,7 @@ export function buildDashboardReportPayload({
     targetMonth,
     report: {
       ...monthlyReport,
+      provenance,
       raw: {
         targetMonth,
         totalReviews,
