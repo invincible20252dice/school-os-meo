@@ -122,7 +122,7 @@ it("recovers from an error when another month loads successfully", async () => {
 });
 
 it("invalidates a manual month choice when URL months change and return", async () => {
-  mocks.fetch.mockResolvedValue(response({ success: true, report: report() }));
+  mocks.fetch.mockImplementation(async () => response({ success: true, report: report() }));
   const view = render(<MonthlyReportPage />);
   await screen.findByRole("img", { name: "総合評価 42点" });
   fireEvent.change(screen.getByLabelText("対象期間"), { target: { value: "2026-07" } });

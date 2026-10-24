@@ -40,7 +40,10 @@ API/data-contract task before claiming full measurement provenance.
 - [x] Independent review of cafb06839e9c449b65acee25b3edb79ea9526d77
   found two P2 issues: a manual month reappeared after a URL month round trip,
   and the returned report period was hidden when the API fell back to an older
-  report. Two new tests reproduced both failures, with the original 20 passing.
+  report. The period test reproduced the missing display. The first URL-roundtrip
+  test reused a consumed Response; after fixing that test fixture to create a
+  fresh Response per request, the pre-fix URL state reproduced July instead of
+  August. Both failures are retained in separate red logs.
 - [x] Corrected URL-month selection invalidation during render and separately
   displayed the returned report period. All 22 focused tests pass. Browser
   coverage now also asserts requested vs returned period mismatch disclosure.
