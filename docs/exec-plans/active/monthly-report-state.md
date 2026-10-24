@@ -66,3 +66,53 @@ branch. Keep vercel.json unchanged and stop before push/PR creation unless that
 exact suppression is separately authorized. No main merge, production deployment,
 aliases, schema/data, auth settings, environment variables, secrets, billing,
 Jev calls or browser/CUA operations. PR24/25 are out of scope and untouched.
+
+## Authorized release extension — 2026-10-24
+
+The user subsequently authorized this correction through production, subject to
+existing main/Production protection and any final-SHA approval requirement.
+Exact-branch deployment suppression for codex/monthly-report-state and its
+matching test are now authorized and applied. Main/other branch settings stay
+unchanged. Earlier publication-gated receipts are historical.
+
+The user explicitly selected reference-only presentation for MonthlyReport
+values whose measurement provenance cannot be established. The page identifies
+stored reports and operational aggregates as reference values, never verified
+measurements. Legacy AIO is labeled as an old stored score. This resolves the
+display decision without changing the database or attempting to infer whether
+an existing default zero was measured.
+
+Additional implementation:
+
+- Remove the hard-coded school baseline and static action suggestions.
+- Add source and per-field availability metadata before zero normalization.
+  Existing score formula and partial-input numerical compatibility remain
+  unchanged; the UI hides the score/rank when required inputs are unavailable.
+- Preserve existing zero-valued source rows using row-presence evidence, without
+  asserting that row presence proves full measurement coverage.
+- Preserve latest-report and latest-rank lookup semantics, disclose returned
+  report period and potential out-of-period ranking input.
+- Reports now require the existing active-profile resolver, authentication and
+  explicit school authorization; the page supplies the existing session bearer.
+  This closes an observed tokenless fallback-admin path without changing Auth
+  configuration, roles, RLS or shared resolver behavior. Responses are private,
+  no-store; read-only resolution avoids invitation/profile writes.
+
+New tests cover tokenless access, pending profiles, cross-school denial with the
+real resolver, editable-metadata spoofing, missing/partial/all-zero data, response
+errors, consecutive switches and delayed session/response resolution. E2E uses
+the actual payload builder for missing/partial/zero cases and mocks only network
+and identity/data boundaries.
+
+Release evidence: parent workspace outputs/monthly-report-release-2026-10-24.
+Final fixed-SHA full verification, independent review and push/PR CI are required
+before release. Do not reuse previous 57f6774 verification as final-code proof.
+GitHub ruleset 24785246 requires a PR and strict Codex Verify with no bypass.
+Classic branch-protection read returned 403; no alternate credential was used.
+
+The previous --prod --skip-domain incident moved generated aliases despite
+skipping custom domains. Do not create a supposedly alias-free Production
+candidate using that flag alone. Snapshot every current production domain/alias,
+identify the deployment actually behind each alias, and document rollout and
+rollback side effects before the final publication decision. No production
+operation has yet been performed by this release extension.

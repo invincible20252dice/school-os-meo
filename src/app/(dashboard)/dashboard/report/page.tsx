@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
+import type { ReportProvenance } from "@/lib/dashboard-reports";
 import type { MonthlyReportData, ReportMetric } from "@/lib/mock/reportData";
 import styles from "./page.module.css";
 
@@ -181,13 +183,20 @@ function toneClass(tone: ReportMetric["tone"]) {
 }
 
 // Validate the existing display contract without inventing missing measurements.
-// Successful API-side zero/baseline values cannot be distinguished here; that
-// provenance limitation requires a separate API contract change.
-function isReport(value: unknown): value is MonthlyReportData {
+// Stored default-zero values cannot be certified as measurements; provenance
+// and input availability from the API govern the reference-only presentation.
+type ReportView = MonthlyReportData & { provenance: ReportProvenance };
+
+function isReport(value: unknown): value is ReportView {
   if (!value || typeof value !== "object") return false;
   const report = value as Record<string, unknown>;
   const strings = (item: unknown, keys: string[]) =>
     !!item && typeof item === "object" && keys.every(key => typeof (item as Record<string, unknown>)[key] === "string");
+  const provenance = report.provenance as ReportProvenance | undefined;
+  const fields = ["totalReviews", "averageRating", "top3RankingRate", "aioScore", "searchImpression", "actionCount"] as const;
+  if (!provenance || !["stored", "aggregate"].includes(provenance.source)
+    || provenance.measurement !== "unverified" || typeof provenance.evaluationInputsComplete !== "boolean"
+    || !provenance.available || !fields.every(field => typeof provenance.available[field] === "boolean")) return false;
   return strings(report, ["schoolName", "period", "monthOverMonth", "aiComment"])
     && typeof report.score === "number" && Number.isFinite(report.score)
     && ["S", "A", "B", "C"].includes(report.rank as string)
@@ -200,7 +209,7 @@ function isReport(value: unknown): value is MonthlyReportData {
 type ReportState =
   | { key: string; status: "loading" | "missing" }
   | { key: string; status: "error"; message: string }
-  | { key: string; status: "ready"; report: MonthlyReportData };
+  | { key: string; status: "ready"; report: ReportView };
 
 export default function MonthlyReportPage() {
   const searchParams = useSearchParams();
@@ -235,25 +244,27 @@ export default function MonthlyReportPage() {
 
     setState({ key: requestKey, status: "loading" });
 
-    fetch(`/api/dashboard/reports?${params.toString()}`, {
-      signal: controller.signal,
-      cache: "no-store",
-    })
-      .then(async (response) => {
+    async function load() {
+      try {
+        const { data } = await createBrowserSupabaseClient().auth.getSession();
+        if (controller.signal.aborted) return;
+        if (!data.session?.access_token) throw new Error("Unauthenticated");
+        const response = await fetch(`/api/dashboard/reports?${params.toString()}`, {
+          headers: { authorization: `Bearer ${data.session.access_token}` },
+          signal: controller.signal, cache: "no-store",
+        });
         const body = (await response.json()) as ReportApiResponse;
         if (controller.signal.aborted) return;
-        if (!response.ok || body.success === false) {
-          throw new Error(body.error || "月次レポートを取得できませんでした。");
-        }
-
+        if (!response.ok || body.success !== true) throw new Error("Report unavailable");
         setState(isReport(body.report)
           ? { key: requestKey, status: "ready", report: body.report }
           : { key: requestKey, status: "missing" });
-      })
-      .catch(() => {
+      } catch {
         if (controller.signal.aborted) return;
         setState({ key: requestKey, status: "error", message: "月次レポートを取得できませんでした。対象期間を選び直してお試しください。" });
-      });
+      }
+    }
+    void load();
 
     return () => controller.abort();
   }, [month, selectedSchoolId, requestKey]);
@@ -294,14 +305,19 @@ export default function MonthlyReportPage() {
       </div>
 
       {report && <>
-      <section className={styles.scorePanel}>
+      <div className={styles.periodNotice} role="note">
+        {report.provenance.source === "stored"
+          ? "保存済み月次レポートの参考値です。実測値として確認されていません。"
+          : "運用テーブルの保存値を集計した参考値です。実測値として確認されていません。"}
+      </div>
+      {report.provenance.evaluationInputsComplete ? <section className={styles.scorePanel}>
         <div className={styles.scoreVisual}>
-          <svg viewBox="0 0 120 120" role="img" aria-label={`総合評価 ${report.score}点`}>
+          <svg viewBox="0 0 120 120" role="img" aria-label={`参考総合評価 ${report.score}点`}>
             <circle cx="60" cy="60" r="48" />
             <circle cx="60" cy="60" r="48" pathLength="100" strokeDasharray={gaugeDash} />
           </svg>
           <div>
-            <strong>{report.rank}判定</strong>
+            <strong>参考{report.rank}判定</strong>
             <span>{report.score}/100点</span>
           </div>
         </div>
@@ -309,13 +325,13 @@ export default function MonthlyReportPage() {
           <div className={styles.panelTitle}>
             <ReportIcon type="score" />
             <div>
-              <h2>総合評価</h2>
+              <h2>参考総合評価</h2>
               <p>前月比 {report.monthOverMonth}</p>
             </div>
           </div>
-          <p>{report.aiComment}</p>
+          <p>保存コメント: {report.aiComment}</p>
         </div>
-      </section>
+      </section> : <div className={styles.periodNotice}>評価に必要なデータが未取得のため、総合評価は表示していません。</div>}
 
       <section className={styles.metrics} aria-label="4大指標サマリー">
         {report.metrics?.map((metric) => (
@@ -349,7 +365,7 @@ export default function MonthlyReportPage() {
             <p>来月強化すべき施策</p>
           </div>
         </div>
-        <ol className={styles.actions}>
+        {report.actions.length > 0 ? <ol className={styles.actions}>
           {report.actions?.map((action) => (
             <li key={action?.title}>
               <div>
@@ -359,7 +375,7 @@ export default function MonthlyReportPage() {
               <span>{action?.owner ?? ""}</span>
             </li>
           ))}
-        </ol>
+        </ol> : <p>改善提案は未取得です。</p>}
       </section>}
     </main>
   );

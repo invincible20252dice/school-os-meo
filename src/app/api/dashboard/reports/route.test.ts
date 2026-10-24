@@ -130,6 +130,60 @@ describe("GET /api/dashboard/reports", () => {
     });
   });
 
+  it("rejects an unauthenticated fallback before any school or report read", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      isAuthenticated: false,
+      access: { userId: "demo-user", role: "admin", schoolId: "", schoolIds: [], name: "", email: "", status: "active", source: "fallback" },
+    });
+    const { GET } = await import("./route");
+    const result = await GET(new Request("https://app.example.com/api/dashboard/reports?schoolId=school-1&role=admin"));
+    expect(result.status).toBe(401);
+    expect(prisma.school.findUnique).not.toHaveBeenCalled();
+    expect(prisma.monthlyReport.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects an out-of-scope school without substituting another school's report", async () => {
+    const access = await import("@/lib/supabase-access");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(access.resolveRequestAccess).mockResolvedValueOnce({
+      isAuthenticated: true,
+      access: { userId: "manager", role: "manager", schoolId: "school-1", schoolIds: ["school-1"], name: "", email: "", status: "active", source: "profiles" },
+    });
+    const { GET } = await import("./route");
+    const result = await GET(new Request("https://app.example.com/api/dashboard/reports?schoolId=school-2"));
+    expect(result.status).toBe(403);
+    expect(prisma.school.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("does not return the fixed default-school baseline when every source is empty", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.monthlyReport.findUnique).mockResolvedValueOnce(null);
+    const { GET } = await import("./route");
+    const result = await GET(new Request("https://app.example.com/api/dashboard/reports?month=2026-08"));
+    const body = await result.json();
+    expect(body.report?.score ?? null).toBeNull();
+    expect(JSON.stringify(body)).not.toContain("先月比+92.4%");
+    expect(JSON.stringify(body)).not.toContain("2386");
+  });
+
+  it("preserves an existing zero source row while marking the other absent inputs unavailable", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(prisma.monthlyReport.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(prisma.aioScoreHistory.findMany).mockResolvedValueOnce([{ totalScore: 0 }] as never);
+    const { GET } = await import("./route");
+    const result = await GET(new Request("https://app.example.com/api/dashboard/reports?schoolId=school-1&month=2026-08"));
+    const body = await result.json();
+    expect(body.report.provenance).toMatchObject({
+      source: "aggregate", measurement: "unverified", evaluationInputsComplete: false,
+      available: { aioScore: true, averageRating: false, top3RankingRate: false, searchImpression: false, actionCount: false },
+    });
+    expect(body.report.metrics[3].value).toBe("0/100");
+    expect(body.report.metrics[2].value).toBe("未取得");
+    expect(body.report.actions).toEqual([]);
+  });
+
   it("uses the latest MonthlyReport when a month is not explicitly selected", async () => {
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(prisma.monthlyReport.findUnique).mockClear();
@@ -205,7 +259,7 @@ describe("GET /api/dashboard/reports", () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.report.schoolName).toBe("大学受験専門塾 iスクール予備校");
+    expect(body.report).toBeNull();
     expect(body.queries).toEqual([]);
   });
 
@@ -310,7 +364,7 @@ describe("GET /api/dashboard/reports", () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body.error).toBe("connection refused");
+    expect(body.error).toBe("レポートデータを取得できませんでした。");
   });
 
   it("returns a generic server error when access resolution throws a non-Error value", async () => {
@@ -339,6 +393,6 @@ describe("GET /api/dashboard/reports", () => {
 
     expect(response.status).toBe(500);
     expect(body.success).toBe(false);
-    expect(body.error).toBe("DB down");
+    expect(body.error).toBe("レポートデータを取得できませんでした。");
   });
 });

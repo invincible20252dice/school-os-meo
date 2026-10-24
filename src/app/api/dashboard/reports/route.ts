@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { canAccessSchool } from "@/lib/auth-access";
+import { RequestAuthenticationError } from "@/lib/request-authentication-error";
 import { isApprovedAccess } from "@/lib/access-control";
 import {
   buildDashboardReportPayload,
   buildReportFromAggregates,
   DEFAULT_REPORT_SCHOOL_ID,
   getCurrentReportMonth,
-  ISCHOOL_REPORT_BASELINE,
   type DashboardQueryLogRecord,
   type DashboardReportRecord,
   type DashboardReportSchoolRecord,
@@ -84,8 +85,7 @@ async function loadStoredReportData(schoolId: string, month: string) {
     }
 
     console.error(
-      "Monthly report tables are not available yet. Falling back to aggregate data.",
-      error,
+      "Monthly report tables are unavailable; checking operational data.",
     );
 
     return {
@@ -161,7 +161,7 @@ async function loadAggregateReportData(schoolId: string, month: string) {
       reviewRatings.length > 0
         ? reviewRatings.reduce((sum, rating) => sum + rating, 0) /
           reviewRatings.length
-        : 0;
+        : null;
     const latestRanks = keywords
       .map((keyword) => keyword.rankHistories[0]?.rank)
       .filter((rank): rank is number => typeof rank === "number");
@@ -177,13 +177,14 @@ async function loadAggregateReportData(schoolId: string, month: string) {
 
     return buildReportFromAggregates({
       month,
+      hasSourceRows: reviews.length + latestRanks.length + aioScores.length + metrics.length > 0,
       totalReviews,
       averageRating,
       totalKeywordCount: keywords.length,
-      top3KeywordCount: latestRanks.filter((rank) => rank <= 3).length,
+      top3KeywordCount: latestRanks.length ? latestRanks.filter((rank) => rank <= 3).length : null,
       aioScores: aioScores.map((score) => score.totalScore),
-      searchImpression,
-      actionCount,
+      searchImpression: metrics.length ? searchImpression : null,
+      actionCount: metrics.length ? actionCount : null,
     });
   } catch (error) {
     if (!isMissingReportTableError(error)) {
@@ -191,32 +192,36 @@ async function loadAggregateReportData(schoolId: string, month: string) {
     }
 
     console.error(
-      "Aggregate report tables are not available yet. Using baseline report data.",
-      error,
+      "Aggregate report tables are unavailable; no report data returned.",
     );
 
     return null;
   }
 }
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
+  const headers = { "Cache-Control": "private, no-store" };
   try {
     const url = new URL(request.url);
-    const accessResult = await resolveRequestAccess(request, url);
+    const accessResult = await resolveRequestAccess(request, url, undefined, { requireActiveProfile: true });
+    if (!accessResult.isAuthenticated) return NextResponse.json({ success: false, error: "ログイン後にレポートを確認してください。" }, { status: 401, headers });
 
-    if (accessResult.isAuthenticated && !isApprovedAccess(accessResult.access)) {
+    if (!isApprovedAccess(accessResult.access)) {
       return NextResponse.json(
         {
           success: false,
           error: "アカウント承認後にレポートを確認できます。",
         },
-        { status: 403 },
+        { status: 403, headers },
       );
     }
 
     const requestedSchoolId =
       normalizeSchoolId(url.searchParams.get("schoolId")) ||
-      DEFAULT_REPORT_SCHOOL_ID;
+      (accessResult.access.role === "admin" ? DEFAULT_REPORT_SCHOOL_ID : accessResult.access.schoolId || accessResult.access.schoolIds[0]);
+    if (!requestedSchoolId || !canAccessSchool(accessResult.access, requestedSchoolId)) return NextResponse.json({ success: false, error: "この校舎のレポートは閲覧できません。" }, { status: 403, headers });
     const scopedSchool = buildScopedSchoolFilter(
       accessResult.access,
       requestedSchoolId,
@@ -228,6 +233,7 @@ export async function GET(request: Request) {
       where: { id: schoolId },
       select: { id: true, name: true },
     });
+    if (!school) return NextResponse.json({ success: false, error: "校舎が見つかりません。" }, { status: 404, headers });
     const { report: storedReport, queries } = await loadStoredReportData(
       schoolId,
       requestedMonth,
@@ -235,15 +241,13 @@ export async function GET(request: Request) {
     const aggregateReport = storedReport
       ? null
       : await loadAggregateReportData(schoolId, month);
-    const report =
-      storedReport ??
-      aggregateReport ??
-      (schoolId === DEFAULT_REPORT_SCHOOL_ID ? ISCHOOL_REPORT_BASELINE : null);
+    const report = storedReport ?? aggregateReport;
     const payload = buildDashboardReportPayload({
       school: school as DashboardReportSchoolRecord | null,
       report,
       queries,
       month: report?.targetMonth || month,
+      source: storedReport ? "stored" : "aggregate",
     });
 
     return NextResponse.json({
@@ -254,18 +258,16 @@ export async function GET(request: Request) {
         effectiveSchoolId: schoolId,
         source: accessResult.access.source,
       },
-    });
+    }, { headers });
   } catch (error) {
-    console.error("[GET /api/dashboard/reports Error]:", error);
+    if (error instanceof RequestAuthenticationError) return NextResponse.json({ success: false, error: "ログイン後にレポートを確認してください。" }, { status: 401, headers });
+    console.error("[GET /api/dashboard/reports] Report read failed");
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "レポートデータを取得できませんでした。",
+        error: "レポートデータを取得できませんでした。",
       },
-      { status: 500 },
+      { status: 500, headers },
     );
   }
 }
