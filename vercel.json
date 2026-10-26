@@ -13,7 +13,8 @@
       "codex/main-stable-alignment": false,
       "codex/google-lead-retry-keys": false,
       "codex/logout-local-session": false,
-      "codex/google-oauth-origin": false
+      "codex/google-oauth-origin": false,
+      "codex/callback-gate-integration": false
     }
   }
 }
